@@ -3219,7 +3219,9 @@ static int msmfb_notify_update(struct fb_info *info, unsigned long *argp)
 		INIT_COMPLETION(mfd->msmfb_no_update_notify);
 		wait_for_completion_interruptible(&mfd->msmfb_no_update_notify);
 	}
-	return 0;
+	if (ret == 0)
+		ret = -ETIMEDOUT;
+	return (ret > 0) ? 0 : ret;
 }
 
 static int msmfb_handle_pp_ioctl(struct msm_fb_data_type *mfd,
