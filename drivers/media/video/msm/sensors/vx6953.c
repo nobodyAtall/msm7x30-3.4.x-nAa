@@ -863,6 +863,10 @@ static struct msm_sensor_id_info_t vx6953_id_info = {
 static struct msm_sensor_exp_gain_info_t vx6953_exp_gain_info = {
 	.coarse_int_time_addr = 0x0202,
 	.global_gain_addr = 0x0204,
+	.digital_gain_gr = 0x020E,
+	.digital_gain_r = 0x0210,
+	.digital_gain_b = 0x0212,
+	.digital_gain_gb = 0x0214,
 	.vert_offset = 9,
 };
 
@@ -890,12 +894,116 @@ static int __init msm_sensor_init_module(void)
 
 static int32_t vx6953_set_fps(struct msm_sensor_ctrl_t *s_ctrl,
 	struct fps_cfg *fps) {
-	return 0;
+	uint16_t total_lines_per_frame;
+	int32_t rc = 0;
+
+	total_lines_per_frame = (uint16_t)((VX6953_QTR_SIZE_HEIGHT +
+			VX6953_VER_QTR_BLK_LINES) * s_ctrl->fps_divider/0x400);
+			s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
+	rc = msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+			s_ctrl->sensor_output_reg_addr->frame_length_lines,
+			((total_lines_per_frame & 0xFF00) >> 8),
+			MSM_CAMERA_I2C_BYTE_DATA);
+	rc = msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+			s_ctrl->sensor_output_reg_addr->frame_length_lines + 1,
+			(total_lines_per_frame & 0xFF00),
+			MSM_CAMERA_I2C_BYTE_DATA);
+	s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);
+	return rc;
 }
 
 int32_t vx6953_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	uint16_t gain, uint32_t line) {
-	return 0;
+	uint16_t line_length_pck, frame_length_lines;
+	uint8_t gain_hi, gain_lo;
+	uint8_t intg_time_hi, intg_time_lo;
+	uint8_t frame_length_lines_hi = 0, frame_length_lines_lo = 0;
+	int32_t rc = 0;
+
+	frame_length_lines = VX6953_QTR_SIZE_HEIGHT +
+		VX6953_VER_QTR_BLK_LINES;
+	line_length_pck = VX6953_QTR_SIZE_WIDTH +
+		VX6953_HRZ_QTR_BLK_PIXELS;
+	s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
+	if ((line + VX6953_STM5M0EDOF_OFFSET) > MAX_FRAME_LENGTH_LINES) {
+		frame_length_lines = MAX_FRAME_LENGTH_LINES;
+		line = MAX_FRAME_LENGTH_LINES - VX6953_STM5M0EDOF_OFFSET;
+	} else if ((line + VX6953_STM5M0EDOF_OFFSET) > frame_length_lines) {
+			frame_length_lines = line + VX6953_STM5M0EDOF_OFFSET;
+			line = frame_length_lines;
+			}
+	frame_length_lines_hi = (uint8_t) ((frame_length_lines &
+		0xFF00) >> 8);
+	frame_length_lines_lo = (uint8_t) (frame_length_lines &
+		0x00FF);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_output_reg_addr->frame_length_lines,
+		(uint8_t)(frame_length_lines_hi),
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_output_reg_addr->frame_length_lines + 1,
+		(uint8_t)(frame_length_lines_lo),
+		MSM_CAMERA_I2C_BYTE_DATA);
+	/* update analogue gain registers */
+	gain_hi = (uint8_t) ((gain & 0xFF00) >> 8);
+	gain_lo = (uint8_t) (gain & 0x00FF);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->global_gain_addr + 1,
+		gain_lo,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->global_gain_addr,
+		gain_hi,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		/*Update GR Comopnent*/
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_gr,
+		gain_hi,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_gr + 1,
+		gain_lo,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		/*Update R Comopnent*/
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_r,
+		gain_hi,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_r + 1,
+		gain_lo,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		/*Update B Comopnent*/
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_b,
+		gain_hi,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_b + 1,
+		gain_lo,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		/*Update GB Comopnent*/
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_gb,
+		gain_hi,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->digital_gain_gb + 1,
+		gain_lo,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		/* update line count registers */
+		intg_time_hi = (uint8_t) (((uint16_t)line & 0xFF00) >> 8);
+		intg_time_lo = (uint8_t) ((uint16_t)line & 0x00FF);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->coarse_int_time_addr,
+		intg_time_hi,
+		MSM_CAMERA_I2C_BYTE_DATA);
+	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+		s_ctrl->sensor_exp_gain_info->coarse_int_time_addr + 1,
+		intg_time_lo,
+		MSM_CAMERA_I2C_BYTE_DATA);
+		s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);
+		return rc;
 }
 
 static struct v4l2_subdev_core_ops vx6953_subdev_core_ops = {
@@ -959,545 +1067,7 @@ static struct msm_camera_i2c_reg_conf vx6953_standby[] = {
 	{0x103, 0x01},
 };
 
-static struct msm_camera_i2c_reg_conf patch_tbl_cut2[] = {
-	{0xFB94, 0},	/*intialise Data Xfer Status reg*/
-	{0xFB95, 0},	/*gain 1	  (0x00)*/
-	{0xFB96, 0},	/*gain 1.07   (0x10)*/
-	{0xFB97, 0},	/*gain 1.14   (0x20)*/
-	{0xFB98, 0},	/*gain 1.23   (0x30)*/
-	{0xFB99, 0},	/*gain 1.33   (0x40)*/
-	{0xFB9A, 0},	/*gain 1.45   (0x50)*/
-	{0xFB9B, 0},	/*gain 1.6    (0x60)*/
-	{0xFB9C, 0},	/*gain 1.78   (0x70)*/
-	{0xFB9D, 2},	/*gain 2	  (0x80)*/
-	{0xFB9E, 2},	/*gain 2.29   (0x90)*/
-	{0xFB9F, 3},	/*gain 2.67   (0xA0)*/
-	{0xFBA0, 3},	/*gain 3.2    (0xB0)*/
-	{0xFBA1, 4},	/*gain 4	  (0xC0)*/
-	{0xFBA2, 7},	/*gain 5.33   (0xD0)*/
-	{0xFBA3, 10},	/*gain 8	  (0xE0)*/
-	{0xFBA4, 11},	/*gain 9.14   (0xE4)*/
-	{0xFBA5, 13},	/*gain 10.67  (0xE8)*/
-	{0xFBA6, 15},	/*gain 12.8   (0xEC)*/
-	{0xFBA7, 19},	/*gain 16     (0xF0)*/
-	{0xF800, 0x12},
-	{0xF801, 0x06},
-	{0xF802, 0xf7},
-	{0xF803, 0x90},
-	{0xF804, 0x02},
-	{0xF805, 0x05},
-	{0xF806, 0xe0},
-	{0xF807, 0xff},
-	{0xF808, 0x65},
-	{0xF809, 0x7d},
-	{0xF80A, 0x70},
-	{0xF80B, 0x03},
-	{0xF80C, 0x02},
-	{0xF80D, 0xf9},
-	{0xF80E, 0x1c},
-	{0xF80F, 0x8f},
-	{0xF810, 0x7d},
-	{0xF811, 0xe4},
-	{0xF812, 0xf5},
-	{0xF813, 0x7a},
-	{0xF814, 0x75},
-	{0xF815, 0x78},
-	{0xF816, 0x30},
-	{0xF817, 0x75},
-	{0xF818, 0x79},
-	{0xF819, 0x53},
-	{0xF81A, 0x85},
-	{0xF81B, 0x79},
-	{0xF81C, 0x82},
-	{0xF81D, 0x85},
-	{0xF81E, 0x78},
-	{0xF81F, 0x83},
-	{0xF820, 0xe0},
-	{0xF821, 0xc3},
-	{0xF822, 0x95},
-	{0xF823, 0x7b},
-	{0xF824, 0xf0},
-	{0xF825, 0x74},
-	{0xF826, 0x02},
-	{0xF827, 0x25},
-	{0xF828, 0x79},
-	{0xF829, 0xf5},
-	{0xF82A, 0x79},
-	{0xF82B, 0xe4},
-	{0xF82C, 0x35},
-	{0xF82D, 0x78},
-	{0xF82E, 0xf5},
-	{0xF82F, 0x78},
-	{0xF830, 0x05},
-	{0xF831, 0x7a},
-	{0xF832, 0xe5},
-	{0xF833, 0x7a},
-	{0xF834, 0xb4},
-	{0xF835, 0x08},
-	{0xF836, 0xe3},
-	{0xF837, 0xe5},
-	{0xF838, 0x7d},
-	{0xF839, 0x70},
-	{0xF83A, 0x04},
-	{0xF83B, 0xff},
-	{0xF83C, 0x02},
-	{0xF83D, 0xf8},
-	{0xF83E, 0xe4},
-	{0xF83F, 0xe5},
-	{0xF840, 0x7d},
-	{0xF841, 0xb4},
-	{0xF842, 0x10},
-	{0xF843, 0x05},
-	{0xF844, 0x7f},
-	{0xF845, 0x01},
-	{0xF846, 0x02},
-	{0xF847, 0xf8},
-	{0xF848, 0xe4},
-	{0xF849, 0xe5},
-	{0xF84A, 0x7d},
-	{0xF84B, 0xb4},
-	{0xF84C, 0x20},
-	{0xF84D, 0x05},
-	{0xF84E, 0x7f},
-	{0xF84F, 0x02},
-	{0xF850, 0x02},
-	{0xF851, 0xf8},
-	{0xF852, 0xe4},
-	{0xF853, 0xe5},
-	{0xF854, 0x7d},
-	{0xF855, 0xb4},
-	{0xF856, 0x30},
-	{0xF857, 0x05},
-	{0xF858, 0x7f},
-	{0xF859, 0x03},
-	{0xF85A, 0x02},
-	{0xF85B, 0xf8},
-	{0xF85C, 0xe4},
-	{0xF85D, 0xe5},
-	{0xF85E, 0x7d},
-	{0xF85F, 0xb4},
-	{0xF860, 0x40},
-	{0xF861, 0x04},
-	{0xF862, 0x7f},
-	{0xF863, 0x04},
-	{0xF864, 0x80},
-	{0xF865, 0x7e},
-	{0xF866, 0xe5},
-	{0xF867, 0x7d},
-	{0xF868, 0xb4},
-	{0xF869, 0x50},
-	{0xF86A, 0x04},
-	{0xF86B, 0x7f},
-	{0xF86C, 0x05},
-	{0xF86D, 0x80},
-	{0xF86E, 0x75},
-	{0xF86F, 0xe5},
-	{0xF870, 0x7d},
-	{0xF871, 0xb4},
-	{0xF872, 0x60},
-	{0xF873, 0x04},
-	{0xF874, 0x7f},
-	{0xF875, 0x06},
-	{0xF876, 0x80},
-	{0xF877, 0x6c},
-	{0xF878, 0xe5},
-	{0xF879, 0x7d},
-	{0xF87A, 0xb4},
-	{0xF87B, 0x70},
-	{0xF87C, 0x04},
-	{0xF87D, 0x7f},
-	{0xF87E, 0x07},
-	{0xF87F, 0x80},
-	{0xF880, 0x63},
-	{0xF881, 0xe5},
-	{0xF882, 0x7d},
-	{0xF883, 0xb4},
-	{0xF884, 0x80},
-	{0xF885, 0x04},
-	{0xF886, 0x7f},
-	{0xF887, 0x08},
-	{0xF888, 0x80},
-	{0xF889, 0x5a},
-	{0xF88A, 0xe5},
-	{0xF88B, 0x7d},
-	{0xF88C, 0xb4},
-	{0xF88D, 0x90},
-	{0xF88E, 0x04},
-	{0xF88F, 0x7f},
-	{0xF890, 0x09},
-	{0xF891, 0x80},
-	{0xF892, 0x51},
-	{0xF893, 0xe5},
-	{0xF894, 0x7d},
-	{0xF895, 0xb4},
-	{0xF896, 0xa0},
-	{0xF897, 0x04},
-	{0xF898, 0x7f},
-	{0xF899, 0x0a},
-	{0xF89A, 0x80},
-	{0xF89B, 0x48},
-	{0xF89C, 0xe5},
-	{0xF89D, 0x7d},
-	{0xF89E, 0xb4},
-	{0xF89F, 0xb0},
-	{0xF8A0, 0x04},
-	{0xF8A1, 0x7f},
-	{0xF8A2, 0x0b},
-	{0xF8A3, 0x80},
-	{0xF8A4, 0x3f},
-	{0xF8A5, 0xe5},
-	{0xF8A6, 0x7d},
-	{0xF8A7, 0xb4},
-	{0xF8A8, 0xc0},
-	{0xF8A9, 0x04},
-	{0xF8AA, 0x7f},
-	{0xF8AB, 0x0c},
-	{0xF8AC, 0x80},
-	{0xF8AD, 0x36},
-	{0xF8AE, 0xe5},
-	{0xF8AF, 0x7d},
-	{0xF8B0, 0xb4},
-	{0xF8B1, 0xd0},
-	{0xF8B2, 0x04},
-	{0xF8B3, 0x7f},
-	{0xF8B4, 0x0d},
-	{0xF8B5, 0x80},
-	{0xF8B6, 0x2d},
-	{0xF8B7, 0xe5},
-	{0xF8B8, 0x7d},
-	{0xF8B9, 0xb4},
-	{0xF8BA, 0xe0},
-	{0xF8BB, 0x04},
-	{0xF8BC, 0x7f},
-	{0xF8BD, 0x0e},
-	{0xF8BE, 0x80},
-	{0xF8BF, 0x24},
-	{0xF8C0, 0xe5},
-	{0xF8C1, 0x7d},
-	{0xF8C2, 0xb4},
-	{0xF8C3, 0xe4},
-	{0xF8C4, 0x04},
-	{0xF8C5, 0x7f},
-	{0xF8C6, 0x0f},
-	{0xF8C7, 0x80},
-	{0xF8C8, 0x1b},
-	{0xF8C9, 0xe5},
-	{0xF8CA, 0x7d},
-	{0xF8CB, 0xb4},
-	{0xF8CC, 0xe8},
-	{0xF8CD, 0x04},
-	{0xF8CE, 0x7f},
-	{0xF8CF, 0x10},
-	{0xF8D0, 0x80},
-	{0xF8D1, 0x12},
-	{0xF8D2, 0xe5},
-	{0xF8D3, 0x7d},
-	{0xF8D4, 0xb4},
-	{0xF8D5, 0xec},
-	{0xF8D6, 0x04},
-	{0xF8D7, 0x7f},
-	{0xF8D8, 0x11},
-	{0xF8D9, 0x80},
-	{0xF8DA, 0x09},
-	{0xF8DB, 0xe5},
-	{0xF8DC, 0x7d},
-	{0xF8DD, 0x7f},
-	{0xF8DE, 0x00},
-	{0xF8DF, 0xb4},
-	{0xF8E0, 0xf0},
-	{0xF8E1, 0x02},
-	{0xF8E2, 0x7f},
-	{0xF8E3, 0x12},
-	{0xF8E4, 0x8f},
-	{0xF8E5, 0x7c},
-	{0xF8E6, 0xef},
-	{0xF8E7, 0x24},
-	{0xF8E8, 0x95},
-	{0xF8E9, 0xff},
-	{0xF8EA, 0xe4},
-	{0xF8EB, 0x34},
-	{0xF8EC, 0xfb},
-	{0xF8ED, 0x8f},
-	{0xF8EE, 0x82},
-	{0xF8EF, 0xf5},
-	{0xF8F0, 0x83},
-	{0xF8F1, 0xe4},
-	{0xF8F2, 0x93},
-	{0xF8F3, 0xf5},
-	{0xF8F4, 0x7c},
-	{0xF8F5, 0xf5},
-	{0xF8F6, 0x7b},
-	{0xF8F7, 0xe4},
-	{0xF8F8, 0xf5},
-	{0xF8F9, 0x7a},
-	{0xF8FA, 0x75},
-	{0xF8FB, 0x78},
-	{0xF8FC, 0x30},
-	{0xF8FD, 0x75},
-	{0xF8FE, 0x79},
-	{0xF8FF, 0x53},
-	{0xF900, 0x85},
-	{0xF901, 0x79},
-	{0xF902, 0x82},
-	{0xF903, 0x85},
-	{0xF904, 0x78},
-	{0xF905, 0x83},
-	{0xF906, 0xe0},
-	{0xF907, 0x25},
-	{0xF908, 0x7c},
-	{0xF909, 0xf0},
-	{0xF90A, 0x74},
-	{0xF90B, 0x02},
-	{0xF90C, 0x25},
-	{0xF90D, 0x79},
-	{0xF90E, 0xf5},
-	{0xF90F, 0x79},
-	{0xF910, 0xe4},
-	{0xF911, 0x35},
-	{0xF912, 0x78},
-	{0xF913, 0xf5},
-	{0xF914, 0x78},
-	{0xF915, 0x05},
-	{0xF916, 0x7a},
-	{0xF917, 0xe5},
-	{0xF918, 0x7a},
-	{0xF919, 0xb4},
-	{0xF91A, 0x08},
-	{0xF91B, 0xe4},
-	{0xF91C, 0x02},
-	{0xF91D, 0x18},
-	{0xF91E, 0x32},
-	{0xF91F, 0x22},
-	{0xF920, 0xf0},
-	{0xF921, 0x90},
-	{0xF922, 0xa0},
-	{0xF923, 0xf8},
-	{0xF924, 0xe0},
-	{0xF925, 0x70},
-	{0xF926, 0x02},
-	{0xF927, 0xa3},
-	{0xF928, 0xe0},
-	{0xF929, 0x70},
-	{0xF92A, 0x0a},
-	{0xF92B, 0x90},
-	{0xF92C, 0xa1},
-	{0xF92D, 0x10},
-	{0xF92E, 0xe0},
-	{0xF92F, 0xfe},
-	{0xF930, 0xa3},
-	{0xF931, 0xe0},
-	{0xF932, 0xff},
-	{0xF933, 0x80},
-	{0xF934, 0x04},
-	{0xF935, 0x7e},
-	{0xF936, 0x00},
-	{0xF937, 0x7f},
-	{0xF938, 0x00},
-	{0xF939, 0x8e},
-	{0xF93A, 0x7e},
-	{0xF93B, 0x8f},
-	{0xF93C, 0x7f},
-	{0xF93D, 0x90},
-	{0xF93E, 0x36},
-	{0xF93F, 0x0d},
-	{0xF940, 0xe0},
-	{0xF941, 0x44},
-	{0xF942, 0x02},
-	{0xF943, 0xf0},
-	{0xF944, 0x90},
-	{0xF945, 0x36},
-	{0xF946, 0x0e},
-	{0xF947, 0xe5},
-	{0xF948, 0x7e},
-	{0xF949, 0xf0},
-	{0xF94A, 0xa3},
-	{0xF94B, 0xe5},
-	{0xF94C, 0x7f},
-	{0xF94D, 0xf0},
-	{0xF94E, 0xe5},
-	{0xF94F, 0x3a},
-	{0xF950, 0x60},
-	{0xF951, 0x0c},
-	{0xF952, 0x90},
-	{0xF953, 0x36},
-	{0xF954, 0x09},
-	{0xF955, 0xe0},
-	{0xF956, 0x70},
-	{0xF957, 0x06},
-	{0xF958, 0x90},
-	{0xF959, 0x36},
-	{0xF95A, 0x08},
-	{0xF95B, 0xf0},
-	{0xF95C, 0xf5},
-	{0xF95D, 0x3a},
-	{0xF95E, 0x02},
-	{0xF95F, 0x03},
-	{0xF960, 0x94},
-	{0xF961, 0x22},
-	{0xF962, 0x78},
-	{0xF963, 0x07},
-	{0xF964, 0xe6},
-	{0xF965, 0xd3},
-	{0xF966, 0x94},
-	{0xF967, 0x00},
-	{0xF968, 0x40},
-	{0xF969, 0x16},
-	{0xF96A, 0x16},
-	{0xF96B, 0xe6},
-	{0xF96C, 0x90},
-	{0xF96D, 0x30},
-	{0xF96E, 0xa1},
-	{0xF96F, 0xf0},
-	{0xF970, 0x90},
-	{0xF971, 0x43},
-	{0xF972, 0x83},
-	{0xF973, 0xe0},
-	{0xF974, 0xb4},
-	{0xF975, 0x01},
-	{0xF976, 0x0f},
-	{0xF977, 0x90},
-	{0xF978, 0x43},
-	{0xF979, 0x87},
-	{0xF97A, 0xe0},
-	{0xF97B, 0xb4},
-	{0xF97C, 0x01},
-	{0xF97D, 0x08},
-	{0xF97E, 0x80},
-	{0xF97F, 0x00},
-	{0xF980, 0x90},
-	{0xF981, 0x30},
-	{0xF982, 0xa0},
-	{0xF983, 0x74},
-	{0xF984, 0x01},
-	{0xF985, 0xf0},
-	{0xF986, 0x22},
-	{0xF987, 0xf0},
-	{0xF988, 0x90},
-	{0xF989, 0x35},
-	{0xF98A, 0xba},
-	{0xF98B, 0xe0},
-	{0xF98C, 0xb4},
-	{0xF98D, 0x0a},
-	{0xF98E, 0x0d},
-	{0xF98F, 0xa3},
-	{0xF990, 0xe0},
-	{0xF991, 0xb4},
-	{0xF992, 0x01},
-	{0xF993, 0x08},
-	{0xF994, 0x90},
-	{0xF995, 0xfb},
-	{0xF996, 0x94},
-	{0xF997, 0xe0},
-	{0xF998, 0x90},
-	{0xF999, 0x35},
-	{0xF99A, 0xb8},
-	{0xF99B, 0xf0},
-	{0xF99C, 0xd0},
-	{0xF99D, 0xd0},
-	{0xF99E, 0xd0},
-	{0xF99F, 0x82},
-	{0xF9A0, 0xd0},
-	{0xF9A1, 0x83},
-	{0xF9A2, 0xd0},
-	{0xF9A3, 0xe0},
-	{0xF9A4, 0x32},
-	{0xF9A5, 0x22},
-	{0xF9A6, 0xe5},
-	{0xF9A7, 0x7f},
-	{0xF9A8, 0x45},
-	{0xF9A9, 0x7e},
-	{0xF9AA, 0x60},
-	{0xF9AB, 0x15},
-	{0xF9AC, 0x90},
-	{0xF9AD, 0x01},
-	{0xF9AE, 0x00},
-	{0xF9AF, 0xe0},
-	{0xF9B0, 0x70},
-	{0xF9B1, 0x0f},
-	{0xF9B2, 0x90},
-	{0xF9B3, 0xa0},
-	{0xF9B4, 0xf8},
-	{0xF9B5, 0xe5},
-	{0xF9B6, 0x7e},
-	{0xF9B7, 0xf0},
-	{0xF9B8, 0xa3},
-	{0xF9B9, 0xe5},
-	{0xF9BA, 0x7f},
-	{0xF9BB, 0xf0},
-	{0xF9BC, 0xe4},
-	{0xF9BD, 0xf5},
-	{0xF9BE, 0x7e},
-	{0xF9BF, 0xf5},
-	{0xF9C0, 0x7f},
-	{0xF9C1, 0x22},
-	{0xF9C2, 0x02},
-	{0xF9C3, 0x0e},
-	{0xF9C4, 0x79},
-	{0xF9C5, 0x22},
-	/* Offsets:*/
-	{0x35C6, 0x00},/* FIDDLEDARKCAL*/
-	{0x35C7, 0x00},
-	{0x35C8, 0x01},/*STOREDISTANCEATSTOPSTREAMING*/
-	{0x35C9, 0x20},
-	{0x35CA, 0x01},/*BRUCEFIX*/
-	{0x35CB, 0x62},
-	{0x35CC, 0x01},/*FIXDATAXFERSTATUSREG*/
-	{0x35CD, 0x87},
-	{0x35CE, 0x01},/*FOCUSDISTANCEUPDATE*/
-	{0x35CF, 0xA6},
-	{0x35D0, 0x01},/*SKIPEDOFRESET*/
-	{0x35D1, 0xC2},
-	{0x35D2, 0x00},
-	{0x35D3, 0xFB},
-	{0x35D4, 0x00},
-	{0x35D5, 0x94},
-	{0x35D6, 0x00},
-	{0x35D7, 0xFB},
-	{0x35D8, 0x00},
-	{0x35D9, 0x94},
-	{0x35DA, 0x00},
-	{0x35DB, 0xFB},
-	{0x35DC, 0x00},
-	{0x35DD, 0x94},
-	{0x35DE, 0x00},
-	{0x35DF, 0xFB},
-	{0x35E0, 0x00},
-	{0x35E1, 0x94},
-	{0x35E6, 0x18},/* FIDDLEDARKCAL*/
-	{0x35E7, 0x2F},
-	{0x35E8, 0x03},/* STOREDISTANCEATSTOPSTREAMING*/
-	{0x35E9, 0x93},
-	{0x35EA, 0x18},/* BRUCEFIX*/
-	{0x35EB, 0x99},
-	{0x35EC, 0x00},/* FIXDATAXFERSTATUSREG*/
-	{0x35ED, 0xA3},
-	{0x35EE, 0x21},/* FOCUSDISTANCEUPDATE*/
-	{0x35EF, 0x5B},
-	{0x35F0, 0x0E},/* SKIPEDOFRESET*/
-	{0x35F1, 0x74},
-	{0x35F2, 0x04},
-	{0x35F3, 0x64},
-	{0x35F4, 0x04},
-	{0x35F5, 0x65},
-	{0x35F6, 0x04},
-	{0x35F7, 0x7B},
-	{0x35F8, 0x04},
-	{0x35F9, 0x7C},
-	{0x35FA, 0x04},
-	{0x35FB, 0xDD},
-	{0x35FC, 0x04},
-	{0x35FD, 0xDE},
-	{0x35FE, 0x04},
-	{0x35FF, 0xEF},
-	{0x3600, 0x04},
-	{0x3601, 0xF0},
-	/*Jump/Data:*/
-	{0x35C2, 0x3F},/* Jump Reg*/
-	{0x35C3, 0xFF},/* Jump Reg*/
-	{0x35C4, 0x3F},/* Data Reg*/
-	{0x35C5, 0xC0},/* Data Reg*/
-	{0x35C0, 0x01},/* Enable*/
-};
+struct msm_camera_i2c_reg_conf init_mode_tbl[59];
 struct msm_camera_i2c_reg_conf init_tbl[] = {
 	{0x0112, 10},
 	{0x0113, 10},
@@ -1668,12 +1238,6 @@ static int32_t vx6953_sensor_setting(int update_type, int rt)
 			msleep(vx6953_stm5m0edof_delay_msecs_stdby);
 			msm_camera_i2c_write_tbl(
 				vx6953_s_ctrl.sensor_i2c_client,
-				patch_tbl_cut2,
-				ARRAY_SIZE(patch_tbl_cut2),
-				vx6953_s_ctrl.msm_sensor_reg->
-				default_data_type);
-			msm_camera_i2c_write_tbl(
-				vx6953_s_ctrl.sensor_i2c_client,
 				init_tbl,
 				ARRAY_SIZE(init_tbl),
 				vx6953_s_ctrl.msm_sensor_reg->
@@ -1683,151 +1247,186 @@ static int32_t vx6953_sensor_setting(int update_type, int rt)
 		return rc;
 		case UPDATE_PERIODIC:
 		if (rt == RES_PREVIEW || rt == RES_CAPTURE) {
-			struct msm_camera_i2c_reg_conf init_mode_tbl[] =  {
-			{REG_0x0112,
-				vx6953_regs.reg_pat_init[0].reg_0x0112},
-			{REG_0x0113,
-				vx6953_regs.reg_pat_init[0].reg_0x0113},
-			{REG_VT_PIX_CLK_DIV,
-				vx6953_regs.reg_pat_init[0].
-				vt_pix_clk_div},
-			{REG_PRE_PLL_CLK_DIV,
-				vx6953_regs.reg_pat_init[0].
-				pre_pll_clk_div},
-			{REG_PLL_MULTIPLIER,
-				vx6953_regs.reg_pat_init[0].
-				pll_multiplier},
-			{REG_OP_PIX_CLK_DIV,
-				vx6953_regs.reg_pat_init[0].
-				op_pix_clk_div},
-			{REG_COARSE_INTEGRATION_TIME_HI,
-				vx6953_regs.reg_pat[rt].
-				coarse_integration_time_hi},
-			{REG_COARSE_INTEGRATION_TIME_LO,
-				vx6953_regs.reg_pat[rt].
-				coarse_integration_time_lo},
-			{REG_ANALOGUE_GAIN_CODE_GLOBAL_LO,
-				vx6953_regs.reg_pat[rt].
-				analogue_gain_code_global},
-			{REG_0x3030,
-				vx6953_regs.reg_pat_init[0].reg_0x3030},
-			/* 953 specific registers */
-			{REG_0x0111,
-				vx6953_regs.reg_pat_init[0].reg_0x0111},
-			{REG_0x0b00,
-				vx6953_regs.reg_pat_init[0].reg_0x0b00},
-			{REG_0x3001,
-				vx6953_regs.reg_pat_init[0].reg_0x3001},
-			{REG_0x3004,
-				vx6953_regs.reg_pat_init[0].reg_0x3004},
-			{REG_0x3007,
-				vx6953_regs.reg_pat_init[0].reg_0x3007},
-			{REG_0x3016,
-				vx6953_regs.reg_pat_init[0].reg_0x3016},
-			{REG_0x301d,
-				vx6953_regs.reg_pat_init[0].reg_0x301d},
-			{REG_0x317e,
-				vx6953_regs.reg_pat_init[0].reg_0x317e},
-			{REG_0x317f,
-				vx6953_regs.reg_pat_init[0].reg_0x317f},
-			{REG_0x3400,
-				vx6953_regs.reg_pat_init[0].reg_0x3400},
-			{0x0b06,
-				vx6953_regs.reg_pat_init[0].reg_0x0b06},
-			/*Single_defect_correct_weight = auto*/
-			{0x0b07,
-				vx6953_regs.reg_pat_init[0].reg_0x0b07},
-			/*Dynamic couplet correction ENABLED*/
-			{0x0b08,
-				vx6953_regs.reg_pat_init[0].reg_0x0b08},
-			/*Dynamic couplet correction weight*/
-			{0x0b09,
-				vx6953_regs.reg_pat_init[0].reg_0x0b09},
-			/* Clock Setup */
-			/* Tell sensor ext clk is 24MHz*/
-			{0x0136,
-				vx6953_regs.reg_pat_init[0].reg_0x0136},
-			{0x0137,
-				vx6953_regs.reg_pat_init[0].reg_0x0137},
-			/* The white balance gains must be written
-			to the sensor every frame. */
-			/* Edof */
-			{REG_0x0b83,
-				vx6953_regs.reg_pat_init[0].reg_0x0b83},
-			{REG_0x0b84,
-				vx6953_regs.reg_pat_init[0].reg_0x0b84},
-			{0x0b85,
-				vx6953_regs.reg_pat_init[0].reg_0x0b85},
-			{0x0b88,
-				vx6953_regs.reg_pat_init[0].reg_0x0b88},
-			{0x0b89,
-				vx6953_regs.reg_pat_init[0].reg_0x0b89},
-			{REG_0x0b8a,
-				vx6953_regs.reg_pat_init[0].reg_0x0b8a},
-			/* Mode specific regieters */
-			{REG_FRAME_LENGTH_LINES_HI,
-				vx6953_regs.reg_pat[rt].
-				frame_length_lines_hi},
-			{REG_FRAME_LENGTH_LINES_LO,
-				vx6953_regs.reg_pat[rt].
-				frame_length_lines_lo},
-			{REG_LINE_LENGTH_PCK_HI,
-				vx6953_regs.reg_pat[rt].
-				line_length_pck_hi},
-			{REG_LINE_LENGTH_PCK_LO,
-				vx6953_regs.reg_pat[rt].
-				line_length_pck_lo},
-			{REG_0x3005,
-				vx6953_regs.reg_pat[rt].reg_0x3005},
-			{0x3010,
-				vx6953_regs.reg_pat[rt].reg_0x3010},
-			{REG_0x3011,
-				vx6953_regs.reg_pat[rt].reg_0x3011},
-			{REG_0x301a,
-				vx6953_regs.reg_pat[rt].reg_0x301a},
-			{REG_0x3035,
-				vx6953_regs.reg_pat[rt].reg_0x3035},
-			{REG_0x3036,
-				vx6953_regs.reg_pat[rt].reg_0x3036},
-			{REG_0x3041,
-				vx6953_regs.reg_pat[rt].reg_0x3041},
-			{0x3042,
-				vx6953_regs.reg_pat[rt].reg_0x3042},
-			{REG_0x3045,
-				vx6953_regs.reg_pat[rt].reg_0x3045},
-			/*EDOF: Estimation settings for Preview mode
-			Application settings for capture mode
-			(standard settings - Not tuned) */
-			{REG_0x0b80,
-				vx6953_regs.reg_pat[rt].reg_0x0b80},
-			{REG_0x0900,
-				vx6953_regs.reg_pat[rt].reg_0x0900},
-			{REG_0x0901,
-				vx6953_regs.reg_pat[rt].reg_0x0901},
-			{REG_0x0902,
-				vx6953_regs.reg_pat[rt].reg_0x0902},
-			{REG_0x0383,
-				vx6953_regs.reg_pat[rt].reg_0x0383},
-			{REG_0x0387,
-				vx6953_regs.reg_pat[rt].reg_0x0387},
-			/* Change output size / frame rate */
-			{REG_0x034c,
-				vx6953_regs.reg_pat[rt].reg_0x034c},
-			{REG_0x034d,
-				vx6953_regs.reg_pat[rt].reg_0x034d},
-			{REG_0x034e,
-				vx6953_regs.reg_pat[rt].reg_0x034e},
-			{REG_0x034f,
-				vx6953_regs.reg_pat[rt].reg_0x034f},
-			{REG_0x1716,
-				vx6953_regs.reg_pat[rt].reg_0x1716},
-			{REG_0x1717,
-				vx6953_regs.reg_pat[rt].reg_0x1717},
-			{REG_0x1718,
-				vx6953_regs.reg_pat[rt].reg_0x1718},
-			{REG_0x1719,
-				vx6953_regs.reg_pat[rt].reg_0x1719},
-			};
+			init_mode_tbl[0].reg_addr = REG_0x0112;
+			init_mode_tbl[0].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0112;
+			init_mode_tbl[1].reg_addr = REG_0x0113;
+			init_mode_tbl[1].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0113;
+			init_mode_tbl[2].reg_addr = REG_VT_PIX_CLK_DIV;
+			init_mode_tbl[2].reg_data =
+			vx6953_regs.reg_pat_init[0].vt_pix_clk_div;
+			init_mode_tbl[3].reg_addr = REG_PRE_PLL_CLK_DIV;
+			init_mode_tbl[3].reg_data =
+			vx6953_regs.reg_pat_init[0].pre_pll_clk_div;
+			init_mode_tbl[4].reg_addr = REG_PLL_MULTIPLIER;
+			init_mode_tbl[4].reg_data =
+			vx6953_regs.reg_pat_init[0].pll_multiplier;
+			init_mode_tbl[5].reg_addr = REG_OP_PIX_CLK_DIV;
+			init_mode_tbl[5].reg_data =
+			vx6953_regs.reg_pat_init[0].op_pix_clk_div;
+			init_mode_tbl[6].reg_addr =
+			REG_COARSE_INTEGRATION_TIME_HI;
+			init_mode_tbl[6].reg_data =
+			vx6953_regs.reg_pat[rt].coarse_integration_time_hi;
+			init_mode_tbl[7].reg_addr =
+			REG_COARSE_INTEGRATION_TIME_LO;
+			init_mode_tbl[7].reg_data =
+			vx6953_regs.reg_pat[rt].coarse_integration_time_lo;
+			init_mode_tbl[8].reg_addr =
+			REG_ANALOGUE_GAIN_CODE_GLOBAL_LO;
+			init_mode_tbl[8].reg_data =
+			vx6953_regs.reg_pat[rt].analogue_gain_code_global;
+			init_mode_tbl[9].reg_addr = REG_0x3030;
+			init_mode_tbl[9].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x3030;
+			init_mode_tbl[10].reg_addr = REG_0x0111;
+			init_mode_tbl[10].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0111;
+			init_mode_tbl[11].reg_addr = REG_0x0b00;
+			init_mode_tbl[11].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b00;
+			init_mode_tbl[12].reg_addr = REG_0x3001;
+			init_mode_tbl[12].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x3001;
+			init_mode_tbl[13].reg_addr = REG_0x3004;
+			init_mode_tbl[13].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x3004;
+			init_mode_tbl[14].reg_addr = REG_0x3007;
+			init_mode_tbl[14].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x3007;
+			init_mode_tbl[15].reg_addr = REG_0x3016;
+			init_mode_tbl[15].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x3016;
+			init_mode_tbl[16].reg_addr = REG_0x301d;
+			init_mode_tbl[16].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x301d;
+			init_mode_tbl[17].reg_addr = REG_0x317e;
+			init_mode_tbl[17].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x317e;
+			init_mode_tbl[18].reg_addr = REG_0x317f;
+			init_mode_tbl[18].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x317f;
+			init_mode_tbl[19].reg_addr = REG_0x3400;
+			init_mode_tbl[19].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x3400;
+			init_mode_tbl[20].reg_addr = 0x0b06;
+			init_mode_tbl[20].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b06;
+			init_mode_tbl[21].reg_addr = 0x0b07;
+			init_mode_tbl[21].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b07;
+			init_mode_tbl[22].reg_addr = 0x0b08;
+			init_mode_tbl[22].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b08;
+			init_mode_tbl[23].reg_addr = 0x0b09;
+			init_mode_tbl[23].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b09;
+			init_mode_tbl[24].reg_addr = 0x0136;
+			init_mode_tbl[24].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0136;
+			init_mode_tbl[25].reg_addr = 0x0137;
+			init_mode_tbl[25].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0137;
+			init_mode_tbl[26].reg_addr = REG_0x0b83;
+			init_mode_tbl[26].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b83;
+			init_mode_tbl[27].reg_addr = REG_0x0b84;
+			init_mode_tbl[27].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b84;
+			init_mode_tbl[28].reg_addr = 0x0b85;
+			init_mode_tbl[28].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b85;
+			init_mode_tbl[29].reg_addr = 0x0b88;
+			init_mode_tbl[29].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b88;
+			init_mode_tbl[30].reg_addr = 0x0b89;
+			init_mode_tbl[30].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b89;
+			init_mode_tbl[31].reg_addr = REG_0x0b8a;
+			init_mode_tbl[31].reg_data =
+			vx6953_regs.reg_pat_init[0].reg_0x0b8a;
+			init_mode_tbl[32].reg_addr = REG_FRAME_LENGTH_LINES_HI;
+			init_mode_tbl[32].reg_data =
+			vx6953_regs.reg_pat[rt].frame_length_lines_hi;
+			init_mode_tbl[33].reg_addr = REG_FRAME_LENGTH_LINES_LO;
+			init_mode_tbl[33].reg_data =
+			vx6953_regs.reg_pat[rt].frame_length_lines_lo;
+			init_mode_tbl[34].reg_addr = REG_LINE_LENGTH_PCK_HI;
+			init_mode_tbl[34].reg_data =
+			vx6953_regs.reg_pat[rt].line_length_pck_hi;
+			init_mode_tbl[35].reg_addr = REG_LINE_LENGTH_PCK_LO;
+			init_mode_tbl[35].reg_data =
+			vx6953_regs.reg_pat[rt].line_length_pck_lo;
+			init_mode_tbl[36].reg_addr = REG_0x3005;
+			init_mode_tbl[36].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3005;
+			init_mode_tbl[37].reg_addr = 0x3010;
+			init_mode_tbl[37].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3010;
+			init_mode_tbl[38].reg_addr = REG_0x3011;
+			init_mode_tbl[38].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3011;
+			init_mode_tbl[39].reg_addr = REG_0x301a;
+			init_mode_tbl[39].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x301a;
+			init_mode_tbl[40].reg_addr = REG_0x3035;
+			init_mode_tbl[40].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3035;
+			init_mode_tbl[41].reg_addr = REG_0x3036;
+			init_mode_tbl[41].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3036;
+			init_mode_tbl[42].reg_addr = REG_0x3041;
+			init_mode_tbl[42].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3041;
+			init_mode_tbl[43].reg_addr = 0x3042;
+			init_mode_tbl[43].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3042;
+			init_mode_tbl[44].reg_addr = REG_0x3045;
+			init_mode_tbl[44].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x3045;
+			init_mode_tbl[45].reg_addr = REG_0x0b80;
+			init_mode_tbl[45].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x0b80;
+			init_mode_tbl[46].reg_addr = REG_0x0900;
+			init_mode_tbl[46].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x0900;
+			init_mode_tbl[47].reg_addr = REG_0x0901;
+			init_mode_tbl[47].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x0901;
+			init_mode_tbl[48].reg_addr = REG_0x0902;
+			init_mode_tbl[48].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x0902;
+			init_mode_tbl[49].reg_addr = REG_0x0383;
+			init_mode_tbl[49].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x0383;
+			init_mode_tbl[50].reg_addr = REG_0x0387;
+			init_mode_tbl[50].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x0387;
+			init_mode_tbl[51].reg_addr = REG_0x034c;
+			init_mode_tbl[51].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x034c;
+			init_mode_tbl[52].reg_addr = REG_0x034d;
+			init_mode_tbl[52].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x034d;
+			init_mode_tbl[53].reg_addr = REG_0x034e;
+			init_mode_tbl[53].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x034e;
+			init_mode_tbl[54].reg_addr = REG_0x034f;
+			init_mode_tbl[54].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x034f;
+			init_mode_tbl[55].reg_addr = REG_0x1716;
+			init_mode_tbl[55].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x1716;
+			init_mode_tbl[56].reg_addr = REG_0x1717;
+			init_mode_tbl[56].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x1717;
+			init_mode_tbl[57].reg_addr = REG_0x1718;
+			init_mode_tbl[57].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x1718;
+			init_mode_tbl[58].reg_addr = REG_0x1719;
+			init_mode_tbl[58].reg_data =
+			vx6953_regs.reg_pat[rt].reg_0x1719;
 			/* stop streaming */
 			msleep(20);
 
@@ -1852,13 +1451,6 @@ static int32_t vx6953_sensor_setting(int update_type, int rt)
 			msleep(vx6953_stm5m0edof_delay_msecs_stdby);
 
 			msleep(vx6953_stm5m0edof_delay_msecs_stdby);
-
-			msm_camera_i2c_write_tbl(
-				vx6953_s_ctrl.sensor_i2c_client,
-				patch_tbl_cut2,
-				ARRAY_SIZE(patch_tbl_cut2),
-				vx6953_s_ctrl.msm_sensor_reg->
-				default_data_type);
 
 			msm_camera_i2c_write_tbl(
 				vx6953_s_ctrl.sensor_i2c_client,

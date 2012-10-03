@@ -522,6 +522,10 @@ static struct msm_cam_clk_info vpe_clk_info[] = {
 	{"vpe_pclk", -1},
 };
 
+static struct msm_cam_clk_info vpe_7x30_clk_info[] = {
+	{"vpe_clk", 153600000},
+};
+
 int vpe_enable(uint32_t clk_rate, struct msm_cam_media_controller *mctl)
 {
 	int rc = 0;
@@ -547,7 +551,10 @@ int vpe_enable(uint32_t clk_rate, struct msm_cam_media_controller *mctl)
 	}
 
 	rc = msm_cam_clk_enable(&vpe_ctrl->pdev->dev, vpe_clk_info,
-			vpe_ctrl->vpe_clk, ARRAY_SIZE(vpe_clk_info), 1);
+		vpe_ctrl->vpe_clk, ARRAY_SIZE(vpe_clk_info), 1);
+	if (rc < 0)
+		rc = msm_cam_clk_enable(&vpe_ctrl->pdev->dev, vpe_7x30_clk_info,
+		vpe_ctrl->vpe_clk, ARRAY_SIZE(vpe_7x30_clk_info), 1);
 	if (rc < 0)
 		goto vpe_clk_failed;
 
@@ -599,9 +606,11 @@ int vpe_disable(struct msm_cam_media_controller *mctl)
 #endif
 	disable_irq(vpe_ctrl->vpeirq->start);
 	tasklet_kill(&vpe_tasklet);
-	msm_cam_clk_enable(&vpe_ctrl->pdev->dev, vpe_clk_info,
+	rc = msm_cam_clk_enable(&vpe_ctrl->pdev->dev, vpe_clk_info,
 			vpe_ctrl->vpe_clk, ARRAY_SIZE(vpe_clk_info), 0);
-
+	if (rc < 0)
+		rc = msm_cam_clk_enable(&vpe_ctrl->pdev->dev, vpe_7x30_clk_info,
+			vpe_ctrl->vpe_clk, ARRAY_SIZE(vpe_7x30_clk_info), 0);
 	regulator_disable(vpe_ctrl->fs_vpe);
 	spin_lock_irqsave(&vpe_ctrl->lock, flags);
 	vpe_ctrl->state = VPE_STATE_IDLE;
