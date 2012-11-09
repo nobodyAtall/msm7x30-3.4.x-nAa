@@ -1338,6 +1338,7 @@ void arch_idle(void)
 	int64_t t1;
 	static DEFINE_PER_CPU(int64_t, t2);
 	int exit_stat;
+	bool low_power = false;
 
 	if (!atomic_read(&msm_pm_init_done))
 		return;
@@ -1345,7 +1346,7 @@ void arch_idle(void)
 	cpu = smp_processor_id();
 	latency_qos = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
 	/* get the next timer expiration */
-	timer_expiration = ktime_to_ns(tick_nohz_get_sleep_length());
+	timer_expiration = msm_timer_enter_idle();
 
 	t1 = ktime_to_ns(ktime_get());
 	msm_pm_add_stat(MSM_PM_STAT_NOT_IDLE, t1 - __get_cpu_var(t2));
@@ -1405,12 +1406,10 @@ void arch_idle(void)
 		/* Sync the timer with SCLK, it is needed only for modem
 		 * assissted pollapse case.
 		 */
-		int64_t next_timer_exp = msm_timer_enter_idle();
 		uint32_t sleep_delay;
-		bool low_power = false;
 
 		sleep_delay = (uint32_t) msm_pm_convert_and_cap_time(
-			next_timer_exp, MSM_PM_SLEEP_TICK_LIMIT);
+			timer_expiration, MSM_PM_SLEEP_TICK_LIMIT);
 
 		if (sleep_delay == 0) /* 0 would mean infinite time */
 			sleep_delay = 1;
@@ -1426,7 +1425,6 @@ void arch_idle(void)
 
 		ret = msm_pm_power_collapse(true, sleep_delay, sleep_limit);
 		low_power = (ret != -EBUSY && ret != -ETIMEDOUT);
-		msm_timer_exit_idle(low_power);
 
 		if (ret)
 			exit_stat = MSM_PM_STAT_IDLE_FAILED_POWER_COLLAPSE;
@@ -1454,6 +1452,7 @@ void arch_idle(void)
 		exit_stat = MSM_PM_STAT_IDLE_SPIN;
 	}
 
+	msm_timer_exit_idle(low_power);
 	__get_cpu_var(t2) = ktime_to_ns(ktime_get());
 	msm_pm_add_stat(exit_stat, __get_cpu_var(t2) - t1);
 }
