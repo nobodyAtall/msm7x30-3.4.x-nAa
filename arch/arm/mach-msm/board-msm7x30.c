@@ -66,6 +66,7 @@
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
 #include <linux/cyttsp-qc.h>
+#include <linux/memblock.h>
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -7390,6 +7391,7 @@ static void __init msm7x30_reserve(void)
 {
 	reserve_info = &msm7x30_reserve_info;
 	msm_reserve();
+	memblock_remove(0xfc00000, SZ_1K);
 }
 
 static void __init msm7x30_allocate_memory_regions(void)
