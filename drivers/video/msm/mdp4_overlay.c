@@ -3457,13 +3457,13 @@ int mdp4_overlay_commit(struct fb_info *info)
 
 	switch (mfd->panel.type) {
 	case MIPI_CMD_PANEL:
-		mdp4_dsi_cmd_pipe_commit(0, 1);
+		//mdp4_dsi_cmd_pipe_commit(0, 1);
 		break;
 	case MIPI_VIDEO_PANEL:
-		mdp4_dsi_video_pipe_commit(0, 1);
+		//mdp4_dsi_video_pipe_commit(0, 1);
 		break;
 	case LCDC_PANEL:
-		mdp4_lcdc_pipe_commit(0, 1);
+		//mdp4_lcdc_pipe_commit(0, 1);
 		break;
 	case DTV_PANEL:
 		mdp4_dtv_pipe_commit(0, 1);
