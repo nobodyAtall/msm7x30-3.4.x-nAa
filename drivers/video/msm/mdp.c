@@ -2164,6 +2164,8 @@ static int mdp_off(struct platform_device *pdev)
 			mfd->panel.type == LCDC_PANEL ||
 			mfd->panel.type == LVDS_PANEL)
 		mdp4_lcdc_off(pdev);
+	else if (mfd->panel.type == MDDI_PANEL)
+		mdp4_mddi_off(pdev);
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	ret = panel_next_off(pdev);
@@ -2209,6 +2211,9 @@ static int mdp_on(struct platform_device *pdev)
 				mfd->panel.type == LCDC_PANEL ||
 				mfd->panel.type == LVDS_PANEL) {
 			mdp4_lcdc_on(pdev);
+		} else if (mfd->panel.type == MDDI_PANEL) {
+			mdp_vsync_cfg_regs(mfd, FALSE);
+			mdp4_mddi_on(pdev);
 		}
 
 		mdp_clk_ctrl(0);
@@ -2410,7 +2415,6 @@ static int mdp_probe(struct platform_device *pdev)
 	struct msm_fb_panel_data *pdata = NULL;
 	int rc;
 	resource_size_t  size ;
-	unsigned long flag;
 #ifdef CONFIG_FB_MSM_MDP40
 	int intf, if_no;
 #endif
@@ -2568,6 +2572,8 @@ static int mdp_probe(struct platform_device *pdev)
 #else
 			mfd->dma_fnc = mdp_dma2_update;
 #endif
+			mfd->vsync_init = mdp4_mddi_rdptr_init;
+			mfd->vsync_show = mdp4_mddi_vsync_show_event;
 			mfd->dma = &dma2_data;
 			mfd->lut_update = mdp_lut_update_nonlcdc;
 			mfd->do_histogram = mdp_do_histogram;
@@ -2584,6 +2590,7 @@ static int mdp_probe(struct platform_device *pdev)
 			mfd->vsync_gpio = -1;
 
 #ifdef CONFIG_FB_MSM_MDP40
+#if 0
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		spin_lock_irqsave(&mdp_spin_lock, flag);
 		mdp_intr_mask |= INTR_OVERLAY0_DONE;
@@ -2594,7 +2601,7 @@ static int mdp_probe(struct platform_device *pdev)
 		outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-
+#endif
 		if (mfd->panel.type == EBI2_PANEL)
 			intf = EBI2_INTF;
 		else
