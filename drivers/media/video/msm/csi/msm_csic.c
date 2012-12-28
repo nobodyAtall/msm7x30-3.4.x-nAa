@@ -258,6 +258,13 @@ static struct msm_cam_clk_info csic_7x_clk_info[] = {
 	{"csi_pclk", -1},
 };
 
+static struct msm_cam_clk_info csic_7x30_clk_info[] = {
+	{"csi_clk", 153600000},
+	{"csi_vfe_clk", -1},
+	{"csi_pclk", -1},
+};
+
+
 static int msm_csic_init(struct v4l2_subdev *sd)
 {
 	int rc = 0;
@@ -281,7 +288,13 @@ static int msm_csic_init(struct v4l2_subdev *sd)
 	if (rc < 0) {
 		csic_dev->hw_version = CSIC_7X;
 		rc = msm_cam_clk_enable(&csic_dev->pdev->dev, csic_7x_clk_info,
-			csic_dev->csic_clk, ARRAY_SIZE(csic_7x_clk_info), 1);
+		csic_dev->csic_clk, ARRAY_SIZE(csic_7x_clk_info), 1);
+	}
+	if (rc < 0) {
+		csic_dev->hw_version = CSIC_7X30;
+		rc = msm_cam_clk_enable(&csic_dev->pdev->dev,
+		csic_7x30_clk_info,
+		csic_dev->csic_clk, ARRAY_SIZE(csic_7x30_clk_info), 1);
 		if (rc < 0) {
 			csic_dev->hw_version = 0;
 			iounmap(csic_dev->base);
@@ -291,11 +304,9 @@ static int msm_csic_init(struct v4l2_subdev *sd)
 	}
 	if (csic_dev->hw_version == CSIC_7X)
 		msm_camio_vfe_blk_reset_3();
-
 #if DBG_CSIC
 	enable_irq(csic_dev->irq->start);
 #endif
-
 	return 0;
 }
 
@@ -331,6 +342,7 @@ static void msm_csic_disable(struct v4l2_subdev *sd)
 	}
 }
 
+
 static int msm_csic_release(struct v4l2_subdev *sd)
 {
 	struct csic_device *csic_dev;
@@ -347,8 +359,10 @@ static int msm_csic_release(struct v4l2_subdev *sd)
 	} else if (csic_dev->hw_version == CSIC_7X) {
 		msm_cam_clk_enable(&csic_dev->pdev->dev, csic_7x_clk_info,
 			csic_dev->csic_clk, ARRAY_SIZE(csic_7x_clk_info), 0);
+	} else if (csic_dev->hw_version == CSIC_7X30) {
+		msm_cam_clk_enable(&csic_dev->pdev->dev, csic_7x30_clk_info,
+			csic_dev->csic_clk, ARRAY_SIZE(csic_7x30_clk_info), 0);
 	}
-
 	iounmap(csic_dev->base);
 	csic_dev->base = NULL;
 	return 0;

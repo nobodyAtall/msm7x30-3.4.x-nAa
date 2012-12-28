@@ -19,6 +19,7 @@
 
 #define CSIC_7X 0x1
 #define CSIC_8X (0x1 << 1)
+#define CSIC_7X30 (0x1 << 2)
 
 struct csic_device {
 	struct platform_device *pdev;
