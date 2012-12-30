@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/module.h>
 #include "msm_sensor.h"
 #define SENSOR_NAME "s5k4e1"
 #define PLATFORM_DRIVER_NAME "msm_camera_s5k4e1"
@@ -170,7 +171,7 @@ static struct msm_camera_i2c_reg_conf s5k4e1_recommend_settings[] = {
 
 static struct v4l2_subdev_info s5k4e1_subdev_info[] = {
 	{
-	.code   = V4L2_MBUS_FMT_SGRBG10_1X10,
+	.code   = V4L2_MBUS_FMT_SBGGR10_1X10,
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	.fmt    = 1,
 	.order    = 0,
@@ -209,6 +210,19 @@ static struct msm_sensor_output_info_t s5k4e1_dimensions[] = {
 		.op_pixel_clk = 81600000,
 		.binning_factor = 1,
 	},
+};
+
+static struct msm_camera_csi_params s5k4e1_csi_params = {
+	.data_format = CSI_10BIT,
+	.lane_cnt    = 1,
+	.lane_assign = 0xe4,
+	.dpcm_scheme = 0,
+	.settle_cnt  = 24,
+};
+
+static struct msm_camera_csi_params *s5k4e1_csi_params_array[] = {
+	&s5k4e1_csi_params,
+	&s5k4e1_csi_params,
 };
 
 static struct msm_sensor_output_reg_addr_t s5k4e1_reg_addr = {
@@ -474,6 +488,7 @@ static struct msm_sensor_fn_t s5k4e1_func_tbl = {
 	.sensor_config = msm_sensor_config,
 	.sensor_power_up = msm_sensor_power_up,
 	.sensor_power_down = msm_sensor_power_down,
+	.sensor_get_csi_params = msm_sensor_get_csi_params,
 };
 
 static struct msm_sensor_reg_t s5k4e1_regs = {
@@ -502,6 +517,7 @@ static struct msm_sensor_ctrl_t s5k4e1_s_ctrl = {
 	.sensor_id_info = &s5k4e1_id_info,
 	.sensor_exp_gain_info = &s5k4e1_exp_gain_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+	.csic_params = &s5k4e1_csi_params_array[0],
 	.msm_sensor_mutex = &s5k4e1_mut,
 	.sensor_i2c_driver = &s5k4e1_i2c_driver,
 	.sensor_v4l2_subdev_info = s5k4e1_subdev_info,

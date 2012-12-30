@@ -807,7 +807,7 @@ static struct msm_camera_i2c_reg_conf vx6953_recommend_settings[] = {
 
 static struct v4l2_subdev_info vx6953_subdev_info[] = {
 	{
-	.code   = V4L2_MBUS_FMT_SGRBG10_1X10,
+	.code   = V4L2_MBUS_FMT_SBGGR10_1X10,
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	.fmt    = 1,
 	.order    = 0,
@@ -848,6 +848,19 @@ static struct msm_sensor_output_info_t vx6953_dimensions[] = {
 	},
 };
 
+static struct msm_camera_csi_params vx6953_csi_params = {
+	.data_format = CSI_8BIT,
+	.lane_cnt    = 1,
+	.lane_assign = 0xe4,
+	.dpcm_scheme = 0,
+	.settle_cnt  = 7,
+};
+
+static struct msm_camera_csi_params *vx6953_csi_params_array[] = {
+	&vx6953_csi_params,
+	&vx6953_csi_params,
+};
+
 static struct msm_sensor_output_reg_addr_t vx6953_reg_addr = {
 	.x_output = 0x034C,
 	.y_output = 0x034E,
@@ -862,11 +875,11 @@ static struct msm_sensor_id_info_t vx6953_id_info = {
 
 static struct msm_sensor_exp_gain_info_t vx6953_exp_gain_info = {
 	.coarse_int_time_addr = 0x0202,
-	.global_gain_addr = 0x0204,
-	.digital_gain_gr = 0x020E,
-	.digital_gain_r = 0x0210,
-	.digital_gain_b = 0x0212,
-	.digital_gain_gb = 0x0214,
+	.global_gain_addr = 0x0205,
+	.digital_gain_gr = 0x020F,
+	.digital_gain_r = 0x0211,
+	.digital_gain_b = 0x0213,
+	.digital_gain_gb = 0x0215,
 	.vert_offset = 9,
 };
 
@@ -892,46 +905,20 @@ static int __init msm_sensor_init_module(void)
 	return i2c_add_driver(&vx6953_i2c_driver);
 }
 
-static int32_t vx6953_set_fps(struct msm_sensor_ctrl_t *s_ctrl,
-	struct fps_cfg *fps) {
-	uint16_t total_lines_per_frame;
-	int32_t rc = 0;
-
-	total_lines_per_frame = (uint16_t)((VX6953_QTR_SIZE_HEIGHT +
-			VX6953_VER_QTR_BLK_LINES) * s_ctrl->fps_divider/0x400);
-			s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
-	rc = msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-			s_ctrl->sensor_output_reg_addr->frame_length_lines,
-			((total_lines_per_frame & 0xFF00) >> 8),
-			MSM_CAMERA_I2C_BYTE_DATA);
-	rc = msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-			s_ctrl->sensor_output_reg_addr->frame_length_lines + 1,
-			(total_lines_per_frame & 0xFF00),
-			MSM_CAMERA_I2C_BYTE_DATA);
-	s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);
-	return rc;
-}
-
 int32_t vx6953_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	uint16_t gain, uint32_t line) {
-	uint16_t line_length_pck, frame_length_lines;
+	uint16_t frame_length_lines;
 	uint8_t gain_hi, gain_lo;
 	uint8_t intg_time_hi, intg_time_lo;
 	uint8_t frame_length_lines_hi = 0, frame_length_lines_lo = 0;
 	int32_t rc = 0;
 
-	frame_length_lines = VX6953_QTR_SIZE_HEIGHT +
-		VX6953_VER_QTR_BLK_LINES;
-	line_length_pck = VX6953_QTR_SIZE_WIDTH +
-		VX6953_HRZ_QTR_BLK_PIXELS;
-	s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
-	if ((line + VX6953_STM5M0EDOF_OFFSET) > MAX_FRAME_LENGTH_LINES) {
-		frame_length_lines = MAX_FRAME_LENGTH_LINES;
-		line = MAX_FRAME_LENGTH_LINES - VX6953_STM5M0EDOF_OFFSET;
-	} else if ((line + VX6953_STM5M0EDOF_OFFSET) > frame_length_lines) {
-			frame_length_lines = line + VX6953_STM5M0EDOF_OFFSET;
-			line = frame_length_lines;
-			}
+	frame_length_lines = s_ctrl->curr_frame_length_lines;
+	frame_length_lines = (frame_length_lines * s_ctrl->fps_divider) / Q10;
+//	s_ctrl->func_tbl->sensor_group_hold_on(s_ctrl);
+	if ((line + VX6953_STM5M0EDOF_OFFSET) > frame_length_lines) {
+		frame_length_lines = line + VX6953_STM5M0EDOF_OFFSET;
+	}
 	frame_length_lines_hi = (uint8_t) ((frame_length_lines &
 		0xFF00) >> 8);
 	frame_length_lines_lo = (uint8_t) (frame_length_lines &
@@ -948,48 +935,28 @@ int32_t vx6953_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	gain_hi = (uint8_t) ((gain & 0xFF00) >> 8);
 	gain_lo = (uint8_t) (gain & 0x00FF);
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->global_gain_addr + 1,
-		gain_lo,
-		MSM_CAMERA_I2C_BYTE_DATA);
-		msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->global_gain_addr,
-		gain_hi,
+		gain_lo,
 		MSM_CAMERA_I2C_BYTE_DATA);
 		/*Update GR Comopnent*/
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->digital_gain_gr,
 		gain_hi,
 		MSM_CAMERA_I2C_BYTE_DATA);
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->digital_gain_gr + 1,
-		gain_lo,
-		MSM_CAMERA_I2C_BYTE_DATA);
 		/*Update R Comopnent*/
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->digital_gain_r,
 		gain_hi,
-		MSM_CAMERA_I2C_BYTE_DATA);
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->digital_gain_r + 1,
-		gain_lo,
 		MSM_CAMERA_I2C_BYTE_DATA);
 		/*Update B Comopnent*/
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->digital_gain_b,
 		gain_hi,
 		MSM_CAMERA_I2C_BYTE_DATA);
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->digital_gain_b + 1,
-		gain_lo,
-		MSM_CAMERA_I2C_BYTE_DATA);
 		/*Update GB Comopnent*/
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->digital_gain_gb,
 		gain_hi,
-		MSM_CAMERA_I2C_BYTE_DATA);
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->digital_gain_gb + 1,
-		gain_lo,
 		MSM_CAMERA_I2C_BYTE_DATA);
 		/* update line count registers */
 		intg_time_hi = (uint8_t) (((uint16_t)line & 0xFF00) >> 8);
@@ -1002,7 +969,7 @@ int32_t vx6953_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 		s_ctrl->sensor_exp_gain_info->coarse_int_time_addr + 1,
 		intg_time_lo,
 		MSM_CAMERA_I2C_BYTE_DATA);
-		s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);
+//		s_ctrl->func_tbl->sensor_group_hold_off(s_ctrl);
 		return rc;
 }
 
@@ -1459,6 +1426,13 @@ static int32_t vx6953_sensor_setting(int update_type, int rt)
 				vx6953_s_ctrl.msm_sensor_reg->
 				default_data_type);
 
+
+			vx6953_s_ctrl.curr_csic_params =
+				vx6953_s_ctrl.csic_params[0];
+			v4l2_subdev_notify(&vx6953_s_ctrl.sensor_v4l2_subdev,
+				NOTIFY_CSIC_CFG,
+				vx6953_s_ctrl.curr_csic_params);
+
 			msleep(vx6953_stm5m0edof_delay_msecs_stdby);
 			if (rt == RES_PREVIEW) {
 				CDBG("%s write mode_tbl for preview\n",
@@ -1576,7 +1550,7 @@ static struct msm_sensor_fn_t vx6953_func_tbl = {
 	.sensor_stop_stream = msm_sensor_stop_stream,
 	.sensor_group_hold_on = msm_sensor_group_hold_on,
 	.sensor_group_hold_off = msm_sensor_group_hold_off,
-	.sensor_set_fps = vx6953_set_fps,
+	.sensor_set_fps = msm_sensor_set_fps,
 	.sensor_write_exp_gain = vx6953_write_exp_gain,
 	.sensor_write_snapshot_exp_gain = vx6953_write_exp_gain,
 	.sensor_csi_setting = vx6953_set_sensor_mode,
@@ -1614,6 +1588,7 @@ static struct msm_sensor_ctrl_t vx6953_s_ctrl = {
 	.sensor_id_info = &vx6953_id_info,
 	.sensor_exp_gain_info = &vx6953_exp_gain_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+	.csic_params = &vx6953_csi_params_array[0],
 	.msm_sensor_mutex = &vx6953_mut,
 	.sensor_i2c_driver = &vx6953_i2c_driver,
 	.sensor_v4l2_subdev_info = vx6953_subdev_info,

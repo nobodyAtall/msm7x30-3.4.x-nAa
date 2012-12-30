@@ -13,7 +13,6 @@
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/of.h>
 #include <mach/irqs.h>
 #include <media/msm_isp.h>
 #include <media/v4l2-device.h>
@@ -208,10 +207,6 @@ static int __devinit irqrouter_probe(struct platform_device *pdev)
 	v4l2_set_subdevdata(&irqrouter_ctrl->subdev, irqrouter_ctrl);
 	irqrouter_ctrl->pdev = pdev;
 
-	if (pdev->dev.of_node)
-		of_property_read_u32((&pdev->dev)->of_node,
-			"cell-index", &pdev->id);
-
 	msm_irqrouter_send_default_irqmap(irqrouter_ctrl);
 
 	media_entity_init(&irqrouter_ctrl->subdev.entity, 0, NULL, 0);
@@ -242,19 +237,9 @@ error:
 
 static int __exit irqrouter_exit(struct platform_device *pdev)
 {
-	struct v4l2_subdev *subdev = dev_get_drvdata(&pdev->dev);
-	struct irqrouter_ctrl_type *irqrouter_ctrl =
-		v4l2_get_subdevdata(subdev);
 	kfree(irqrouter_ctrl);
 	return 0;
 }
-
-static const struct of_device_id msm_irqrouter_dt_match[] = {
-	{.compatible = "qcom,irqrouter"},
-	{}
-};
-
-MODULE_DEVICE_TABLE(of, msm_irqrouter_dt_match);
 
 static struct platform_driver msm_irqrouter_driver = {
 	.probe = irqrouter_probe,
@@ -262,7 +247,6 @@ static struct platform_driver msm_irqrouter_driver = {
 	.driver = {
 		.name = MSM_IRQ_ROUTER_DRV_NAME,
 		.owner = THIS_MODULE,
-		.of_match_table = msm_irqrouter_dt_match,
 	},
 };
 

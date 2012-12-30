@@ -658,6 +658,34 @@ static struct msm_sensor_output_info_t ov2720_dimensions[] = {
 	},
 };
 
+static struct msm_camera_csid_vc_cfg ov2720_cid_cfg[] = {
+	{0, CSI_RAW10, CSI_DECODE_10BIT},
+	{1, CSI_EMBED_DATA, CSI_DECODE_8BIT},
+};
+
+static struct msm_camera_csi2_params ov2720_csi_params = {
+	.csid_params = {
+		.lane_cnt = 2,
+		.lut_params = {
+			.num_cid = 2,
+			.vc_cfg = ov2720_cid_cfg,
+		},
+	},
+	.csiphy_params = {
+		.lane_cnt = 2,
+		.settle_cnt = 0x1B,
+	},
+};
+
+static struct msm_camera_csi2_params *ov2720_csi_params_array[] = {
+	&ov2720_csi_params,
+	&ov2720_csi_params,
+	&ov2720_csi_params,
+	&ov2720_csi_params,
+	&ov2720_csi_params,
+	&ov2720_csi_params,
+};
+
 static struct msm_sensor_output_reg_addr_t ov2720_reg_addr = {
 	.x_output = 0x3808,
 	.y_output = 0x380a,
@@ -674,12 +702,6 @@ static struct msm_sensor_exp_gain_info_t ov2720_exp_gain_info = {
 	.coarse_int_time_addr = 0x3501,
 	.global_gain_addr = 0x3508,
 	.vert_offset = 6,
-};
-
-static enum msm_camera_vreg_name_t ov2720_veg_seq[] = {
-	CAM_VIO,
-	CAM_VANA,
-	CAM_VDIG,
 };
 
 static int32_t ov2720_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
@@ -700,15 +722,9 @@ static int32_t ov2720_write_exp_gain(struct msm_sensor_ctrl_t *s_ctrl,
 	int_time[0] = line >> 12;
 	int_time[1] = line >> 4;
 	int_time[2] = line << 4;
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
+	msm_camera_i2c_write_seq(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->coarse_int_time_addr-1,
-		int_time[0], MSM_CAMERA_I2C_BYTE_DATA);
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->coarse_int_time_addr,
-		int_time[1], MSM_CAMERA_I2C_BYTE_DATA);
-	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
-		s_ctrl->sensor_exp_gain_info->coarse_int_time_addr+1,
-		int_time[2], MSM_CAMERA_I2C_BYTE_DATA);
+		&int_time[0], 3);
 	msm_camera_i2c_write(s_ctrl->sensor_i2c_client,
 		s_ctrl->sensor_exp_gain_info->global_gain_addr, gain,
 		MSM_CAMERA_I2C_WORD_DATA);
@@ -733,49 +749,9 @@ static struct msm_camera_i2c_client ov2720_sensor_i2c_client = {
 	.addr_type = MSM_CAMERA_I2C_WORD_ADDR,
 };
 
-
-static const struct of_device_id ov2720_dt_match[] = {
-	{.compatible = "qcom,ov2720", .data = &ov2720_s_ctrl},
-	{}
-};
-
-MODULE_DEVICE_TABLE(of, ov2720_dt_match);
-
-static struct platform_driver ov2720_platform_driver = {
-	.driver = {
-		.name = "qcom,ov2720",
-		.owner = THIS_MODULE,
-		.of_match_table = ov2720_dt_match,
-	},
-};
-
-static int32_t ov2720_platform_probe(struct platform_device *pdev)
-{
-	int32_t rc = 0;
-	const struct of_device_id *match;
-	match = of_match_device(ov2720_dt_match, &pdev->dev);
-	rc = msm_sensor_platform_probe(pdev, match->data);
-	return rc;
-}
-
 static int __init msm_sensor_init_module(void)
 {
-	int32_t rc = 0;
-	rc = platform_driver_probe(&ov2720_platform_driver,
-		ov2720_platform_probe);
-	if (!rc)
-		return rc;
 	return i2c_add_driver(&ov2720_i2c_driver);
-}
-
-static void __exit msm_sensor_exit_module(void)
-{
-	if (ov2720_s_ctrl.pdev) {
-		msm_sensor_free_sensor_data(&ov2720_s_ctrl);
-		platform_driver_unregister(&ov2720_platform_driver);
-	} else
-		i2c_del_driver(&ov2720_i2c_driver);
-	return;
 }
 
 static struct v4l2_subdev_core_ops ov2720_subdev_core_ops = {
@@ -807,7 +783,7 @@ static struct msm_sensor_fn_t ov2720_func_tbl = {
 	.sensor_config = msm_sensor_config,
 	.sensor_power_up = msm_sensor_power_up,
 	.sensor_power_down = msm_sensor_power_down,
-	.sensor_adjust_frame_lines = msm_sensor_adjust_frame_lines2,
+	.sensor_adjust_frame_lines = msm_sensor_adjust_frame_lines,
 	.sensor_get_csi_params = msm_sensor_get_csi_params,
 };
 
@@ -833,12 +809,11 @@ static struct msm_sensor_ctrl_t ov2720_s_ctrl = {
 	.msm_sensor_reg = &ov2720_regs,
 	.sensor_i2c_client = &ov2720_sensor_i2c_client,
 	.sensor_i2c_addr = 0x6C,
-	.vreg_seq = ov2720_veg_seq,
-	.num_vreg_seq = ARRAY_SIZE(ov2720_veg_seq),
 	.sensor_output_reg_addr = &ov2720_reg_addr,
 	.sensor_id_info = &ov2720_id_info,
 	.sensor_exp_gain_info = &ov2720_exp_gain_info,
 	.cam_mode = MSM_SENSOR_MODE_INVALID,
+	.csi_params = &ov2720_csi_params_array[0],
 	.msm_sensor_mutex = &ov2720_mut,
 	.sensor_i2c_driver = &ov2720_i2c_driver,
 	.sensor_v4l2_subdev_info = ov2720_subdev_info,
@@ -849,7 +824,6 @@ static struct msm_sensor_ctrl_t ov2720_s_ctrl = {
 };
 
 module_init(msm_sensor_init_module);
-module_exit(msm_sensor_exit_module);
 MODULE_DESCRIPTION("Omnivision 2MP Bayer sensor driver");
 MODULE_LICENSE("GPL v2");
 
