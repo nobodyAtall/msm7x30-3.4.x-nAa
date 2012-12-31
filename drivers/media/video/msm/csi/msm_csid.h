@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -16,7 +16,6 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <media/v4l2-subdev.h>
-#include <media/msm_camera.h>
 
 enum msm_csid_state_t {
 	CSID_POWER_UP,
@@ -36,14 +35,22 @@ struct csid_device {
 	uint32_t hw_version;
 	enum msm_csid_state_t csid_state;
 
-	struct clk *csid0_clk[6];
-	struct clk *csid_clk[6];
+	struct clk *csid_clk[5];
+};
+
+struct csid_cfg_params {
+	struct v4l2_subdev *subdev;
+	void *parms;
 };
 
 #define VIDIOC_MSM_CSID_CFG \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct csic_cfg_data*)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 4, struct csid_cfg_params)
+
+#define VIDIOC_MSM_CSID_INIT \
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct v4l2_subdev*)
 
 #define VIDIOC_MSM_CSID_RELEASE \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct v4l2_subdev*)
+	_IOWR('V', BASE_VIDIOC_PRIVATE + 6, struct v4l2_subdev*)
+
 #endif
 

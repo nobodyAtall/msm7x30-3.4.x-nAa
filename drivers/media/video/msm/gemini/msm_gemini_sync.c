@@ -218,7 +218,6 @@ int msm_gemini_evt_get(struct msm_gemini_device *pgmn_dev,
 		return -EAGAIN;
 	}
 
-	memset(&ctrl_cmd, 0, sizeof(struct msm_gemini_ctrl_cmd));
 	ctrl_cmd.type = buf_p->vbuf.type;
 	kfree(buf_p);
 
@@ -281,7 +280,6 @@ int msm_gemini_we_pingpong_irq(struct msm_gemini_device *pgmn_dev,
 		GMN_DBG("%s:%d] no output return buffer\n", __func__,
 			__LINE__);
 		rc = -1;
-		return rc;
 	}
 
 	buf_out = msm_gemini_q_out(&pgmn_dev->output_buf_q);

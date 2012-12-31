@@ -11,12 +11,12 @@
  *
  */
 
+#include <linux/module.h>
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <mach/irqs.h>
 #include <linux/io.h>
 #include <linux/slab.h>
-#include <linux/module.h>
 #include "msm_vpe1.h"
 #include <linux/pm_qos.h>
 #include <linux/clk.h>

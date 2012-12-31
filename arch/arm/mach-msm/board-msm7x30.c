@@ -999,7 +999,7 @@ static struct msm_camera_sensor_flash_data flash_vx6953 = {
 };
 
 static struct msm_camera_sensor_platform_info sensor_board_info_vx6953 = {
-	.mount_angle	= 0,
+	.mount_angle	= 270,
 	.cam_vreg = msm_7x30_back_cam_vreg,
 	.num_vreg = ARRAY_SIZE(msm_7x30_back_cam_vreg),
 	.gpio_conf = &msm_7x30_back_cam_gpio_conf,
