@@ -153,7 +153,7 @@ static void mdp4_mddi_do_blt(struct msm_fb_data_type *mfd, int enable)
 	int cndx = 0;
 	struct vsycn_ctrl *vctrl;
 	struct mdp4_overlay_pipe *pipe;
-	int need_wait;
+	int need_wait = 0;
 
 	vctrl = &vsync_ctrl_db[cndx];
 	pipe = vctrl->base_pipe;
@@ -563,6 +563,7 @@ void mdp4_dmap_done_mddi(int cndx)
 	pipe->dmap_cnt++;
 	mdp4_stat.kickoff_dmap++;
 	vctrl->dmap_koff++;
+	INIT_COMPLETION(vctrl->dmap_comp);
 	vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
 	outpdw(MDP_BASE + 0x000c, 0); /* kickoff dmap engine */
 	mb(); /* make sure kickoff executed */
@@ -612,6 +613,7 @@ void mdp4_overlay0_done_mddi(int cndx)
 	pipe->dmap_cnt++;
 	mdp4_stat.kickoff_dmap++;
 	vctrl->dmap_koff++;
+	INIT_COMPLETION(vctrl->dmap_comp);
 	vsync_irq_enable(INTR_DMA_P_DONE, MDP_DMAP_TERM);
 	outpdw(MDP_BASE + 0x000c, 0); /* kickoff dmap engine */
 	mb(); /* make sure kickoff executed */
