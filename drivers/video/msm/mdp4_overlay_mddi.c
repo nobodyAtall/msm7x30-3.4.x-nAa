@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -69,6 +69,7 @@ static struct vsycn_ctrl {
 	struct vsync_update vlist[2];
 	int vsync_enabled;
 	int clk_enabled;
+	int new_update;
 	int clk_control;
 	ktime_t vsync_time;
 	struct work_struct clk_work;
@@ -261,7 +262,7 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 	unsigned long flags;
 	int need_dmap_wait = 0;
 	int need_ov_wait = 0;
-	int cnt = 0;
+	int cnt = 0, clk_set_on = 0;
 
 	vctrl = &vsync_ctrl_db[0];
 
@@ -285,6 +286,22 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 			mdp4_free_writeback_buf(vctrl->mfd, mixer);
 	}
 	mutex_unlock(&vctrl->update_lock);
+
+	spin_lock_irqsave(&vctrl->spin_lock, flags);
+	vctrl->clk_control = 0;
+	vctrl->pan_display++;
+	if (!vctrl->clk_enabled) {
+		clk_set_on = 1;
+		vctrl->clk_enabled = 1;
+		vctrl->expire_tick = VSYNC_EXPIRE_TICK;
+	}
+	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+
+	if (clk_set_on) {
+		pr_debug("%s: SET_CLK_ON\n", __func__);
+		mdp_clk_ctrl(1);
+		vsync_irq_enable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
+	}
 
 	/* free previous committed iommu back to pool */
 	mdp4_overlay_iommu_unmap_freelist(mixer);
@@ -414,6 +431,7 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 			pr_debug("%s: SET_CLK_ON\n", __func__);
 			mdp_clk_ctrl(1);
 			vctrl->clk_enabled = 1;
+			vctrl->new_update = 1;
 			clk_set_on = 1;
 		}
 		if (clk_set_on) {
@@ -508,6 +526,12 @@ static void primary_rdptr_isr(int cndx)
 
 	spin_lock(&vctrl->spin_lock);
 	vctrl->vsync_time = ktime_get();
+
+	if (vctrl->new_update) {
+		vctrl->new_update = 0;
+		spin_unlock(&vctrl->spin_lock);
+		return;
+	}
 
 	complete_all(&vctrl->vsync_comp);
 		vctrl->wait_vsync_cnt = 0;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -620,6 +620,7 @@ int mdp4_dtv_off(struct platform_device *pdev)
 			vctrl->base_pipe = NULL;
 		} else {
 			mdp4_mixer_stage_down(pipe, 1);
+			msleep(20);
 			mdp4_overlay_pipe_free(pipe);
 			vctrl->base_pipe = NULL;
 		}
