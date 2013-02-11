@@ -1,5 +1,4 @@
-/* Copyright (c) 2009-2011, The Linux Foundation. All rights reserved.
- *
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -208,6 +207,7 @@ static union rpc_reply_batt_chg rep_batt_chg;
 
 struct msm_battery_info {
 	u32 voltage_max_design;
+	u32 voltage_max_full;
 	u32 voltage_min_design;
 	u32 voltage_fail_safe;
 	u32 chg_api_version;
@@ -231,7 +231,7 @@ struct msm_battery_info {
 	u32 battery_temp;  /* in celsius */
 	u32 is_charging;
 
-	u32(*calculate_capacity) (u32 voltage);
+	u32(*calculate_capacity) (u32 voltage, u32 full_voltage);
 
 	s32 batt_handle;
 
@@ -580,6 +580,7 @@ static void msm_batt_update_psy_status(void)
 			/* Use previous */
 			battery_voltage = msm_batt_info.battery_voltage;
 	}
+
 	if (battery_status == BATTERY_STATUS_INVALID) {
 		if (battery_voltage >= msm_batt_info.voltage_min_design &&
 		    battery_voltage <= msm_batt_info.voltage_max_design) {
@@ -635,6 +636,24 @@ static void msm_batt_update_psy_status(void)
 		}
 	}
 
+	/*
+	 * If batteries doesn't attain max designed voltage even after it is
+	 * fully charged, update the max voltage to the voltage at which battery
+	 * is fully charged and doesn't take any more charge. This is to avoid
+	 * UI showing <100%
+	 * */
+	if (battery_level == BATTERY_LEVEL_FULL && !is_charging) {
+		msm_batt_info.voltage_max_full =
+			(battery_voltage < msm_batt_info.voltage_max_design ?
+			battery_voltage : msm_batt_info.voltage_max_design);
+		msm_batt_info.batt_capacity =
+			msm_batt_info.calculate_capacity(battery_voltage,
+					msm_batt_info.voltage_max_full);
+		supp = &msm_psy_batt;
+		DBG_LIMIT("BATT: current max_voltage: %d",
+				msm_batt_info.voltage_max_full);
+	}
+
 	if (msm_batt_info.is_charging != is_charging) {
 		if (!is_charging) {
 			msm_batt_info.batt_status = (battery_level ==
@@ -688,7 +707,8 @@ static void msm_batt_update_psy_status(void)
 
 		msm_batt_info.battery_voltage  	= battery_voltage;
 		msm_batt_info.batt_capacity =
-			msm_batt_info.calculate_capacity(battery_voltage);
+			msm_batt_info.calculate_capacity(battery_voltage,
+					 msm_batt_info.voltage_max_full);
 		DBG_LIMIT("BATT: voltage = %u mV [capacity = %d%%]\n",
 			 battery_voltage, msm_batt_info.batt_capacity);
 
@@ -1230,10 +1250,9 @@ static int msm_batt_cleanup(void)
 	return rc;
 }
 
-static u32 msm_batt_capacity(u32 current_voltage)
+static u32 msm_batt_capacity(u32 current_voltage, u32 high_voltage)
 {
 	u32 low_voltage = msm_batt_info.voltage_min_design;
-	u32 high_voltage = msm_batt_info.voltage_max_design;
 
 	if (current_voltage <= low_voltage)
 		return 0;
@@ -1441,6 +1460,8 @@ static int __devinit msm_batt_probe(struct platform_device *pdev)
 		msm_batt_info.voltage_max_design = BATTERY_HIGH;
 	if (!msm_batt_info.voltage_fail_safe)
 		msm_batt_info.voltage_fail_safe  = BATTERY_LOW;
+
+	msm_batt_info.voltage_max_full = msm_batt_info.voltage_max_design;
 
 	if (msm_batt_info.batt_technology == POWER_SUPPLY_TECHNOLOGY_UNKNOWN)
 		msm_batt_info.batt_technology = POWER_SUPPLY_TECHNOLOGY_LION;
