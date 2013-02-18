@@ -5282,11 +5282,15 @@ static void __init bt_power_init(void)
 #define bt_power_init(x) do {} while (0)
 #endif
 
+static u32 msm_calculate_batt_capacity(u32 current_voltage, u32 full_voltage);
+
 static struct msm_psy_batt_pdata msm_psy_batt_data = {
 	.voltage_min_design 	= 2800,
 	.voltage_max_design	= 4300,
+	.voltage_fail_safe      = 2860,
 	.avail_chg_sources   	= AC_CHG | USB_CHG ,
 	.batt_technology        = POWER_SUPPLY_TECHNOLOGY_LION,
+	.calculate_capacity     = &msm_calculate_batt_capacity,
 };
 
 static struct platform_device msm_batt_device = {
@@ -5294,6 +5298,20 @@ static struct platform_device msm_batt_device = {
 	.id		    = -1,
 	.dev.platform_data  = &msm_psy_batt_data,
 };
+
+static u32 msm_calculate_batt_capacity(u32 current_voltage , u32 high_voltage)
+{
+       u32 low_voltage  = msm_psy_batt_data.voltage_min_design;
+
+       if (current_voltage <= low_voltage)
+               return 0;
+       else if (current_voltage >= high_voltage)
+               return 100;
+       else
+               return (current_voltage - low_voltage) * 100
+                       / (high_voltage - low_voltage);
+}
+
 
 static char *msm_adc_fluid_device_names[] = {
 	"LTC_ADC1",
