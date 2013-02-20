@@ -433,6 +433,7 @@ config ARCH_MSM7X27A
 	select ARCH_MSM_CORTEXMP
 	select MIGHT_HAVE_CACHE_L2X0
 	select ARM_HAS_SG_CHAIN
+	select MSM_FIQ_SUPPORT
 
 config  MSM_VIC
 	bool
