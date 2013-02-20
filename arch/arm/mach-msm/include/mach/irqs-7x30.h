@@ -13,6 +13,8 @@
 #ifndef __ASM_ARCH_MSM_IRQS_7X30_H
 #define __ASM_ARCH_MSM_IRQS_7X30_H
 
+#define FIQ_START               0
+
 /* MSM ACPU Interrupt Numbers */
 
 #define INT_DEBUG_TIMER_EXP	0

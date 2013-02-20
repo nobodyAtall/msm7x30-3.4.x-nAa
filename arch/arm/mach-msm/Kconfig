@@ -68,6 +68,9 @@ config ARCH_MSM7X30
 	select HOLES_IN_ZONE if SPARSEMEM
 	select MSM_MODEM_RESTART
 	select ARM_HAS_SG_CHAIN
+	select MSM_FIQ
+	select MSM_FIQ_SUPPORT
+
 
 config ARCH_QSD8X50
 	bool "QSD8X50"
@@ -1241,6 +1244,16 @@ config QSD_PMIC_DEFAULT_DCDC1
 config MSM_FIQ_SUPPORT
 	default y
 	bool "Enable installation of an FIQ handler."
+
+config MSM_FIQ
+       bool "Enable FIQ for debugging"
+       select FIQ
+       help
+         Enable any line to be used as an FIQ. This will help debugging
+         if apps is not responding and holding lock with irqs disabled.
+         Modem will then generate an raise a FIQ on this line before sending
+         SMSM reset.
+
 
 config MSM_SERIAL_DEBUGGER
 	select MSM_FIQ_SUPPORT

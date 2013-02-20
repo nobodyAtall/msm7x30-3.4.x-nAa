@@ -46,12 +46,8 @@ void msm7k_fiq_handler(void)
 	c = irq_data_get_irq_chip(d);
 	c->irq_mask(d);
 
-	if (cpu_is_msm8625() || cpu_is_msm8625q())
-		/* Clear the IRQ from the ENABLE_SET */
-		gic_clear_irq_pending(msm_fiq_no);
-	else
-		/* Clear the IRQ from the VIC_INT_CLEAR0*/
-		c->irq_ack(d);
+	/* Clear the IRQ from the VIC_INT_CLEAR0*/
+	c->irq_ack(d);
 
 	ctx_regs.ARM_pc = msm_dump_cpu_ctx.fiq_r14;
 	ctx_regs.ARM_lr = msm_dump_cpu_ctx.svc_r14;
@@ -84,10 +80,7 @@ static int __init msm_setup_fiq_handler(void)
 	}
 
 	fiq_set_type(msm_fiq_no, IRQF_TRIGGER_RISING);
-	if (cpu_is_msm8625() || cpu_is_msm8625q())
-		gic_set_irq_secure(msm_fiq_no);
-	else
-		msm_fiq_select(msm_fiq_no);
+	msm_fiq_select(msm_fiq_no);
 
 	enable_irq(msm_fiq_no);
 	pr_info("%s : MSM FIQ handler setup--done\n", __func__);
@@ -96,10 +89,7 @@ static int __init msm_setup_fiq_handler(void)
 
 static int __init init7k_fiq(void)
 {
-	if (cpu_is_msm8625() || cpu_is_msm8625q())
-		msm_fiq_no = MSM8625_INT_A9_M2A_2;
-	else
-		msm_fiq_no = INT_A9_M2A_2;
+	msm_fiq_no = INT_A9_M2A_2;
 
 	if (msm_setup_fiq_handler())
 		pr_err("MSM FIQ INIT FAILED\n");
