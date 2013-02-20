@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <asm/fiq.h>
+#include <asm/unwind.h>
 #include <asm/hardware/gic.h>
 #include <asm/cacheflush.h>
 #include <mach/irqs-8625.h>
@@ -32,6 +33,7 @@ void msm7k_fiq_handler(void)
 {
 	struct irq_data *d;
 	struct irq_chip *c;
+	struct pt_regs ctx_regs;
 
 	pr_info("Fiq is received %s\n", __func__);
 	fiq_counter++;
@@ -43,6 +45,14 @@ void msm7k_fiq_handler(void)
 	/* Clear the IRQ from the ENABLE_SET */
 	gic_clear_irq_pending(MSM8625_INT_A9_M2A_2);
 	local_irq_enable();
+	ctx_regs.ARM_pc = msm_dump_cpu_ctx.fiq_r14;
+	ctx_regs.ARM_lr = msm_dump_cpu_ctx.svc_r14;
+	ctx_regs.ARM_sp = msm_dump_cpu_ctx.svc_r13;
+	ctx_regs.ARM_fp = msm_dump_cpu_ctx.usr_r11;
+	unwind_backtrace(&ctx_regs, current);
+#ifdef CONFIG_SMP
+	smp_send_all_cpu_backtrace();
+#endif
 	flush_cache_all();
 	outer_flush_all();
 	return;
@@ -79,4 +89,4 @@ static int __init init7k_fiq(void)
 
 	return 0;
 }
-late_initcall(init7k_fiq);
+fs_initcall(init7k_fiq);
