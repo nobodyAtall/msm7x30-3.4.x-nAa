@@ -854,8 +854,14 @@ void mdp4_overlay_update_mddi(struct msm_fb_data_type *mfd)
 			pr_info("%s: pipe_alloc failed\n", __func__);
 			return;
 		}
-		pipe->pipe_used++;
-		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
+
+		if (mdp4_overlay_borderfill_supported()) {
+			pipe->pipe_used++;
+			pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
+		} else {
+			pipe->mixer_stage  = MDP4_MIXER_STAGE_UNUNSED;
+		}
+
 		pipe->mixer_num  = MDP4_MIXER0;
 		pipe->src_format = mfd->fb_imgType;
 		mdp4_overlay_panel_mode(pipe->mixer_num, MDP4_PANEL_MDDI);
