@@ -2388,7 +2388,10 @@ static int mdp4_overlay_req2pipe(struct mdp_overlay *req, int mixer,
 
 	}
 
-	pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE0;
+	if (!mdp4_overlay_borderfill_supported())
+		pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE_BASE;
+	else
+		pipe->mixer_stage = req->z_order + MDP4_MIXER_STAGE0;
 	pipe->src_width = req->src.width & 0x1fff;	/* source img width */
 	pipe->src_height = req->src.height & 0x1fff;	/* source img height */
 	pipe->src_h = req->src_rect.h & 0x07ff;
@@ -3153,7 +3156,14 @@ int mdp4_overlay_unset(struct fb_info *info, int ndx)
 	}
 
 	mdp4_overlay_reg_flush(pipe, 1);
-	mdp4_mixer_stage_down(pipe, 0);
+
+	if (!mdp4_overlay_borderfill_supported() &&
+		pipe->mixer_stage == MDP4_MIXER_STAGE_BASE) {
+			mdp4_mixer_stage_down(pipe, 1);
+			pipe->mixer_stage = MDP4_MIXER_STAGE_UNUNSED;
+	} else {
+		mdp4_mixer_stage_down(pipe, 0);
+	}
 
 	if (pipe->blt_forced) {
 		if (pipe->flags & MDP_SECURE_OVERLAY_SESSION) {
