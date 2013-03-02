@@ -192,8 +192,8 @@ static struct mfd_cell misc_cell __devinitdata = {
 	.num_resources	= ARRAY_SIZE(misc_cell_resources),
 };
 
-static struct mfd_cell pm8058_pwm_cell __devinitdata = {
-	.name		= "pm8058-pwm",
+static struct mfd_cell pwm_cell __devinitdata = {
+	.name		= PM8XXX_PWM_DEV_NAME,
 	.id		= -1,
 };
 
@@ -614,15 +614,10 @@ pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 		}
 	}
 
-	if (pdata->pwm_pdata) {
-		pm8058_pwm_cell.platform_data = pdata->pwm_pdata;
-		pm8058_pwm_cell.pdata_size = sizeof(struct pm8058_pwm_pdata);
-		rc = mfd_add_devices(pmic->dev, 0, &pm8058_pwm_cell, 1, NULL,
-								irq_base);
-		if (rc) {
-			pr_err("Failed to add pwm subdevice ret=%d\n", rc);
-			goto bail;
-		}
+	rc = mfd_add_devices(pmic->dev, 0, &pwm_cell, 1, NULL, 0);
+	if (rc) {
+		pr_err("Failed to add pwm subdevice ret=%d\n", rc);
+		goto bail;
 	}
 
 	if (pdata->misc_pdata) {
