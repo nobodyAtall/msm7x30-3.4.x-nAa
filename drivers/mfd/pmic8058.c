@@ -273,7 +273,7 @@ static const struct resource batt_alarm_cell_resources[] __devinitconst = {
 };
 
 static struct mfd_cell leds_cell __devinitdata = {
-	.name		= "pm8058-led",
+	.name		= PM8XXX_LEDS_DEV_NAME,
 	.id		= -1,
 };
 
@@ -558,10 +558,8 @@ pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 
 	if (pdata->leds_pdata) {
 		leds_cell.platform_data = pdata->leds_pdata;
-		leds_cell.pdata_size =
-			sizeof(struct pmic8058_leds_platform_data);
-		rc = mfd_add_devices(pmic->dev, 0, &leds_cell, 1, NULL,
-								irq_base);
+		leds_cell.pdata_size = sizeof(struct pm8xxx_led_platform_data);
+		rc = mfd_add_devices(pmic->dev, 0, &leds_cell, 1, NULL, 0);
 		if (rc) {
 			pr_err("Failed to add leds subdevice ret=%d\n", rc);
 			goto bail;

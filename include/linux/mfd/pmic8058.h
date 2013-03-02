@@ -31,7 +31,7 @@
 #include <linux/mfd/pm8xxx/upl.h>
 #include <linux/mfd/pm8xxx/misc.h>
 #include <linux/mfd/pm8xxx/batt-alarm.h>
-#include <linux/leds-pmic8058.h>
+#include <linux/leds-pm8xxx.h>
 #include <linux/pmic8058-othc.h>
 #include <linux/mfd/pm8xxx/tm.h>
 #include <linux/pmic8058-xoadc.h>
@@ -116,7 +116,7 @@ struct pm8058_platform_data {
 	struct pm8xxx_pwrkey_platform_data	*pwrkey_pdata;
 	struct pm8xxx_vibrator_platform_data	*vibrator_pdata;
 	struct pm8xxx_misc_platform_data	*misc_pdata;
-	struct pmic8058_leds_platform_data	*leds_pdata;
+	struct pm8xxx_led_platform_data		*leds_pdata;
 	struct pmic8058_othc_config_pdata	*othc0_pdata;
 	struct pmic8058_othc_config_pdata	*othc1_pdata;
 	struct pmic8058_othc_config_pdata	*othc2_pdata;
