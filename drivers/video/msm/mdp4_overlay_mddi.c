@@ -250,6 +250,7 @@ void mdp4_mddi_pipe_queue(int cndx, struct mdp4_overlay_pipe *pipe)
 }
 
 static void mdp4_mddi_blt_ov_update(struct mdp4_overlay_pipe *pipe);
+static int mdp4_mddi_clk_check(struct vsycn_ctrl *vctrl);
 
 int mdp4_mddi_pipe_commit(int cndx, int wait)
 {
@@ -287,6 +288,9 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 			mdp4_free_writeback_buf(vctrl->mfd, mixer);
 	}
 	mutex_unlock(&vctrl->update_lock);
+
+	if (mdp4_mddi_clk_check(vctrl) < 0)
+		return 0;
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	vctrl->clk_control = 0;
@@ -1100,13 +1104,45 @@ void mdp_mddi_overlay_suspend(struct msm_fb_data_type *mfd)
 	}
 }
 
+static int mdp4_mddi_clk_check(struct vsycn_ctrl *vctrl)
+{
+	int clk_set_on = 0;
+	unsigned long flags;
+
+	mutex_lock(&vctrl->update_lock);
+	if (atomic_read(&vctrl->suspend)) {
+		mutex_unlock(&vctrl->update_lock);
+		pr_err("%s: suspended, no more pan display\n", __func__);
+		return -EPERM;
+	}
+
+	spin_lock_irqsave(&vctrl->spin_lock, flags);
+	vctrl->clk_control = 0;
+	vctrl->pan_display++;
+
+	if (!vctrl->clk_enabled) {
+		clk_set_on = 1;
+		vctrl->clk_enabled = 1;
+		vctrl->expire_tick = VSYNC_EXPIRE_TICK;
+	}
+	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+
+	if (clk_set_on) {
+		pr_debug("%s: SET_CLK_ON\n", __func__);
+		mdp_clk_ctrl(1);
+		vsync_irq_enable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
+	}
+
+	mutex_unlock(&vctrl->update_lock);
+
+	return 0;
+}
+
 void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 {
 	int cndx = 0;
 	struct vsycn_ctrl *vctrl;
 	struct mdp4_overlay_pipe *pipe;
-	unsigned long flags;
-	int clk_set_on = 0;
 
 	mutex_lock(&mfd->dma->ov_mutex);
 	vctrl = &vsync_ctrl_db[cndx];
@@ -1123,31 +1159,10 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 		return;
 	}
 
-	mutex_lock(&vctrl->update_lock);
-	if (atomic_read(&vctrl->suspend)) {
-		mutex_unlock(&vctrl->update_lock);
+	if (mdp4_mddi_clk_check(vctrl) < 0) {
 		mutex_unlock(&mfd->dma->ov_mutex);
-		pr_err("%s: suspended, no more pan display\n", __func__);
 		return;
 	}
-
-	spin_lock_irqsave(&vctrl->spin_lock, flags);
-	vctrl->clk_control = 0;
-	vctrl->pan_display++;
-	if (!vctrl->clk_enabled) {
-		clk_set_on = 1;
-		vctrl->clk_enabled = 1;
-		vctrl->expire_tick = VSYNC_EXPIRE_TICK;
-	}
-	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
-
-	if (clk_set_on) {
-		pr_debug("%s: SET_CLK_ON\n", __func__);
-		mdp_clk_ctrl(1);
-		vsync_irq_enable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
-	}
-
-	mutex_unlock(&vctrl->update_lock);
 
 	if (pipe->mixer_stage == MDP4_MIXER_STAGE_BASE) {
 		mdp4_mddi_vsync_enable(mfd, pipe, 0);
