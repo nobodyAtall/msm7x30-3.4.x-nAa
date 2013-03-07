@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2474,6 +2474,7 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 		mfd->panel_info.type == MIPI_CMD_PANEL) ?
 		mfd->panel_info.mipi.dsi_pclk_rate :
 		mfd->panel_info.clk_rate;
+
 	if (mfd->panel_info.type == MDDI_PANEL) {
 		h_period = mfd->panel_info.lcdc.h_back_porch +
 			mfd->panel_info.lcdc.h_front_porch +
@@ -2532,11 +2533,11 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 
 		ptype = mdp4_overlay_format2type(pipe->src_format);
 		if (ptype == OVERLAY_TYPE_VIDEO) {
-			if ((pipe->src_h >= 720) && (pipe->src_w >= 1080))  {
+			if ((pipe->src_h > 720) && (pipe->src_w >= 1080))  {
 				pipe->req_clk = (u32) mdp_max_clk + 100; 
 				pipe->blt_forced++;
 				return 0;
-			} else if ((pipe->src_h >= 1080) && (pipe->src_w >= 720))  {
+			} else if ((pipe->src_h >= 1080) && (pipe->src_w > 720))  {
 				pipe->req_clk = (u32) mdp_max_clk + 100; 
 				pipe->blt_forced++;
 				return 0;
@@ -2638,6 +2639,8 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 		pr_debug("%s calculated mdp clk is less than pclk.\n",
 			__func__);
 	}
+	if (mfd->panel_info.type == MDDI_PANEL && rst <= 122880000)
+		rst = 122880000;
 
 	pipe->req_clk = (u32) rst;
 
