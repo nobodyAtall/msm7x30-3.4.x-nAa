@@ -39,6 +39,9 @@
 #define DRIVER_VERSION_MAJOR   3
 #define DRIVER_VERSION_MINOR   1
 
+#define STATES_COUNT 7
+#define MAX_IDLE_COUNT 3
+
 /* Adreno MH arbiter config*/
 #define ADRENO_CFG_MHARB \
 	(0x10 \
@@ -1943,6 +1946,78 @@ static bool is_adreno_rbbm_status_idle(struct kgsl_device *device)
 	return status;
 }
 
+static unsigned int adreno_isgpuidle(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
+	unsigned int i;
+	static unsigned int previous_states[STATES_COUNT];
+	unsigned int current_states[STATES_COUNT];
+	static unsigned int idle_count = 0;
+
+	if(!device->fence_event_counter)
+	{
+		idle_count=0;
+		return true;
+	}
+
+	adreno_regread(device, REG_CP_RB_RPTR, &current_states[0]);
+	adreno_regread(device, REG_CP_RB_WPTR, &current_states[1]);
+	current_states[2] = rb->wptr;
+
+	adreno_regwrite(device, REG_CP_RB_WPTR, rb->wptr);
+
+	kgsl_sharedmem_readl(&device->memstore, &current_states[3],
+		KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
+			eoptimestamp));
+
+	adreno_regread(device,
+		adreno_dev->gpudev->reg_rbbm_status,
+		&current_states[4]);
+
+	adreno_regread(device, REG_CP_IB1_BUFSZ, &current_states[5]);
+	adreno_regread(device, REG_CP_IB2_BUFSZ, &current_states[6]);
+
+	for(i=0; i<STATES_COUNT; i++)
+	{
+		if(previous_states[i] != current_states[i])
+		{
+			idle_count = 0;
+		}
+
+		previous_states[i] = current_states[i];
+	}
+
+	idle_count ++;
+
+	if(!(idle_count % MAX_IDLE_COUNT)  && (device->fence_event_counter))
+	{
+		unsigned int total_sizedwords = 4;
+		unsigned int *ringcmds;
+		unsigned int rcmd_gpu;
+
+		ringcmds = adreno_ringbuffer_allocspace(rb, adreno_dev->drawctxt_active, total_sizedwords);
+		if(!ringcmds) {
+			KGSL_DRV_ERR(device, "unable to allocate space in ringbuffer \n");
+			return false;
+		}
+		rcmd_gpu = rb->buffer_desc.gpuaddr + sizeof(uint)*(rb->wptr-total_sizedwords);
+
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, cp_nop_packet(1));
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, 0x89ABCDEF);
+
+		/* Trigger the interrupt */
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, cp_type3_packet(CP_INTERRUPT, 1));
+		GSL_RB_WRITE(ringcmds, rcmd_gpu, CP_INT_CNTL__RB_INT_MASK);
+
+		adreno_regwrite(device, REG_CP_RB_WPTR, rb->wptr);
+
+		KGSL_DRV_ERR(device, "dummy NOP added to trigger ISR \n");
+	}
+
+	return false;
+}
+
 static unsigned int adreno_isidle(struct kgsl_device *device)
 {
 	int status = false;
@@ -1954,9 +2029,13 @@ static unsigned int adreno_isidle(struct kgsl_device *device)
 	if (device->state == KGSL_STATE_ACTIVE) {
 		/* Is the ring buffer is empty? */
 		GSL_RB_GET_READPTR(rb, &rb->rptr);
-		if (!device->active_cnt && (rb->rptr == rb->wptr)) {
-			/* Is the core idle? */
-			status = is_adreno_rbbm_status_idle(device);
+
+		if ((rb->rptr == rb->wptr) && adreno_isgpuidle(device)) {
+
+			if (!device->active_cnt) {
+				/* Is the core idle? */
+				status = is_adreno_rbbm_status_idle(device);
+			}
 		}
 	} else {
 		status = true;

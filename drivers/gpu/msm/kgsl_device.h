@@ -206,6 +206,7 @@ struct kgsl_device {
 	/* Postmortem Control switches */
 	int pm_regs_enabled;
 	int pm_ib_enabled;
+	uint32_t fence_event_counter;
 };
 
 void kgsl_process_events(struct work_struct *work);
