@@ -733,6 +733,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_ACTIVE);
 	}
 	device->open_count++;
+	device->fence_event_counter = 0;
 	mutex_unlock(&device->mutex);
 
 	KGSL_DRV_INFO(device, "Initialized %s: mmu=%s pagetable_count=%d\n",
