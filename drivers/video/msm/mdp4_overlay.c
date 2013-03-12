@@ -2439,6 +2439,7 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 	u32 pclk;
 	u32 xscale, yscale;
 	u32 hsync = 0;
+	u32 h_period, v_period;
 	u32 shift = 16;
 	u64 rst;
 	int ptype;
@@ -2477,6 +2478,26 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 		mfd->panel_info.type == MIPI_CMD_PANEL) ?
 		mfd->panel_info.mipi.dsi_pclk_rate :
 		mfd->panel_info.clk_rate;
+	if (mfd->panel_info.type == MDDI_PANEL) {
+		h_period = mfd->panel_info.lcdc.h_back_porch +
+			mfd->panel_info.lcdc.h_front_porch +
+			mfd->panel_info.lcdc.h_pulse_width +
+			mfd->panel_info.xres;
+
+		if (h_period == mfd->panel_info.xres)
+			h_period = (mfd->panel_info.xres * 110/100);
+
+		v_period = mfd->panel_info.lcdc.v_back_porch +
+			mfd->panel_info.lcdc.v_front_porch +
+			mfd->panel_info.lcdc.v_pulse_width +
+			mfd->panel_info.yres;
+
+		if (v_period == mfd->panel_info.yres)
+			v_period = (mfd->panel_info.yres * 110/100);
+
+		pclk = h_period * v_period * 60;
+	}
+
 	if (!pclk) {
 		pipe->req_clk = mdp_max_clk;
 		pr_err("%s panel pixel clk is zero!\n", __func__);
