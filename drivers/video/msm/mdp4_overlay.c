@@ -568,10 +568,6 @@ static uint32 mdp4_scale_phase_step(int f_num, uint32 src, uint32 dst)
 	uint32 val, s;
 	int	n;
 
-	if (dst == 0) {
-		pr_err("%s:dst value is zero !\n", __func__);
-		return -EINVAL;
-	}
 	n = mdp4_leading_0(src);
 	if (n > f_num)
 		n = f_num;
@@ -2524,8 +2520,8 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 		return ret;
 	}
 
-	if (!pipe->src_w) {
-		pr_err("%s: pipe src_w is zero!\n", __func__);
+	if (!pipe->dst_h) {
+		pr_err("%s: pipe dst_h is zero!\n", __func__);
 		pipe->req_clk = mdp_max_clk;
 		return ret;
 	}
@@ -2594,23 +2590,11 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 	if (pipe->src_h > pipe->dst_h) {
 		yscale = pipe->src_h;
 		yscale <<= shift;
-		if (pipe->dst_h != 0) {
-			yscale /= pipe->dst_h;
-		} else {
-			pipe->req_clk = mdp_max_clk;
-			pr_err("%s: pipe->dst_h is zero!\n", __func__);
-			return 0;
-		}
+		yscale /= pipe->dst_h;
 	} else {		/* upscale */
 		yscale = pipe->dst_h;
 		yscale <<= shift;
-		if (pipe->src_h != 0) {
-			yscale /= pipe->src_h;
-		} else {
-			pipe->req_clk = mdp_max_clk;
-			pr_err("%s: pipe->src_h is zero!\n", __func__);
-			return 0;
-		}
+		yscale /= pipe->src_h;
 	}
 
 	yscale *= pipe->src_w;
@@ -2636,13 +2620,7 @@ static int mdp4_calc_pipe_mdp_clk(struct msm_fb_data_type *mfd,
 	if ((mfd->panel_info.lcdc.v_back_porch <= 4) &&
 	    (pipe->src_h != pipe->dst_h)) {
 		u32 clk = 0;
-		if (mfd->panel_info.lcdc.v_back_porch != 0) {
-			clk = 4 * (pclk >> shift) / mfd->panel_info.lcdc.v_back_porch;
-		} else {
-			pipe->req_clk = mdp_max_clk;
-			pr_err("%s: mfd->panel_info.lcdc.v_back_porch is zero!\n", __func__);
-			return 0;
-		}
+		clk = 4 * (pclk >> shift) / mfd->panel_info.lcdc.v_back_porch;
 		clk <<= shift;
 		pr_debug("%s: mdp clk rate %d based on low vbp %d\n",
 			 __func__, clk, mfd->panel_info.lcdc.v_back_porch);
