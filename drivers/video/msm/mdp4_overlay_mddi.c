@@ -416,8 +416,12 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 
 	mdp4_stat.overlay_commit[pipe->mixer_num]++;
 
-	if (wait)
-		mdp4_mddi_wait4vsync(0);
+	if (wait) {
+		if (pipe->ov_blt_addr)
+			mdp4_mddi_wait4ov(0);
+		else
+			mdp4_mddi_wait4dmap(0);
+	}
 
 	return cnt;
 }
@@ -1173,9 +1177,7 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 	}
 
 	mdp4_overlay_mdp_perf_upd(mfd, 1);
-
-	mdp4_mddi_pipe_commit(cndx, 0);
-
+	mdp4_mddi_pipe_commit(cndx, 1);
 	mdp4_overlay_mdp_perf_upd(mfd, 0);
         mutex_unlock(&mfd->dma->ov_mutex);
 }
