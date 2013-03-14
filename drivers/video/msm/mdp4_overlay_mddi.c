@@ -398,11 +398,8 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 
 	mdp4_stat.overlay_commit[pipe->mixer_num]++;
 
-	if (wait) {
-		long long tick;
-
-		mdp4_mddi_wait4vsync(0, &tick);
-	}
+	if (wait)
+		mdp4_mddi_wait4vsync(0);
 
 	return cnt;
 }
@@ -451,7 +448,7 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 	mutex_unlock(&vctrl->update_lock);
 }
 
-void mdp4_mddi_wait4vsync(int cndx, long long *vtime)
+void mdp4_mddi_wait4vsync(int cndx)
 {
 	struct vsycn_ctrl *vctrl;
 	struct mdp4_overlay_pipe *pipe;
@@ -465,10 +462,8 @@ void mdp4_mddi_wait4vsync(int cndx, long long *vtime)
 	vctrl = &vsync_ctrl_db[cndx];
 	pipe = vctrl->base_pipe;
 
-	if (atomic_read(&vctrl->suspend) > 0) {
-		*vtime = -1;
+	if (atomic_read(&vctrl->suspend) > 0)
 		return;
-	}
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (vctrl->wait_vsync_cnt == 0)
@@ -478,8 +473,6 @@ void mdp4_mddi_wait4vsync(int cndx, long long *vtime)
 
 	wait_for_completion(&vctrl->vsync_comp);
 	mdp4_stat.wait4vsync0++;
-
-	*vtime = ktime_to_ns(vctrl->vsync_time);
 }
 
 static void mdp4_mddi_wait4dmap(int cndx)
