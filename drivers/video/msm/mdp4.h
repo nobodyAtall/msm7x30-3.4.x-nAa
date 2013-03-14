@@ -984,8 +984,7 @@ int mdp4_v4l2_overlay_play(struct fb_info *info, struct mdp4_overlay_pipe *pipe,
 	unsigned long srcp2_addr);
 int mdp4_overlay_mdp_pipe_req(struct mdp4_overlay_pipe *pipe,
 				struct msm_fb_data_type *mfd);
-int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd,
-				struct mdp4_overlay_pipe *plist);
+int mdp4_overlay_mdp_perf_req(struct msm_fb_data_type *mfd);
 void mdp4_overlay_mdp_perf_upd(struct msm_fb_data_type *mfd, int flag);
 int mdp4_overlay_reset(void);
 
