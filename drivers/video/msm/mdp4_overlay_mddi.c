@@ -99,6 +99,22 @@ static void vsync_irq_disable(int intr, int term)
 	spin_unlock_irqrestore(&mdp_spin_lock, flag);
 }
 
+
+static void mdp4_mddi_pipe_clean(struct vsync_update *vp)
+{
+	struct mdp4_overlay_pipe *pipe;
+	int i;
+
+	pipe = vp->plist;
+	for (i = 0; i < OVERLAY_PIPE_MAX; i++, pipe++) {
+		if (pipe->pipe_used) {
+			mdp4_overlay_iommu_pipe_free(pipe->pipe_ndx, 0);
+			pipe->pipe_used = 0; /* clear */
+		}
+	}
+	vp->update_cnt = 0;     /* empty queue */
+}
+
 static void mdp4_mddi_blt_ov_update(struct mdp4_overlay_pipe *pipe)
 {
 	uint32 off, addr;
@@ -1057,17 +1073,8 @@ int mdp4_mddi_off(struct platform_device *pdev)
 		 * pipe's iommu will be freed at next overlay play
 		 * and iommu_drop statistic will be increased by one
 		 */
-		vp->update_cnt = 0;     /* empty queue */
-	}
-
-	undx =  vctrl->update_ndx;
-	vp = &vctrl->vlist[undx];
-	if (vp->update_cnt) {
-	/*
-		 * pipe's iommu will be freed at next overlay play
-		 * and iommu_drop statistic will be increased by one
-	 */
-		vp->update_cnt = 0;     /* empty queue */
+		pr_warn("%s: update_cnt=%d\n", __func__, vp->update_cnt);
+		mdp4_mddi_pipe_clean(vp);
 	}
 
 	pr_debug("%s-:\n", __func__);
