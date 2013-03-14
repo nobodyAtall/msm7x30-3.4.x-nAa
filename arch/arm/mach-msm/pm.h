@@ -138,6 +138,5 @@ static inline void msm_pm_add_stat(enum msm_pm_time_stats_id id, int64_t t) {}
 #endif
 
 void msm_pm_set_cpr_ops(struct msm_pm_cpr_ops *ops);
-extern void __iomem *virt_start_ptr;
 
 #endif  /* __ARCH_ARM_MACH_MSM_PM_H */
