@@ -878,6 +878,9 @@ void mdp4_overlay_update_mddi(struct msm_fb_data_type *mfd)
 		pipe = vctrl->base_pipe;
 	}
 
+	/* TE enabled */
+	mdp4_mddi_vsync_enable(mfd, pipe, 0);
+
 	MDP_OUTP(MDP_BASE + 0x021c, 10); /* read pointer */
 
 	mddi_ld_param = 0;
