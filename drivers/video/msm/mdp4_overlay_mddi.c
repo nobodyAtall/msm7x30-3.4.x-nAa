@@ -304,8 +304,6 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 	}
 	mutex_unlock(&vctrl->update_lock);
 
-	if (mdp4_mddi_clk_check(vctrl) < 0)
-		return 0;
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	vctrl->clk_control = 0;
