@@ -322,7 +322,7 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 	}
 
 	/* free previous committed iommu back to pool */
-	mdp4_overlay_iommu_unmap_freelist(mixer);
+	mdp4_overlay_iommu_unmap_freelist(MDP4_MIXER0);
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (pipe->ov_blt_addr) {
@@ -389,7 +389,7 @@ int mdp4_mddi_pipe_commit(int cndx, int wait)
 		}
 	}
 
-	mdp4_mixer_stage_commit(mixer);
+	mdp4_mixer_stage_commit(MDP4_MIXER0);
 
 	pipe = vctrl->base_pipe;
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
@@ -941,7 +941,8 @@ void mdp4_overlay_update_mddi(struct msm_fb_data_type *mfd)
 
 	mdp4_overlay_rgb_setup(pipe);
 
-	mdp4_overlay_reg_flush(pipe, 1);
+	if (mdp4_overlay_borderfill_supported())
+		mdp4_overlay_reg_flush(pipe, 1);
 
 	mdp4_mixer_stage_up(pipe, 0);
 
@@ -1055,12 +1056,10 @@ int mdp4_mddi_off(struct platform_device *pdev)
 	}
 
 	/* sanity check, free pipes besides base layer */
-	mdp4_overlay_unset_mixer(pipe->mixer_num);
+	mdp4_overlay_unset_mixer(MDP4_MIXER0);
 	mdp4_mixer_stage_down(pipe, 1);
-	if (mfd->ref_cnt == 0) {
-		mdp4_overlay_pipe_free(pipe);
-		vctrl->base_pipe = NULL;
-	}
+	mdp4_overlay_pipe_free(pipe);
+	vctrl->base_pipe = NULL;
 
 	if (vctrl->vsync_enabled) {
 		vsync_irq_disable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
