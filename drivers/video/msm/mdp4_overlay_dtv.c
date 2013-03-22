@@ -198,7 +198,7 @@ int mdp4_dtv_pipe_commit(int cndx, int wait)
 	vp = &vctrl->vlist[undx];
 	pipe = vctrl->base_pipe;
 	mixer = pipe->mixer_num;
-	mdp4_overlay_iommu_unmap_freelist(mixer);
+	mdp4_overlay_iommu_unmap_freelist(MDP4_MIXER1);
 
 	if (vp->update_cnt == 0) {
 		mutex_unlock(&vctrl->update_lock);
@@ -227,7 +227,7 @@ int mdp4_dtv_pipe_commit(int cndx, int wait)
 			pipe->pipe_used = 0; /* clear */
 		}
 	}
-	mdp4_mixer_stage_commit(mixer);
+	mdp4_mixer_stage_commit(MDP4_MIXER1);
 
 	 /* start timing generator & mmu if they are not started yet */
 	mdp4_overlay_dtv_start();
@@ -632,6 +632,7 @@ int mdp4_dtv_off(struct platform_device *pdev)
 	int undx;
 	struct vsycn_ctrl *vctrl;
 	struct mdp4_overlay_pipe *pipe;
+	struct mdp4_overlay_pipe *real_pipe;
 	struct vsync_update *vp;
 
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
@@ -649,7 +650,7 @@ int mdp4_dtv_off(struct platform_device *pdev)
 	pipe = vctrl->base_pipe;
 	if (pipe != NULL) {
 		/* sanity check, free pipes besides base layer */
-		mdp4_overlay_unset_mixer(pipe->mixer_num);
+		mdp4_overlay_unset_mixer(MDP4_MIXER1);
 		if (hdmi_prim_display && mfd->ref_cnt == 0) {
 			/* adb stop */
 			if (pipe->pipe_type == OVERLAY_TYPE_BF)
@@ -660,8 +661,16 @@ int mdp4_dtv_off(struct platform_device *pdev)
 		} else {
 			mdp4_mixer_stage_down(pipe, 1);
 			msleep(20);
-			mdp4_overlay_pipe_free(pipe);
-			vctrl->base_pipe = NULL;
+			if (!mdp4_overlay_borderfill_supported()) {
+				real_pipe =
+					mdp4_overlay_ndx2pipe(pipe->pipe_ndx);
+				if (real_pipe && !real_pipe->pipe_used)
+					mdp4_overlay_pipe_free(pipe);
+				vctrl->base_pipe = NULL;
+			} else {
+				mdp4_overlay_pipe_free(pipe);
+				vctrl->base_pipe = NULL;
+			}
 		}
 		mdp4_dtv_stop(mfd);
 		mdp4_dtv_wait4vsync(cndx);
@@ -822,9 +831,13 @@ static void mdp4_overlay_dtv_alloc_pipe(struct msm_fb_data_type *mfd,
 		mdp4_overlay_rgb_setup(pipe);
 	}
 
-	mdp4_overlay_reg_flush(pipe, 1);
+	if (mdp4_overlay_borderfill_supported())
+		mdp4_overlay_reg_flush(pipe, 1);
+
 	mdp4_mixer_stage_up(pipe, 0);
-	mdp4_mixer_stage_commit(pipe->mixer_num);
+
+	if (mdp4_overlay_borderfill_supported())
+		mdp4_mixer_stage_commit(pipe->mixer_num);
 
 	vctrl->base_pipe = pipe; /* keep it */
 }

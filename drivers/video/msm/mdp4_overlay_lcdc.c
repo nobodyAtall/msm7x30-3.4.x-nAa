@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -203,7 +203,7 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 	mutex_unlock(&vctrl->update_lock);
 
 	/* free previous committed iommu back to pool */
-	mdp4_overlay_iommu_unmap_freelist(mixer);
+	mdp4_overlay_iommu_unmap_freelist(MDP4_MIXER0);
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (vctrl->ov_koff != vctrl->ov_done) {
@@ -246,7 +246,7 @@ int mdp4_lcdc_pipe_commit(int cndx, int wait)
 		}
 	}
 
-	mdp4_mixer_stage_commit(mixer);
+	mdp4_mixer_stage_commit(MDP4_MIXER0);
 
 	/* start timing generator & mmu if they are not started yet */
 	mdp4_overlay_lcdc_start();
@@ -543,8 +543,13 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 		pipe = mdp4_overlay_pipe_alloc(ptype, MDP4_MIXER0);
 		if (pipe == NULL)
 			printk(KERN_INFO "%s: pipe_alloc failed\n", __func__);
-		pipe->pipe_used++;
-		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
+
+		if (mdp4_overlay_borderfill_supported()) {
+			pipe->pipe_used++;
+			pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
+		} else {
+			pipe->mixer_stage  = MDP4_MIXER_STAGE_UNUNSED;
+		}
 		pipe->mixer_num  = MDP4_MIXER0;
 		pipe->src_format = mfd->fb_imgType;
 		mdp4_overlay_panel_mode(pipe->mixer_num, MDP4_PANEL_LCDC);
@@ -588,7 +593,9 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	mdp4_overlay_rgb_setup(pipe);
 	mdp4_overlayproc_cfg(pipe);
 
-	mdp4_overlay_reg_flush(pipe, 1);
+	if (mdp4_overlay_borderfill_supported()) {
+		mdp4_overlay_reg_flush(pipe, 1);
+	}
 	mdp4_mixer_stage_up(pipe, 0);
 
 
@@ -738,7 +745,7 @@ int mdp4_lcdc_off(struct platform_device *pdev)
 
 	if (pipe) {
 		/* sanity check, free pipes besides base layer */
-		mdp4_overlay_unset_mixer(pipe->mixer_num);
+		mdp4_overlay_unset_mixer(MDP4_MIXER0);
 		if (mfd->ref_cnt == 0) {
 			/* adb stop */
 			if (pipe->pipe_type == OVERLAY_TYPE_BF)
@@ -754,6 +761,10 @@ int mdp4_lcdc_off(struct platform_device *pdev)
 			mdp4_mixer_stage_down(vctrl->base_pipe, 1);
 			mdp4_overlay_iommu_pipe_free(
 				vctrl->base_pipe->pipe_ndx, 1);
+			if (!mdp4_overlay_borderfill_supported()) {
+				mdp4_overlay_pipe_free(pipe);
+				vctrl->base_pipe = NULL;
+			}
 		}
 	}
 
