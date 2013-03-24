@@ -6863,6 +6863,31 @@ static struct platform_device flip_switch_device = {
 	}
 };
 
+#ifdef CONFIG_INPUT_KEYRESET
+#include <linux/keyreset.h>
+/* keyreset platform device */
+static int mogami_reset_keys_up[] = {
+	KEY_VOLUMEDOWN,
+	0
+};
+
+static struct keyreset_platform_data mogami_reset_keys_pdata = {
+	.keys_up = mogami_reset_keys_up,
+	.keys_down = {
+		KEY_POWER,
+		KEY_HOME,
+		0
+	},
+};
+
+struct platform_device mogami_reset_keys_device = {
+	.name = KEYRESET_NAME,
+	.dev    = {
+		.platform_data = &mogami_reset_keys_pdata,
+	},
+};
+#endif
+
 static void __init msm7x30_init(void)
 {
 	int rc;
@@ -6940,6 +6965,9 @@ static void __init msm7x30_init(void)
 	sensors_ldo_init();
 #endif
 	hdmi_init_regs();
+#ifdef CONFIG_INPUT_KEYRESET
+	platform_device_register(&mogami_reset_keys_device);
+#endif
 	msm_fb_add_devices();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
