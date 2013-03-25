@@ -2012,7 +2012,6 @@ static unsigned int adreno_isgpuidle(struct kgsl_device *device)
 
 		adreno_regwrite(device, REG_CP_RB_WPTR, rb->wptr);
 
-		KGSL_DRV_ERR(device, "dummy NOP added to trigger ISR \n");
 	}
 
 	return false;
@@ -2296,11 +2295,14 @@ unsigned int adreno_hang_detect(struct kgsl_device *device,
 	unsigned int hang_detected = 1;
 	unsigned int i;
 	static unsigned long next_hang_detect_time;
+	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
 
 	if (!adreno_dev->fast_hang_detect)
 		return 0;
 
-	if (is_adreno_rbbm_status_idle(device)) {
+	GSL_RB_GET_READPTR(rb, &rb->rptr);
+	if ((rb->rptr == adreno_dev->ringbuffer.wptr)
+			&& (is_adreno_rbbm_status_idle(device))) {
 
 		/*
 		 * On A20X if the RPTR != WPTR and the device is idle, then
