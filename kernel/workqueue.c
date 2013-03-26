@@ -115,12 +115,6 @@ enum {
  */
 
 struct global_cwq;
-#define ULIS
-#ifdef ULIS
-DEFINE_SPINLOCK(dbgs_lock);
-unsigned long dbgs_flags;
-#endif
-
 
 /*
  * The poor guys doing the actual heavy lifting.  All on-duty workers
@@ -1787,11 +1781,6 @@ static void cwq_dec_nr_in_flight(struct cpu_workqueue_struct *cwq, int color,
 	if (atomic_dec_and_test(&cwq->wq->nr_cwqs_to_flush))
 		complete(&cwq->wq->first_flusher->done);
 }
-#define ULIS
-#ifdef ULIS
-extern void printk_u16s(int, char*);
-#endif
-
 
 /**
  * process_one_work - process single work
@@ -1879,22 +1868,7 @@ __acquires(&gcwq->lock)
 	lock_map_acquire_read(&cwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	trace_workqueue_execute_start(work);
-#ifdef ULIS
-	spin_lock_irqsave(&dbgs_lock, dbgs_flags);
-	if (1) {
-		char symname[KSYM_NAME_LEN];
-		lookup_symbol_name((unsigned int)f, symname);
-		printk_u16s(1000 + (gcwq->cpu) * 100 + worker->id, symname);
-	}
-	spin_unlock_irqrestore(&dbgs_lock, dbgs_flags);
-#endif
 	f(work);
-#ifdef ULIS
-	spin_lock_irqsave(&dbgs_lock, dbgs_flags);
-	printk_u16s(2000 + (gcwq->cpu) * 100 + worker->id, "work end");
-	spin_unlock_irqrestore(&dbgs_lock, dbgs_flags);
-#endif
-
 	/*
 	 * While we must be careful to not use "work" after this, the trace
 	 * point will only record its address.

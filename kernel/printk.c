@@ -155,24 +155,6 @@ static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 static int saved_console_loglevel = -1;
 
-#define ULIS
-#ifdef ULIS
-void enable_uncache_log_buf(char * new_addr, int new_size) {
-	int i = 0;
-	unsigned long flags;
-	raw_spin_lock_irqsave(&logbuf_lock, flags);
-	while (i <= log_end) {
-		new_addr[i] = __log_buf[i];
-		i++;
-	}
-	log_buf = new_addr;
-	log_buf_len = new_size;
-	raw_spin_unlock_irqrestore(&logbuf_lock, flags);
-	return;
-}
-EXPORT_SYMBOL(enable_uncache_log_buf);
-#endif
-
 #ifdef CONFIG_KEXEC
 /*
  * This appends the listed symbols to /proc/vmcoreinfo

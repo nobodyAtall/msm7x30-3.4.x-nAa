@@ -16,37 +16,6 @@
 #include <linux/bitmap.h>
 
 #include "internals.h"
-#define ULIS
-#ifdef ULIS
-#include <linux/sched.h>
-
-struct irqlog {
-	unsigned long ulTick;
-	unsigned long ulMsec;
-	unsigned int unPid;
-	unsigned int reserved;
-	unsigned char ucComm[16];
-};
-
-#define MAX_KERNEL_IRQ_LOGS (2048)
-//1MB / 4 / sizeofstruct32 / cpu2
-
-struct irqlogwrap {
-	struct irqlog sp[4][MAX_KERNEL_IRQ_LOGS];
-};
-static struct irqlogwrap *pIrqLogData;
-int * nNextLogIdx_IRQ; //MAX QUAD
-
-void enable_uncache_irq_log(char * start, int size) {
-	nNextLogIdx_IRQ = (int *)start;
-	start =  start + 16;  //4 words for indexing.
-	pIrqLogData = (struct irqlogwrap*)start;
-	printk("%s: size of the irqlogwrap =%d \n", __func__, sizeof(struct irqlog));
-}
-EXPORT_SYMBOL(enable_uncache_irq_log);
-#endif
-
-
 
 /*
  * lockdep: we want to handle all irq_desc locks as a single lock-class:
@@ -339,48 +308,10 @@ static int irq_expand_nr_irqs(unsigned int nr)
 int generic_handle_irq(unsigned int irq)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
-#ifdef ULIS
-	unsigned long long t;
-	int cpu, i;
-	struct irqlog *p;
-#endif
-
 
 	if (!desc)
 		return -EINVAL;
-#ifdef ULIS
-	if (pIrqLogData != NULL)
-	{
-		cpu = smp_processor_id();
-		i = nNextLogIdx_IRQ[cpu];
-		p = &(pIrqLogData->sp[cpu][i]);
-		t = sched_clock();
-		p->ulMsec = do_div(t, 1000000000) / 1000;
-		p->ulTick = (unsigned long) t;
-		p->unPid = irq;
-		p->reserved = current->pid;
-		snprintf(p->ucComm, 16, "IRQ %d enter", irq);
-		nNextLogIdx_IRQ[cpu] = ++i & (MAX_KERNEL_IRQ_LOGS - 1);
-	}
-#endif
-
 	generic_handle_irq_desc(irq, desc);
-#ifdef ULIS
-	if (pIrqLogData != NULL)
-	{
-		cpu = smp_processor_id();
-		i = nNextLogIdx_IRQ[cpu];
-		p = &(pIrqLogData->sp[cpu][i]);
-		t = sched_clock();
-		p->ulMsec = do_div(t, 1000000000) / 1000;
-		p->ulTick = (unsigned long) t;
-		p->unPid = irq;
-		p->reserved = 0;
-		snprintf(p->ucComm, 16, "IRQ %d exit", irq);
-		nNextLogIdx_IRQ[cpu] = ++i & (MAX_KERNEL_IRQ_LOGS - 1);
-	}
-#endif
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(generic_handle_irq);
