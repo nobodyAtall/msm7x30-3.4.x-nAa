@@ -57,7 +57,7 @@ struct l2x0_of_data {
 static inline void cache_wait_way(void __iomem *reg, unsigned long mask)
 {
 	/* wait for cache operation by line or way to complete */
-	while (readl_relaxed_no_log(reg) & mask)
+	while (readl_relaxed(reg) & mask)
 		cpu_relax();
 }
 
@@ -74,7 +74,7 @@ static inline void cache_sync(void)
 {
 	void __iomem *base = l2x0_base;
 
-	writel_relaxed_no_log(0, base + sync_reg_offset);
+	writel_relaxed(0, base + sync_reg_offset);
 	cache_wait(base + L2X0_CACHE_SYNC, 1);
 }
 
@@ -82,14 +82,14 @@ static inline void l2x0_clean_line(unsigned long addr)
 {
 	void __iomem *base = l2x0_base;
 	cache_wait(base + L2X0_CLEAN_LINE_PA, 1);
-	writel_relaxed_no_log(addr, base + L2X0_CLEAN_LINE_PA);
+	writel_relaxed(addr, base + L2X0_CLEAN_LINE_PA);
 }
 
 static inline void l2x0_inv_line(unsigned long addr)
 {
 	void __iomem *base = l2x0_base;
 	cache_wait(base + L2X0_INV_LINE_PA, 1);
-	writel_relaxed_no_log(addr, base + L2X0_INV_LINE_PA);
+	writel_relaxed(addr, base + L2X0_INV_LINE_PA);
 }
 
 #if defined(CONFIG_PL310_ERRATA_588369) || defined(CONFIG_PL310_ERRATA_727915)
@@ -101,7 +101,7 @@ static inline void debug_writel(unsigned long val)
 
 static void pl310_set_debug(unsigned long val)
 {
-	writel_relaxed_no_log(val, l2x0_base + L2X0_DEBUG_CTRL);
+	writel_relaxed(val, l2x0_base + L2X0_DEBUG_CTRL);
 }
 #else
 /* Optimised out for non-errata case */
@@ -119,9 +119,9 @@ static inline void l2x0_flush_line(unsigned long addr)
 
 	/* Clean by PA followed by Invalidate by PA */
 	cache_wait(base + L2X0_CLEAN_LINE_PA, 1);
-	writel_relaxed_no_log(addr, base + L2X0_CLEAN_LINE_PA);
+	writel_relaxed(addr, base + L2X0_CLEAN_LINE_PA);
 	cache_wait(base + L2X0_INV_LINE_PA, 1);
-	writel_relaxed_no_log(addr, base + L2X0_INV_LINE_PA);
+	writel_relaxed(addr, base + L2X0_INV_LINE_PA);
 }
 #else
 
@@ -129,7 +129,7 @@ static inline void l2x0_flush_line(unsigned long addr)
 {
 	void __iomem *base = l2x0_base;
 	cache_wait(base + L2X0_CLEAN_INV_LINE_PA, 1);
-	writel_relaxed_no_log(addr, base + L2X0_CLEAN_INV_LINE_PA);
+	writel_relaxed(addr, base + L2X0_CLEAN_INV_LINE_PA);
 }
 #endif
 
@@ -152,7 +152,7 @@ static void l2x0_for_each_set_way(void __iomem *reg)
 	for (way = 0; way < l2x0_ways; way++) {
 		raw_spin_lock_irqsave(&l2x0_lock, flags);
 		for (set = 0; set < l2x0_sets; set++)
-			writel_relaxed_no_log((way << 28) | (set << 5), reg);
+			writel_relaxed((way << 28) | (set << 5), reg);
 		cache_sync();
 		raw_spin_unlock_irqrestore(&l2x0_lock, flags);
 	}
@@ -162,7 +162,7 @@ static void l2x0_for_each_set_way(void __iomem *reg)
 static void __l2x0_flush_all(void)
 {
 	debug_writel(0x03);
-	writel_relaxed_no_log(l2x0_way_mask, l2x0_base + L2X0_CLEAN_INV_WAY);
+	writel_relaxed(l2x0_way_mask, l2x0_base + L2X0_CLEAN_INV_WAY);
 	cache_wait_way(l2x0_base + L2X0_CLEAN_INV_WAY, l2x0_way_mask);
 	cache_sync();
 	debug_writel(0x00);
@@ -199,7 +199,7 @@ static void l2x0_clean_all(void)
 	/* clean all ways */
 	raw_spin_lock_irqsave(&l2x0_lock, flags);
 	debug_writel(0x03);
-	writel_relaxed_no_log(l2x0_way_mask, l2x0_base + L2X0_CLEAN_WAY);
+	writel_relaxed(l2x0_way_mask, l2x0_base + L2X0_CLEAN_WAY);
 	cache_wait_way(l2x0_base + L2X0_CLEAN_WAY, l2x0_way_mask);
 	cache_sync();
 	debug_writel(0x00);
@@ -214,7 +214,7 @@ static void l2x0_inv_all(void)
 	raw_spin_lock_irqsave(&l2x0_lock, flags);
 	/* Invalidating when L2 is enabled is a nono */
 	BUG_ON(readl(l2x0_base + L2X0_CTRL) & 1);
-	writel_relaxed_no_log(l2x0_way_mask, l2x0_base + L2X0_INV_WAY);
+	writel_relaxed(l2x0_way_mask, l2x0_base + L2X0_INV_WAY);
 	cache_wait_way(l2x0_base + L2X0_INV_WAY, l2x0_way_mask);
 	cache_sync();
 	raw_spin_unlock_irqrestore(&l2x0_lock, flags);
@@ -327,7 +327,7 @@ static void l2x0_disable(void)
 
 	raw_spin_lock_irqsave(&l2x0_lock, flags);
 	__l2x0_flush_all();
-	writel_relaxed_no_log(0, l2x0_base + L2X0_CTRL);
+	writel_relaxed(0, l2x0_base + L2X0_CTRL);
 	dsb();
 	raw_spin_unlock_irqrestore(&l2x0_lock, flags);
 }
@@ -344,9 +344,9 @@ static void l2x0_unlock(u32 cache_id)
 		lockregs = 1;
 
 	for (i = 0; i < lockregs; i++) {
-		writel_relaxed_no_log(0x0, l2x0_base + L2X0_LOCKDOWN_WAY_D_BASE +
+		writel_relaxed(0x0, l2x0_base + L2X0_LOCKDOWN_WAY_D_BASE +
 			       i * L2X0_LOCKDOWN_STRIDE);
-		writel_relaxed_no_log(0x0, l2x0_base + L2X0_LOCKDOWN_WAY_I_BASE +
+		writel_relaxed(0x0, l2x0_base + L2X0_LOCKDOWN_WAY_I_BASE +
 			       i * L2X0_LOCKDOWN_STRIDE);
 	}
 }
@@ -359,8 +359,8 @@ void __init l2x0_init(void __iomem *base, u32 aux_val, u32 aux_mask)
 
 	l2x0_base = base;
 
-	l2x0_cache_id = readl_relaxed_no_log(l2x0_base + L2X0_CACHE_ID);
-	aux = readl_relaxed_no_log(l2x0_base + L2X0_AUX_CTRL);
+	l2x0_cache_id = readl_relaxed(l2x0_base + L2X0_CACHE_ID);
+	aux = readl_relaxed(l2x0_base + L2X0_AUX_CTRL);
 
 	aux &= aux_mask;
 	aux |= aux_val;
@@ -405,19 +405,19 @@ void __init l2x0_init(void __iomem *base, u32 aux_val, u32 aux_mask)
 	 * If you are booting from non-secure mode
 	 * accessing the below registers will fault.
 	 */
-	if (!(readl_relaxed_no_log(l2x0_base + L2X0_CTRL) & 1)) {
+	if (!(readl_relaxed(l2x0_base + L2X0_CTRL) & 1)) {
 		/* Make sure that I&D is not locked down when starting */
 		l2x0_unlock(l2x0_cache_id);
 
 		/* l2x0 controller is disabled */
-		writel_relaxed_no_log(aux, l2x0_base + L2X0_AUX_CTRL);
+		writel_relaxed(aux, l2x0_base + L2X0_AUX_CTRL);
 
 		l2x0_saved_regs.aux_ctrl = aux;
 
 		l2x0_inv_all();
 
 		/* enable L2X0 */
-		writel_relaxed_no_log(1, l2x0_base + L2X0_CTRL);
+		writel_relaxed(1, l2x0_base + L2X0_CTRL);
 	}
 
 		outer_cache.inv_range = l2x0_inv_range;
@@ -480,7 +480,7 @@ static void __init pl310_of_setup(const struct device_node *np,
 
 	of_property_read_u32_array(np, "arm,tag-latency", tag, ARRAY_SIZE(tag));
 	if (tag[0] && tag[1] && tag[2])
-		writel_relaxed_no_log(
+		writel_relaxed(
 			((tag[0] - 1) << L2X0_LATENCY_CTRL_RD_SHIFT) |
 			((tag[1] - 1) << L2X0_LATENCY_CTRL_WR_SHIFT) |
 			((tag[2] - 1) << L2X0_LATENCY_CTRL_SETUP_SHIFT),
@@ -489,7 +489,7 @@ static void __init pl310_of_setup(const struct device_node *np,
 	of_property_read_u32_array(np, "arm,data-latency",
 				   data, ARRAY_SIZE(data));
 	if (data[0] && data[1] && data[2])
-		writel_relaxed_no_log(
+		writel_relaxed(
 			((data[0] - 1) << L2X0_LATENCY_CTRL_RD_SHIFT) |
 			((data[1] - 1) << L2X0_LATENCY_CTRL_WR_SHIFT) |
 			((data[2] - 1) << L2X0_LATENCY_CTRL_SETUP_SHIFT),
@@ -498,9 +498,9 @@ static void __init pl310_of_setup(const struct device_node *np,
 	of_property_read_u32_array(np, "arm,filter-ranges",
 				   filter, ARRAY_SIZE(filter));
 	if (filter[1]) {
-		writel_relaxed_no_log(ALIGN(filter[0] + filter[1], SZ_1M),
+		writel_relaxed(ALIGN(filter[0] + filter[1], SZ_1M),
 			       l2x0_base + L2X0_ADDR_FILTER_END);
-		writel_relaxed_no_log((filter[0] & ~(SZ_1M - 1)) | L2X0_ADDR_FILTER_EN,
+		writel_relaxed((filter[0] & ~(SZ_1M - 1)) | L2X0_ADDR_FILTER_EN,
 			       l2x0_base + L2X0_ADDR_FILTER_START);
 	}
 }
@@ -508,45 +508,45 @@ static void __init pl310_of_setup(const struct device_node *np,
 
 static void pl310_save(void)
 {
-	u32 l2x0_revision = readl_relaxed_no_log(l2x0_base + L2X0_CACHE_ID) &
+	u32 l2x0_revision = readl_relaxed(l2x0_base + L2X0_CACHE_ID) &
 		L2X0_CACHE_ID_RTL_MASK;
 
-	l2x0_saved_regs.tag_latency = readl_relaxed_no_log(l2x0_base +
+	l2x0_saved_regs.tag_latency = readl_relaxed(l2x0_base +
 		L2X0_TAG_LATENCY_CTRL);
-	l2x0_saved_regs.data_latency = readl_relaxed_no_log(l2x0_base +
+	l2x0_saved_regs.data_latency = readl_relaxed(l2x0_base +
 		L2X0_DATA_LATENCY_CTRL);
-	l2x0_saved_regs.filter_end = readl_relaxed_no_log(l2x0_base +
+	l2x0_saved_regs.filter_end = readl_relaxed(l2x0_base +
 		L2X0_ADDR_FILTER_END);
-	l2x0_saved_regs.filter_start = readl_relaxed_no_log(l2x0_base +
+	l2x0_saved_regs.filter_start = readl_relaxed(l2x0_base +
 		L2X0_ADDR_FILTER_START);
 
 	if (l2x0_revision >= L2X0_CACHE_ID_RTL_R2P0) {
 		/*
 		 * From r2p0, there is Prefetch offset/control register
 		 */
-		l2x0_saved_regs.prefetch_ctrl = readl_relaxed_no_log(l2x0_base +
+		l2x0_saved_regs.prefetch_ctrl = readl_relaxed(l2x0_base +
 			L2X0_PREFETCH_CTRL);
 		/*
 		 * From r3p0, there is Power control register
 		 */
 		if (l2x0_revision >= L2X0_CACHE_ID_RTL_R3P0)
-			l2x0_saved_regs.pwr_ctrl = readl_relaxed_no_log(l2x0_base +
+			l2x0_saved_regs.pwr_ctrl = readl_relaxed(l2x0_base +
 				L2X0_POWER_CTRL);
 	}
 }
 
 static void l2x0_resume(void)
 {
-	if (!(readl_relaxed_no_log(l2x0_base + L2X0_CTRL) & 1)) {
+	if (!(readl_relaxed(l2x0_base + L2X0_CTRL) & 1)) {
 		/* restore aux ctrl and enable l2 */
-		l2x0_unlock(readl_relaxed_no_log(l2x0_base + L2X0_CACHE_ID));
+		l2x0_unlock(readl_relaxed(l2x0_base + L2X0_CACHE_ID));
 
-		writel_relaxed_no_log(l2x0_saved_regs.aux_ctrl, l2x0_base +
+		writel_relaxed(l2x0_saved_regs.aux_ctrl, l2x0_base +
 			L2X0_AUX_CTRL);
 
 		l2x0_inv_all();
 
-		writel_relaxed_no_log(1, l2x0_base + L2X0_CTRL);
+		writel_relaxed(1, l2x0_base + L2X0_CTRL);
 	}
 }
 
@@ -554,25 +554,25 @@ static void pl310_resume(void)
 {
 	u32 l2x0_revision;
 
-	if (!(readl_relaxed_no_log(l2x0_base + L2X0_CTRL) & 1)) {
+	if (!(readl_relaxed(l2x0_base + L2X0_CTRL) & 1)) {
 		/* restore pl310 setup */
-		writel_relaxed_no_log(l2x0_saved_regs.tag_latency,
+		writel_relaxed(l2x0_saved_regs.tag_latency,
 			l2x0_base + L2X0_TAG_LATENCY_CTRL);
-		writel_relaxed_no_log(l2x0_saved_regs.data_latency,
+		writel_relaxed(l2x0_saved_regs.data_latency,
 			l2x0_base + L2X0_DATA_LATENCY_CTRL);
-		writel_relaxed_no_log(l2x0_saved_regs.filter_end,
+		writel_relaxed(l2x0_saved_regs.filter_end,
 			l2x0_base + L2X0_ADDR_FILTER_END);
-		writel_relaxed_no_log(l2x0_saved_regs.filter_start,
+		writel_relaxed(l2x0_saved_regs.filter_start,
 			l2x0_base + L2X0_ADDR_FILTER_START);
 
-		l2x0_revision = readl_relaxed_no_log(l2x0_base + L2X0_CACHE_ID) &
+		l2x0_revision = readl_relaxed(l2x0_base + L2X0_CACHE_ID) &
 			L2X0_CACHE_ID_RTL_MASK;
 
 		if (l2x0_revision >= L2X0_CACHE_ID_RTL_R2P0) {
-			writel_relaxed_no_log(l2x0_saved_regs.prefetch_ctrl,
+			writel_relaxed(l2x0_saved_regs.prefetch_ctrl,
 				l2x0_base + L2X0_PREFETCH_CTRL);
 			if (l2x0_revision >= L2X0_CACHE_ID_RTL_R3P0)
-				writel_relaxed_no_log(l2x0_saved_regs.pwr_ctrl,
+				writel_relaxed(l2x0_saved_regs.pwr_ctrl,
 					l2x0_base + L2X0_POWER_CTRL);
 		}
 	}
@@ -622,7 +622,7 @@ int __init l2x0_of_init(u32 aux_val, u32 aux_mask)
 	data = of_match_node(l2x0_ids, np)->data;
 
 	/* L2 configuration can only be changed if the cache is disabled */
-	if (!(readl_relaxed_no_log(l2x0_base + L2X0_CTRL) & 1)) {
+	if (!(readl_relaxed(l2x0_base + L2X0_CTRL) & 1)) {
 		if (data->setup)
 			data->setup(np, &aux_val, &aux_mask);
 	}
