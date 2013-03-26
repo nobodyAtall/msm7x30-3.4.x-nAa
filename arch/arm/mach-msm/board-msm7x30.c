@@ -7307,7 +7307,7 @@ static struct memtype_reserve msm7x30_reserve_table[] __initdata = {
 #ifdef CONFIG_MSM_RTB
 static void __init reserve_rtb_memory(void)
 {
-	msm7x30_reserve_table[MEMTYPE_EBI0].size += msm7x30_rtb_pdata.size;
+	msm7x30_reserve_table[MEMTYPE_EBI1].size += msm7x30_rtb_pdata.size;
 }
 #else
 static void __init reserve_rtb_memory(void)
@@ -7399,7 +7399,7 @@ static void __init msm7x30_calculate_reserve_sizes(void)
 	size_ion_devices();
 	reserve_ion_memory();
 #ifdef ULIS
-       msm7x30_reserve_table[MEMTYPE_EBI0].size += (ULISLOGSIZE + PAGE_SIZE);
+       msm7x30_reserve_table[MEMTYPE_EBI1].size += (ULISLOGSIZE + PAGE_SIZE);
 #endif
 
 	reserve_rtb_memory();
