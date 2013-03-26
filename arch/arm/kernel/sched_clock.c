@@ -148,23 +148,10 @@ void __init setup_sched_clock(u32 (*read)(void), int bits, unsigned long rate)
 	pr_debug("Registered %pF as sched_clock source\n", read);
 }
 
-#define ULIS
-#ifdef ULIS
-static atomic64_t last_ns;
-#endif
-
-
 unsigned long long notrace sched_clock(void)
 {
 	u32 cyc = read_sched_clock();
-#ifdef ULIS
-	u64 local = cyc_to_sched_clock(cyc, sched_clock_mask);
-	atomic64_set(&last_ns, local);
-	return local;
-#else
-
 	return cyc_to_sched_clock(cyc, sched_clock_mask);
-#endif
 }
 
 void __init sched_clock_postinit(void)

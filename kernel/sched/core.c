@@ -87,59 +87,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
-#define ULIS
-#define ULIS_VER (2012.10.31,ULIS,JB,k3.4,v3.3)
-#ifndef ULIS
-#define printk_u16s
-#else
-struct ScheduleLogData {
-	unsigned long ulTick;
-	unsigned long ulMsec;
-	unsigned int unPid;
-	int64_t reserved;
-	unsigned char ucComm[16];
-};
-//MAX_KERNEL_SCHEDULE_LOGS = (1048576)/4/CONFIG_NR_CPUS/32;
-//1MB was defined at board file, 1/4 of that
-//sizeof(struct ScheduleLogData);
-#define MAX_KERNEL_SCHEDULE_LOGS (2048)
-extern int64_t msm_timer_get_sclk_time(int64_t *);
-struct ScheduleLogDataWrap {
-	struct ScheduleLogData sp[4][MAX_KERNEL_SCHEDULE_LOGS]; //CPU =2
-};
-struct ScheduleLogDataWrap *pScheduleLogData = 0;
-int * nNextLogIdx_SCHED; //max QUAD core
-void enable_uncache_sched_log(char * start, int size) {
-	nNextLogIdx_SCHED = (int *)start;
-	start = start + 16;
-	pScheduleLogData = (struct ScheduleLogDataWrap*)start;
-       //MAX_KERNEL_SCHEDULE_LOGS = size / cpus / sizeof(struct ScheduleLogData);
-}
-EXPORT_SYMBOL(enable_uncache_sched_log);
-
-void printk_u16s(int code, char *s)
-{
-	if (pScheduleLogData != NULL) {
-		unsigned long long t;
-		int i, cpu = smp_processor_id();
-		struct ScheduleLogData *p;
-		i = nNextLogIdx_SCHED[cpu];
-		p = &(pScheduleLogData->sp[cpu][i]);
-
-		t = sched_clock();
-		p->ulMsec = do_div(t, 1000000000) / 1000;
-		p->ulTick = (unsigned long) t;
-		p->unPid = current->pid;
-		p->reserved = code;
-		strncpy(p->ucComm, s, 16);
-		nNextLogIdx_SCHED[cpu] = ++i & (MAX_KERNEL_SCHEDULE_LOGS - 1);
-       }
-}
-EXPORT_SYMBOL(printk_u16s);
-#endif
-
-
-
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
 	unsigned long delta;
@@ -2134,28 +2081,6 @@ context_switch(struct rq *rq, struct task_struct *prev,
 #ifndef __ARCH_WANT_UNLOCKED_CTXSW
 	spin_release(&rq->lock.dep_map, 1, _THIS_IP_);
 #endif
-
-#ifdef ULIS
-	if (pScheduleLogData != NULL)
-	{
-		unsigned long long t;
-		int i, cpu = smp_processor_id();
-		struct ScheduleLogData *p;
-		i = nNextLogIdx_SCHED[cpu];
-		p = &(pScheduleLogData->sp[cpu][i]);
-
-		if (prev != NULL) {
-			p->reserved = prev->pid;
-			t = sched_clock();
-			p->ulMsec = do_div(t, 1000000000) / 1000;
-			p->ulTick = (unsigned long) t;
-			p->unPid = next->pid;
-			strncpy(p->ucComm, next->comm, 16);
-			nNextLogIdx_SCHED[cpu] = ++i & (MAX_KERNEL_SCHEDULE_LOGS - 1);
-		}
-	}
-#endif
-
 
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);

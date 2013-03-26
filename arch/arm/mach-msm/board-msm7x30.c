@@ -93,7 +93,6 @@
 
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
-#define ULIS
 
 #define MSM_PMEM_SF_SIZE	0x1700000
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
@@ -174,9 +173,6 @@ static struct platform_device ion_dev;
 #define DDR1_BANK_BASE 0X20000000
 #define DDR2_BANK_BASE 0X40000000
 
-//#ifdef ULIS
-#define ULISLOGSIZE     (2097152)
-//#endif
 static unsigned int phys_add = DDR2_BANK_BASE;
 unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
 EXPORT_SYMBOL(ebi1_phys_offset);
@@ -6987,16 +6983,8 @@ static struct i2c_board_info cy8ctma300_board_info[] = {
 	}
 };
 
-
-#ifdef ULIS
-extern void enable_uncache_log_buf(char *, int);
-extern void enable_uncache_sched_log(char *, int);
-extern void enable_uncache_irq_log(char *, int);
-#endif
-
 static void __init msm7x30_init(void)
 {
-
 	int rc;
 	unsigned smem_size;
 	uint32_t usb_hub_gpio_cfg_value = GPIO_CFG(56,
@@ -7005,26 +6993,8 @@ static void __init msm7x30_init(void)
 						GPIO_CFG_NO_PULL,
 						GPIO_CFG_2MA);
 	uint32_t soc_version = 0;
-#ifdef ULIS
-	{
-	unsigned long lphy;
-	char * temp;
-	lphy = allocate_contiguous_ebi_nomap(ULISLOGSIZE, PAGE_SIZE);
-	temp = (char *)__arm_ioremap(lphy, ULISLOGSIZE, 11); //same as MT_MEMORY_NONCACHED
-	memset((void*)temp, 0, ULISLOGSIZE);
-	enable_uncache_log_buf(temp, ULISLOGSIZE/2);
-	pr_err("ULIS:   log_buf mapped at 0x%08x/size %dKB\n", (unsigned int)temp, ULISLOGSIZE/2/1024);
-	temp = temp + (ULISLOGSIZE/2);
-	enable_uncache_sched_log(temp, ULISLOGSIZE/4);
-	pr_err("ULIS: sched_buf mapped at 0x%08x/size %dKB\n", (unsigned int)temp, ULISLOGSIZE/4/1024);
-	temp = temp + (ULISLOGSIZE/4);
-	enable_uncache_irq_log(temp, ULISLOGSIZE/4);
-	pr_err("ULIS:   irq_buf mapped at 0x%08x/size %dKB\n", (unsigned int)temp, ULISLOGSIZE/4/1024);
-	}
-#endif
 
 	soc_version = socinfo_get_version();
-
 
 	msm_clock_init(&msm7x30_clock_init_data);
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
@@ -7398,10 +7368,6 @@ static void __init msm7x30_calculate_reserve_sizes(void)
 	reserve_mdp_memory();
 	size_ion_devices();
 	reserve_ion_memory();
-#ifdef ULIS
-       msm7x30_reserve_table[MEMTYPE_EBI1].size += (ULISLOGSIZE + PAGE_SIZE);
-#endif
-
 	reserve_rtb_memory();
 }
 
