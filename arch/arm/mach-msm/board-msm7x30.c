@@ -5333,32 +5333,6 @@ static struct platform_device msm_adc_device = {
 	},
 };
 
-#ifdef CONFIG_MSM_RTB
-static struct msm_rtb_platform_data msm7x30_rtb_pdata = {
-	.size = SZ_1M,
-};
-
-static int __init msm_rtb_set_buffer_size(char *p)
-{
-	int s;
-
-	s = memparse(p, NULL);
-	msm7x30_rtb_pdata.size = ALIGN(s, SZ_4K);
-	return 0;
-}
-early_param("msm_rtb_size", msm_rtb_set_buffer_size);
-
-struct platform_device msm7x30_rtb_device = {
-	.name = "msm_rtb",
-	.id   = -1,
-	.dev  = {
-		.platform_data = &msm7x30_rtb_pdata,
-	},
-};
-#endif
-
-
-
 #ifdef CONFIG_MSM_SDIO_AL
 static struct msm_gpio mdm2ap_status = {
 	GPIO_CFG(77, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
@@ -5524,9 +5498,6 @@ static struct platform_device *devices[] __initdata = {
 
 	&msm_batt_device,
 	&msm_adc_device,
-#ifdef CONFIG_MSM_RTB
-	&msm7x30_rtb_device,
-#endif
 	&msm_ebi0_thermal,
 	&msm_ebi1_thermal,
 	&msm_adsp_device,
@@ -7274,19 +7245,6 @@ static struct memtype_reserve msm7x30_reserve_table[] __initdata = {
 	},
 };
 
-#ifdef CONFIG_MSM_RTB
-static void __init reserve_rtb_memory(void)
-{
-	msm7x30_reserve_table[MEMTYPE_EBI1].size += msm7x30_rtb_pdata.size;
-}
-#else
-static void __init reserve_rtb_memory(void)
-{
-}
-#endif
-
-
-
 unsigned long size;
 unsigned long msm_ion_camera_size;
 
@@ -7368,7 +7326,6 @@ static void __init msm7x30_calculate_reserve_sizes(void)
 	reserve_mdp_memory();
 	size_ion_devices();
 	reserve_ion_memory();
-	reserve_rtb_memory();
 }
 
 static int msm7x30_paddr_to_memtype(unsigned int paddr)
