@@ -614,7 +614,7 @@ int smsm_check_for_modem_crash(void)
 	if (!smsm_info.state)
 		return 0;
 
-	if (__raw_readl_no_log(SMSM_STATE_ADDR(SMSM_MODEM_STATE)) & SMSM_RESET) {
+	if (__raw_readl(SMSM_STATE_ADDR(SMSM_MODEM_STATE)) & SMSM_RESET) {
 		handle_modem_crash();
 		return -1;
 	}
