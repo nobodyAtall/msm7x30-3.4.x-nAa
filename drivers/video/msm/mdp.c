@@ -2,7 +2,7 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2013, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -1414,8 +1414,8 @@ int mdp_ppp_pipe_wait(void)
 }
 
 static DEFINE_SPINLOCK(mdp_lock);
-static int mdp_irq_mask;
-static int mdp_irq_enabled;
+int mdp_irq_mask;
+int mdp_irq_enabled;
 
 /*
  * mdp_enable_irq: can not be called from isr
