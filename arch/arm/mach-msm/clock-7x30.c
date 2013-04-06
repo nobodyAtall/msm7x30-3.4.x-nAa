@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/clkdev.h>
+#include <asm/div64.h>
 #include <linux/string.h>
 
 #include <mach/msm_iomap.h>
