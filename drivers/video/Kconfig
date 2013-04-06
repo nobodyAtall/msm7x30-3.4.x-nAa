@@ -2353,6 +2353,20 @@ config FB_PRE_INIT_FB
 	  Select this option if display contents should be inherited as set by
 	  the bootloader.
 
+config FB_MSM_MDDI_SONY_HVGA_LCD
+	depends on FB_MSM
+	bool "MDDI Sony HVGA LCD Panel"
+	select FB_MSM_MDDI
+	---help---
+	  Support for Sony HVGA MDDI LCD Panel (320x480)
+
+config FB_MSM_MDDI_HITACHI_HVGA_LCD
+	depends on FB_MSM
+	bool "MDDI Hitachi HVGA LCD Panel"
+	select FB_MSM_MDDI
+	---help---
+	  Support for Hitachi HVGA MDDI LCD Panel (320x480)
+
 config FB_MX3
 	tristate "MX3 Framebuffer support"
 	depends on FB && MX3_IPU
