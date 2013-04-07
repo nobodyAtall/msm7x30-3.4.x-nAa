@@ -389,6 +389,41 @@ config BQ27520_TEST_ENABLE
 	help
 	  Say Y here to enable Test sysfs Interface for BQ27520 Drivers.
 
+config BATTERY_SEMC_ARCH
+	bool "SEMC battery data handling"
+	depends on ARCH_MSM
+	default n
+	help
+	  Say Y to enable support for SEMC battery data handling in the
+	  platform.
+
+config BATTERY_CHARGALG
+	bool "Battery charging algorithm"
+	default n
+	help
+	  Say Y to enable charging algorithm for batteries.
+
+config BATTERY_CHARGALG_ENABLE_STEP_CHARGING
+	bool "Enable step charging"
+	depends on BATTERY_CHARGALG
+	default n
+	help
+	  Say Y to enable step charging. Step charging controls the maximum
+	  charging current relative to the actual battery voltage.
+
+config BATTERY_BQ27520_SEMC
+	tristate "BQ27520 battery driver (SEMC)"
+	depends on I2C
+	help
+	  Say Y here to enable support for batteries with BQ27520(I2C) chip.
+
+config CHARGER_BQ24185
+	tristate "TI BQ24185 Switch-Mode One-Cell Li-Ion charger"
+	depends on I2C
+	help
+	 Say Y here to enable Support for the TI BQ24185 Battery Charger.
+	 The driver is configured to operate with a single lithium cell.
+
 config PM8921_CHARGER
 	tristate "PM8921 Charger driver"
 	depends on MFD_PM8921_CORE
