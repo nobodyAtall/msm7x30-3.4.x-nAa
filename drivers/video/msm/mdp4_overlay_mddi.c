@@ -32,13 +32,16 @@
 
 static int vsync_start_y_adjust = 4;
 
+extern int mdp_irq_mask;
+extern int mdp_irq_enabled;
+
 #define MAX_CONTROLLER	1
 
 /*
  * VSYNC_EXPIRE_TICK == 0 means clock always on
  * VSYNC_EXPIRE_TICK == 4 is recommended
  */
-#define VSYNC_EXPIRE_TICK 4
+#define VSYNC_EXPIRE_TICK 10
 
 static struct vsycn_ctrl {
 	struct device *dev;
@@ -72,7 +75,7 @@ static struct vsycn_ctrl {
 	int new_update;
 	int clk_control;
 	ktime_t vsync_time;
-	struct work_struct clk_work;
+	struct delayed_work clk_work;
 } vsync_ctrl_db[MAX_CONTROLLER];
 
 static void vsync_irq_enable(int intr, int term)
@@ -508,7 +511,8 @@ static void mdp4_mddi_wait4dmap(int cndx)
 	if (atomic_read(&vctrl->suspend) > 0)
 		return;
 
-	wait_for_completion(&vctrl->dmap_comp);
+	if (wait_for_completion_timeout(&vctrl->dmap_comp, HZ/10) <= 0)
+		pr_err("DMAP UPDATE FAILED!!!\n");
 }
 
 static void mdp4_mddi_wait4ov(int cndx)
@@ -525,7 +529,8 @@ static void mdp4_mddi_wait4ov(int cndx)
 	if (atomic_read(&vctrl->suspend) > 0)
 		return;
 
-	wait_for_completion(&vctrl->ov_comp);
+	if (wait_for_completion_timeout(&vctrl->ov_comp, (HZ/10)) <= 0)
+		pr_err("OV UPDATE FAILED!!!\n");
 }
 
 /*
@@ -558,7 +563,7 @@ static void primary_rdptr_isr(int cndx)
 		if (vctrl->expire_tick == 0) {
 			if (vctrl->pan_display <= 0) {
 				vctrl->clk_control = 1;
-			schedule_work(&vctrl->clk_work);
+				schedule_delayed_work(&vctrl->clk_work, 0);
 			} else {
 				/* wait one more vsycn */
 				vctrl->expire_tick += 1;
@@ -665,18 +670,32 @@ static void clk_ctrl_work(struct work_struct *work)
 {
 	unsigned long flags;
 	struct vsycn_ctrl *vctrl =
-		container_of(work, typeof(*vctrl), clk_work);
-
+	container_of(to_delayed_work(work), typeof(*vctrl), clk_work);
 	mutex_lock(&vctrl->update_lock);
-	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (vctrl->clk_control && vctrl->clk_enabled) {
-		vsync_irq_disable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
-			vctrl->clk_enabled = 0;
-		vctrl->clk_control = 0;
+		spin_lock_irqsave(&mdp_spin_lock, flags);
+		if (mdp_irq_enabled && (mdp_irq_mask & MDP_DMAP_TERM)) {
+			pr_err("AVOID CLOCK DISABLE DURING DMA TRANSFER!!!\n");
+			spin_unlock_irqrestore(&mdp_spin_lock, flags);
+			mutex_unlock(&vctrl->update_lock);
+			schedule_delayed_work(&vctrl->clk_work, (HZ/100));
+			return;
+		}
+
+		spin_unlock_irqrestore(&mdp_spin_lock, flags);
+
+		spin_lock_irqsave(&vctrl->spin_lock, flags);
+		if (vctrl->expire_tick || vctrl->vsync_enabled) {
+			spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+			return;
+		}
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+		pr_debug("%s: SET_CLK_OFF\n", __func__);
 		mdp_clk_ctrl(0);
-		pr_debug("%s: SET_CLK_OFF, pid=%d\n", __func__, current->pid);
-	} else {
+		spin_lock_irqsave(&vctrl->spin_lock, flags);
+		vsync_irq_disable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
+		vctrl->clk_enabled = 0;
+		vctrl->clk_control = 0;
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 	}
 	mutex_unlock(&vctrl->update_lock);
@@ -740,7 +759,7 @@ void mdp4_mddi_rdptr_init(int cndx)
 	init_completion(&vctrl->vsync_comp);
 	spin_lock_init(&vctrl->spin_lock);
 	atomic_set(&vctrl->suspend, 1);
-	INIT_WORK(&vctrl->clk_work, clk_ctrl_work);
+	INIT_DELAYED_WORK(&vctrl->clk_work, clk_ctrl_work);
 }
 
 void mdp4_primary_rdptr(void)
@@ -1145,7 +1164,7 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 	int cndx = 0;
 	struct vsycn_ctrl *vctrl;
 	struct mdp4_overlay_pipe *pipe;
-
+	unsigned long flags;
 	mutex_lock(&mfd->dma->ov_mutex);
 	vctrl = &vsync_ctrl_db[cndx];
 
@@ -1165,6 +1184,14 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 		mutex_unlock(&mfd->dma->ov_mutex);
 		return;
 	}
+
+	spin_lock_irqsave(&vctrl->spin_lock, flags);
+	/*
+	 * in the middle of shutting clocks down
+	 * delay to allow pan display to go through
+	 */
+	vctrl->expire_tick = VSYNC_EXPIRE_TICK;
+	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 
 	if (pipe->mixer_stage == MDP4_MIXER_STAGE_BASE) {
 		mdp4_mddi_vsync_enable(mfd, pipe, 0);
