@@ -348,13 +348,15 @@ static int pm8058_gpios_init(void)
 	int rc;
 
 	struct pm8xxx_gpio_init_info bq24185_irq = {
-		PM8058_GPIO_PM_TO_SYS(BQ24185_GPIO_IRQ),
+		PM8058_GPIO_PM_TO_SYS(BQ24185_GPIO_IRQ - 1),
 		{
-			.direction = PM_GPIO_DIR_IN,
-			.pull = PM_GPIO_PULL_NO,
-			.vin_sel = PM8058_GPIO_VIN_S3,
-			.function = PM_GPIO_FUNC_NORMAL,
-			.inv_int_pol = 0,
+			.direction 		= PM_GPIO_DIR_IN,
+			.pull 			= PM_GPIO_PULL_NO,
+			.vin_sel 		= PM8058_GPIO_VIN_S3,
+			.function 		= PM_GPIO_FUNC_NORMAL,
+			.inv_int_pol 	= 0,
+			.out_strength	= PM_GPIO_STRENGTH_LOW,
+			.output_value	= 0,
 		},
 	};
 
@@ -458,9 +460,9 @@ static int pm8058_gpios_init(void)
 	}
 #endif
 
-	rc = pm8xxx_gpio_config(BQ24185_GPIO_IRQ - 1, &bq24185_irq.config);
+	rc = pm8xxx_gpio_config(bq24185_irq.gpio, &bq24185_irq.config);
 	if (rc) {
-		pr_err("%s BQ24185_GPIO_IRQ config failed\n", __func__);
+		pr_err("%s BQ24185_GPIO_IRQ config failed with %d\n", __func__, rc);
 		return rc;
 	}
 
