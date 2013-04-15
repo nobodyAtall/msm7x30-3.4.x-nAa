@@ -2988,7 +2988,11 @@ static struct sii9024_platform_data sii9024_platform_data = {
 static void semc_mogami_lcd_regulators_on(void)
 {
 	vreg_helper_on("gp7",1800);  /* L8 */
+#ifdef CONFIG_MACH_SEMC_ANZU
+	vreg_helper_on("gp6",2850);  /* L15 */
+#else
 	vreg_helper_on("gp6",2300);  /* L15 */
+#endif
 }
 
 /* Generic Power On function for SEMC mogami displays */
@@ -6528,7 +6532,11 @@ static void __init shared_vreg_on(void)
 {
 	vreg_helper_on(VREG_L20, 2800);
 	vreg_helper_on(VREG_L10, 2600);
+#ifdef CONFIG_MACH_SEMC_ANZU
+	vreg_helper_on(VREG_L15, 2900);
+#else
 	vreg_helper_on(VREG_L15, 2300);
+#endif
 	vreg_helper_on(VREG_L8, 1800);
 }
 
