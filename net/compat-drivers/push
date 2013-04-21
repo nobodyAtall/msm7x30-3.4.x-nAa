@@ -1,0 +1,9 @@
+#!/bin/bash
+modules=`find . -name *.ko`
+adb shell mkdir -p /data/local/tmp/3.8.1/
+adb chell chmod 777 /data/local/tmp/3.8.1/
+for i in $modules
+do
+	echo $i
+	adb push $i /data/local/tmp/3.8.1/
+done
