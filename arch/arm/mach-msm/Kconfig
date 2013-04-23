@@ -676,7 +676,6 @@ config MACH_MSM7X30_FLUID
 config MACH_SEMC_MOGAMI
        depends on ARCH_MSM7X30
        depends on !MSM_STACKED_MEMORY
-       select TI1271
        default y
        bool "SonyEricsson Mogami CDB"
        help
@@ -685,7 +684,6 @@ config MACH_SEMC_MOGAMI
 config MACH_SEMC_SMULTRON
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
-	select TI1271
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
 	bool "SonyEricsson Smultron"
@@ -695,7 +693,6 @@ config MACH_SEMC_SMULTRON
 config MACH_SEMC_COCONUT
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
-	select TI1271
 	default n
 	bool "SonyEricsson Coconut"
 	help
