@@ -23,7 +23,7 @@ static struct as3676_platform_led as3676_leds_mapping[] = {
 	},
 	{
 		.name = "button-backlight",
-		.sinks = BIT(AS3676_SINK_RGB1) | BIT(AS3676_SINK_RGB2),
+		.sinks = BIT(AS3676_SINK_RGB2) | BIT(AS3676_SINK_RGB3),
 		.max_current = 25000,
 	},
 	{
