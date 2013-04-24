@@ -1660,7 +1660,7 @@ static void cy8ctma300_bl_check(struct spi_device *spi)
 }
 
 
-static ssize_t cy8ctma300_bl_fw_write(struct kobject *kobj,
+static ssize_t cy8ctma300_bl_fw_write(struct file *file, struct kobject *kobj,
 				struct bin_attribute *bin_attr,
 				char *buf, loff_t pos, size_t size)
 {
@@ -1688,7 +1688,7 @@ end:
 }
 
 
-static ssize_t cy8ctma300_bl_fw_read(struct kobject *kobj,
+static ssize_t cy8ctma300_bl_fw_read(struct file *file, struct kobject *kobj,
 	struct bin_attribute *bin_attr,
 	char *buf, loff_t pos, size_t size)
 {
