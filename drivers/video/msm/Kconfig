@@ -732,6 +732,8 @@ config FB_MSM_HDMI_SII9024A_PANEL
         depends on FB_MSM_MDP40
         bool "LCDC HDMI SiI9024A 720p Panel"
         select FB_MSM_DTV
+        select FB_MSM_EXT_INTERFACE_COMMON
+        select FB_MSM_HDMI_COMMON
         select UIO
         select UIO_PDRV_GENIRQ
         default n
