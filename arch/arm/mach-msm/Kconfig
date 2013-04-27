@@ -693,6 +693,7 @@ config MACH_SEMC_SMULTRON
 config MACH_SEMC_MANGO
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
+	select SUPPORT_ALIEN_USB_CHARGER
 	default n
 	bool "SonyEricsson Mango"
 	help
@@ -701,6 +702,7 @@ config MACH_SEMC_MANGO
 config MACH_SEMC_COCONUT
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
+	select SUPPORT_ALIEN_USB_CHARGER
 	default n
 	bool "SonyEricsson Coconut"
 	help
@@ -736,7 +738,6 @@ config MACH_SEMC_ANZU
 config MACH_SEMC_IYOKAN
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
-	#select FB_MSM_HDPI
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
 	bool "SonyEricsson Iyokan"
@@ -751,6 +752,15 @@ config MACH_SEMC_HALLON
 	bool "SonyEricsson Hallon"
 	help
 	  Support for the SonyEricsson Hallon devices.
+
+config MACH_SEMC_SATSUMA
+	depends on ARCH_MSM7X30
+	depends on !MSM_STACKED_MEMORY
+	select SUPPORT_ALIEN_USB_CHARGER
+	default y
+	bool "SonyEricsson Satsuma"
+	help
+	  Support for the SonyEricsson Satsuma devices.
 
 config MACH_SAPPHIRE
 	depends on ARCH_MSM7X01A
