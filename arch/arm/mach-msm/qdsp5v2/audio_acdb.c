@@ -3280,6 +3280,7 @@ static s32 acdb_calibrate_device(void *data)
 	}
 
 	while (!kthread_should_stop()) {
+		msleep(5);
 		MM_DBG("Waiting for call back events\n");
 		wait_event_interruptible(acdb_data.wait,
 					(acdb_data.device_cb_compl
