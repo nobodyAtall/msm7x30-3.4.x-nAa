@@ -63,6 +63,7 @@ obj-$(CONFIG_BOSCH_BMA150)              += bma150.o
 obj-$(CONFIG_INPUT_BMA150)		+= bma150.o
 obj-$(CONFIG_INPUT_BMA150_NG)		+= bma150_ng.o
 obj-$(CONFIG_INPUT_BMA250)		+= bma250.o
+obj-$(CONFIG_INPUT_BMP180)		+= bmp180.o
 obj-$(CONFIG_INPUT_APDS9702)	+= apds9702.o
 obj-$(CONFIG_INPUT_SIMPLE_REMOTE)	+= simple_remote.o
 obj-$(CONFIG_INPUT_KP_FLIP_SWITCH)	+= kp_flip_switch.o

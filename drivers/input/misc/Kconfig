@@ -713,6 +713,14 @@ config INPUT_BMA250
 	  Say Y here if you want support for the BMA250 accelerometer
 	  device. This driver only supports I2C communication.
 
+config INPUT_BMP180
+	tristate "Bosch BMP180 pressure sensor"
+	default n
+	depends on I2C
+	help
+	  Say Y here if you want support for the BMP180 pressure
+	  device. This driver only supports I2C communication.
+
 config INPUT_APDS9702
 	tristate "APDS9702 proximity driver"
 	depends on I2C
