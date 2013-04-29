@@ -67,6 +67,7 @@
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
 #include <linux/spi/cypress_touch.h>
+#include <linux/hrtimer.h>
 #include <mach/mddi_novatek_fwvga.h>
 
 #define CYPRESS_TOUCH_GPIO_RESET        (40)
@@ -97,6 +98,10 @@
 #include <linux/bma150.h>
 
 #include <linux/leds-as3676.h>
+
+#include <linux/max17040.h>
+#include <mach/msm_battery.h>
+#include <mach/semc_battery_data.h>
 
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
@@ -1044,14 +1049,14 @@ struct msm_camera_device_platform_data msm_camera_device_data = {
 	.ioclk.vfe_clk_rate  = 147456000,
 };
 
-static struct msm_camera_sensor_flash_src msm_flash_src_pwm = {
+/*static struct msm_camera_sensor_flash_src msm_flash_src_pwm = {
 	.flash_sr_type = MSM_CAMERA_FLASH_SRC_PWM,
 	._fsrc.pwm_src.freq  = 1000,
 	._fsrc.pwm_src.max_load = 300,
 	._fsrc.pwm_src.low_load = 30,
 	._fsrc.pwm_src.high_load = 100,
 	._fsrc.pwm_src.channel = 7,
-};
+};*/
 
 #ifdef CONFIG_MT9D112
 static struct msm_camera_sensor_flash_data flash_mt9d112 = {
@@ -2769,6 +2774,13 @@ static struct platform_device novatek_device = {
 	}
 };
 
+static struct cypress_callback *cy_callback;
+
+static void cy_register_cb(struct cypress_callback *cy)
+{
+	cy_callback = cy;
+}
+
 static struct cypress_touch_platform_data cypress_touch_data = {
 	.x_min		= 0,
 	.x_max		= 479,
@@ -2817,6 +2829,64 @@ static struct regulator_bulk_data optnav_regulators[] = {
 	{ .supply = "gp4", .min_uV = 2600000, .max_uV = 2600000 },
 	{ .supply = "gp9", .min_uV = 1800000, .max_uV = 1800000 },
 	{ .supply = "usb", .min_uV = 3300000, .max_uV = 3300000 },
+};
+
+/* Driver(s) to be notified upon change in bdata */
+static char *bdata_supplied_to[] = {
+	MAX17040_NAME,
+};
+
+static struct semc_battery_platform_data semc_battery_platform_data = {
+	.supplied_to = bdata_supplied_to,
+	.num_supplicants = ARRAY_SIZE(bdata_supplied_to),
+};
+
+static struct platform_device bdata_driver = {
+	.name = SEMC_BDATA_NAME,
+	.id = -1,
+	.dev = {
+		.platform_data = &semc_battery_platform_data,
+	},
+};
+
+static struct max17040_platform_data max17040_platform_data = {
+	.model_desc = {
+		.ocv_test = { 0xD9, 0x80 },
+		.soc_low = 0xF4,
+		.soc_high = 0xF6,
+		.model_data = {
+			{
+				0xA6, 0xA0, 0xB7, 0x50, 0xB8, 0xB0, 0xB8, 0xE0,
+				0xB9, 0x30, 0xBB, 0x60, 0xBB, 0xF0, 0xBC, 0x40
+			},
+			{
+				0xBC, 0xA0, 0xBD, 0x50, 0xBE, 0x20, 0xC0, 0x20,
+				0xC3, 0xF0, 0xC6, 0xE0, 0xCB, 0x40, 0xCF, 0x80
+			},
+			{
+				0x03, 0xA0, 0x1A, 0x80, 0xAD, 0x60, 0x43, 0x60,
+				0x00, 0x40, 0x7E, 0x40, 0x0E, 0x80, 0x72, 0x00
+			},
+			{
+				0x4C, 0x20, 0x3B, 0x40, 0x29, 0xE0, 0x1B, 0x00,
+				0x1B, 0x20, 0x13, 0x60, 0x12, 0x40, 0x12, 0x40
+			}
+		},
+		.exp = 1
+	},
+	.rcomp_data = {
+		.rcomp0 = 0x55,
+		.temp_co_hot = -1400,
+		.temp_co_cold = -9725,
+		.temp_div = 1000,
+	},
+	.chg_max_temp = 550,
+	.chg_min_temp = 50,
+};
+
+/* Driver(s) to be notified upon change in USB */
+static char *hsusb_chg_supplied_to[] = {
+	MAX17040_NAME,
 };
 
 static void __iomem *virtual_optnav;
@@ -2919,23 +2989,6 @@ static struct ofn_atlab_platform_data optnav_data = {
 	},
 };
 
-static int hdmi_comm_power(int on, int show);
-static int hdmi_init_irq(void);
-static int hdmi_enable_5v(int on);
-static int hdmi_core_power(int on, int show);
-static int hdmi_cec_power(int on);
-static bool hdmi_check_hdcp_hw_support(void);
-
-static struct msm_hdmi_platform_data adv7520_hdmi_data = {
-	.irq = MSM_GPIO_TO_INT(18),
-	.comm_power = hdmi_comm_power,
-	.init_irq = hdmi_init_irq,
-	.enable_5v = hdmi_enable_5v,
-	.core_power = hdmi_core_power,
-	.cec_power = hdmi_cec_power,
-	.check_hdcp_hw_support = hdmi_check_hdcp_hw_support,
-};
-
 #ifdef CONFIG_BOSCH_BMA150
 
 static struct regulator_bulk_data sensors_ldo[] = {
@@ -3014,12 +3067,12 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.platform_data = &optnav_data,
 	},
 	{
-		I2C_BOARD_INFO("adv7520", ADV7520_I2C_ADDR),
-		.platform_data = &adv7520_hdmi_data,
-	},
-	{
 		I2C_BOARD_INFO("as3676", 0x80 >> 1),
 		.platform_data = &as3676_platform_data,
+	},
+	{
+		I2C_BOARD_INFO(MAX17040_NAME, 0x6C >> 1),
+		.platform_data = &max17040_platform_data,
 	},
 };
 
@@ -3247,6 +3300,7 @@ static void __init msm_qsd_spi_init(void)
 #ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
+#ifndef CONFIG_BATTERY_ZEUS
         int rc;
         static int vbus_is_on;
 	struct pm8xxx_gpio_init_info usb_vbus = {
@@ -3278,6 +3332,7 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 	}
 
         vbus_is_on = on;
+#endif
 }
 
 static struct msm_usb_host_platform_data msm_usb_host_pdata = {
@@ -3818,45 +3873,6 @@ reg_free:
 bail:
 	return rc;
 }
-
-static int atv_dac_power(int on)
-{
-	int rc = 0;
-
-	if (on) {
-		rc = regulator_enable(atv_s4);
-		if (rc) {
-			pr_err("%s: s4 vreg enable failed (%d)\n",
-				__func__, rc);
-			return rc;
-		}
-		rc = regulator_enable(atv_ldo9);
-		if (rc) {
-			pr_err("%s: ldo9 vreg enable failed (%d)\n",
-				__func__, rc);
-			return rc;
-		}
-	} else {
-		rc = regulator_disable(atv_ldo9);
-		if (rc) {
-			pr_err("%s: ldo9 vreg disable failed (%d)\n",
-				   __func__, rc);
-			return rc;
-		}
-		rc = regulator_disable(atv_s4);
-		if (rc) {
-			pr_err("%s: s4 vreg disable failed (%d)\n",
-				   __func__, rc);
-			return rc;
-		}
-	}
-	return rc;
-}
-
-static struct tvenc_platform_data atv_pdata = {
-	.poll		 = 1,
-	.pm_vid_en	 = atv_dac_power,
-};
 
 static void __init msm_fb_add_devices(void)
 {
@@ -4507,6 +4523,7 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_MSM_VPE
 	&msm_vpe_device,
 #endif
+	&bdata_driver,
 	&novatek_device,
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	&msm_device_tsif,
@@ -6004,6 +6021,8 @@ printk(KERN_NOTICE "msm7x30_init 3\n");
 		msm_otg_pdata.ldo_set_voltage = 0;
 	}
 printk(KERN_NOTICE "msm7x30_init 4\n");
+	hsusb_chg_set_supplicants(hsusb_chg_supplied_to,
+				  ARRAY_SIZE(hsusb_chg_supplied_to));
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =
@@ -6052,6 +6071,8 @@ printk(KERN_NOTICE "msm7x30_init 11\n");
 	sensors_ldo_init();
 #endif
 	msm_fb_add_devices();
+	spi_register_board_info(msm_spi_board_info,
+				ARRAY_SIZE(msm_spi_board_info));
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
 	msm_device_i2c_init();
