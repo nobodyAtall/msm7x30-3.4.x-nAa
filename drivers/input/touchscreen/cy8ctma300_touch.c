@@ -1001,10 +1001,10 @@ static int cy8ctma300_touch_release(struct inode *inode, struct file *file)
 	return 0;
 };
 
-static ssize_t cy8ctma300_touch_ioctl(struct inode *inode, struct file *file,
-	unsigned int cmd, unsigned long arg)
+static long cy8ctma300_touch_ioctl(struct file *file, unsigned int cmd,
+          unsigned long arg)
 {
-	int err = 0;
+	long err = 0;
 
 	switch (cmd) {
 
@@ -1103,7 +1103,7 @@ static void charger_noise_suppression(struct cy8ctma300_touch *this,
 static const struct file_operations cy8ctma300_touch_fops = {
 	.owner   = THIS_MODULE,
 	.open    = cy8ctma300_touch_open,
-	.ioctl   = cy8ctma300_touch_ioctl,
+	.unlocked_ioctl   = cy8ctma300_touch_ioctl,
 	.release = cy8ctma300_touch_release,
 };
 
