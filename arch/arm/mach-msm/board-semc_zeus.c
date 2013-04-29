@@ -874,11 +874,27 @@ static uint32_t camera_off_vcm_gpio_table[] = {
 GPIO_CFG(1, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VCM */
 };
 
+static uint32_t camera_on_vcm_gpio_table[] = {
+GPIO_CFG(1, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* VCM */
+};
+
+static void msm_camera_vreg_enable(void)
+{
+	vreg_helper_on("gp15", 1200); /* L22 */
+	vreg_helper_on("lvsw1", 1800); /* LVS1 */
+	vreg_helper_on("gp2", 2800); /* L11 */
+}
+
+static void msm_camera_vreg_disable(void)
+{
+	vreg_helper_off("gp2");
+	vreg_helper_off("lvsw1");
+	vreg_helper_off("gp15");
+}
+
 static uint32_t camera_off_gpio_table[] = {
 	/* parallel CAMERA interfaces */
-	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* RST */
-	GPIO_CFG(2,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(3,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
+	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* RST */
 	GPIO_CFG(4,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
 	GPIO_CFG(5,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
 	GPIO_CFG(6,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT6 */
@@ -890,18 +906,17 @@ static uint32_t camera_off_gpio_table[] = {
 	GPIO_CFG(12, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* PCLK */
 	GPIO_CFG(13, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* HSYNC_IN */
 	GPIO_CFG(14, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VSYNC_IN */
-	GPIO_CFG(15, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* MCLK */
-};
-
-static uint32_t camera_on_vcm_gpio_table[] = {
-GPIO_CFG(1, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* VCM */
+	GPIO_CFG(15, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA), /* MCLK */
+	GPIO_CFG(21, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* NIRQ */
+	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* VT VGA_PWDN */
+	GPIO_CFG(143, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* STB */
+	GPIO_CFG(104, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* LED_IND */
+	GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* LED_TORCH */
 };
 
 static uint32_t camera_on_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* RST */
-	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
 	GPIO_CFG(4,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
 	GPIO_CFG(5,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
 	GPIO_CFG(6,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT6 */
@@ -913,7 +928,12 @@ static uint32_t camera_on_gpio_table[] = {
 	GPIO_CFG(12, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* PCLK */
 	GPIO_CFG(13, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* HSYNC_IN */
 	GPIO_CFG(14, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VSYNC_IN */
-	GPIO_CFG(15, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* MCLK */
+	GPIO_CFG(15, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA), /* MCLK */
+	GPIO_CFG(21, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* NIRQ */
+	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* VT VGA_PWDN */
+	GPIO_CFG(143, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* STB */
+	GPIO_CFG(104, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* LED_IND */
+	GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* LED_TORCH */
 };
 
 static uint32_t camera_off_gpio_fluid_table[] = {
@@ -944,8 +964,12 @@ static void config_gpio_table(uint32_t *table, int len)
 }
 static int config_camera_on_gpios(void)
 {
+	gpio_request(31, "vtcam_rst");
+	gpio_set_value(31, 1); // SCAM_RST_N
+	gpio_free(31);
 	config_gpio_table(camera_on_gpio_table,
 		ARRAY_SIZE(camera_on_gpio_table));
+	msm_camera_vreg_enable();
 
 	if (adie_get_detected_codec_type() != TIMPANI_ID)
 		/* GPIO1 is shared also used in Timpani RF card so
@@ -967,6 +991,10 @@ static int config_camera_on_gpios(void)
 
 static void config_camera_off_gpios(void)
 {
+	gpio_request(31, "vtcam_rst");
+	gpio_set_value(31, 1); // SCAM_RST_N
+	gpio_free(31);
+	msm_camera_vreg_disable();
 	config_gpio_table(camera_off_gpio_table,
 		ARRAY_SIZE(camera_off_gpio_table));
 
@@ -985,6 +1013,31 @@ static void config_camera_off_gpios(void)
 	}
 }
 
+struct gpio_led as3685a_leds[] = {
+	{
+		.name = "indicator", /*MSM_CAMERA_LED_LOW*/
+		.default_trigger = 0,
+		.gpio = 104,
+		.active_low = 0
+	},
+	{
+		.name = "torch", /*MSM_CAMERA_LED_HIGH*/
+		.default_trigger = 0,
+		.gpio = 105,
+		.active_low = 0
+	}
+};
+
+struct gpio_led_platform_data as3685a_data = {
+	.num_leds = ARRAY_SIZE(as3685a_leds),
+	.leds = as3685a_leds
+};
+
+struct msm_camera_sensor_flash_src seix006_flash_src = {
+	.flash_sr_type = MSM_CAMERA_FLASH_SRC_LED,
+	._fsrc.gpio_led_src = &as3685a_data
+};
+
 struct resource msm_camera_resources[] = {
 	{
 		.start	= 0xA6000000,
@@ -1001,26 +1054,129 @@ struct resource msm_camera_resources[] = {
 	}
 };
 
-struct msm_camera_device_platform_data msm_camera_device_data = {
-	.camera_gpio_on  = config_camera_on_gpios,
+struct msm_camera_device_platform_data msm_camera_device_data_seix006 = {
+	.camera_gpio_on = config_camera_on_gpios,
 	.camera_gpio_off = config_camera_off_gpios,
+	.ioext.mdcphy = MSM_MDC_PHYS,
+	.ioext.mdcsz  = MSM_MDC_SIZE,
+	.ioext.appphy = MSM_CLK_CTL_PHYS,
+	.ioext.appsz  = MSM_CLK_CTL_SIZE,
 	.ioext.camifpadphy = 0xAB000000,
-	.ioext.camifpadsz  = 0x00000400,
+	.ioext.camifpadsz = 0x00000400,
+	.ioext.csiphy = 0xA6100000,
+	.ioext.csisz  = 0x00000400,
+	.ioext.csiirq = INT_CSI,
+	.ioclk.mclk_clk_rate = 19200000,
+	.ioclk.vfe_clk_rate  = 122880000,
+};
+
+struct msm_camera_device_platform_data msm_camera_device_data_ovm7692 = {
+	.camera_gpio_on = config_camera_on_gpios,
+	.camera_gpio_off = config_camera_off_gpios,
+	.ioext.mdcphy = MSM_MDC_PHYS,
+	.ioext.mdcsz  = MSM_MDC_SIZE,
+	.ioext.appphy = MSM_CLK_CTL_PHYS,
+	.ioext.appsz  = MSM_CLK_CTL_SIZE,
+	.ioext.camifpadphy = 0xAB000000,
+	.ioext.camifpadsz = 0x00000400,
 	.ioext.csiphy = 0xA6100000,
 	.ioext.csisz  = 0x00000400,
 	.ioext.csiirq = INT_CSI,
 	.ioclk.mclk_clk_rate = 24000000,
-	.ioclk.vfe_clk_rate  = 147456000,
+	.ioclk.vfe_clk_rate  = 122880000,
 };
 
-/*static struct msm_camera_sensor_flash_src msm_flash_src_pwm = {
-	.flash_sr_type = MSM_CAMERA_FLASH_SRC_PWM,
-	._fsrc.pwm_src.freq  = 1000,
-	._fsrc.pwm_src.max_load = 300,
-	._fsrc.pwm_src.low_load = 30,
-	._fsrc.pwm_src.high_load = 100,
-	._fsrc.pwm_src.channel = 7,
-};*/
+struct msm_camera_device_platform_data msm_camera_device_data_mt9v114 = {
+	.camera_gpio_on = config_camera_on_gpios,
+	.camera_gpio_off = config_camera_off_gpios,
+	.ioext.mdcphy = MSM_MDC_PHYS,
+	.ioext.mdcsz  = MSM_MDC_SIZE,
+	.ioext.appphy = MSM_CLK_CTL_PHYS,
+	.ioext.appsz  = MSM_CLK_CTL_SIZE,
+	.ioext.camifpadphy = 0xAB000000,
+	.ioext.camifpadsz = 0x00000400,
+	.ioext.csiphy = 0xA6100000,
+	.ioext.csisz  = 0x00000400,
+	.ioext.csiirq = INT_CSI,
+	.ioclk.mclk_clk_rate = 19200000,
+	.ioclk.vfe_clk_rate  = 122880000,
+};
+
+#ifdef CONFIG_SEIX006
+static struct msm_camera_sensor_flash_data flash_seix006 = {
+	.flash_type = MSM_CAMERA_FLASH_LED,
+	.flash_src  = &seix006_flash_src
+};
+static struct msm_camera_sensor_info msm_camera_sensor_seix006_data = {
+	.sensor_name    = "seix006",
+	.sensor_reset   = 0,
+	.sensor_pwd     = 143,
+	.vcm_pwd        = 0,
+	.pdata          = &msm_camera_device_data_seix006,
+	.flash_data     = &flash_seix006,
+	.resource       = msm_camera_resources,
+	.num_resources  = ARRAY_SIZE(msm_camera_resources)
+};
+
+static struct platform_device msm_camera_sensor_seix006 = {
+	.name      = "msm_camera_seix006",
+	.dev       = {
+		.platform_data = &msm_camera_sensor_seix006_data,
+	},
+};
+#endif /*CONFIG_SEIX006 ZEUS 5MAF CAMERA*/
+
+#ifdef CONFIG_OVM7692
+
+static struct msm_camera_sensor_flash_data flash_ovm7692_data = {
+	.flash_type = MSM_CAMERA_FLASH_NONE,
+	.flash_src  = 0
+};
+
+static struct msm_camera_sensor_info msm_camera_sensor_ovm7692_data = {
+	.sensor_name    = "ovm7692",
+	.sensor_reset   = 0,
+	.sensor_pwd     = 31,
+	.vcm_pwd        = 0,
+	.pdata          = &msm_camera_device_data_ovm7692,
+	.flash_data     = &flash_ovm7692_data,
+	.resource       = msm_camera_resources,
+	.num_resources  = ARRAY_SIZE(msm_camera_resources)
+};
+
+static struct platform_device msm_camera_sensor_ovm7692 = {
+	.name      = "msm_camera_ovm7692",
+	.dev       = {
+		.platform_data = &msm_camera_sensor_ovm7692_data,
+	},
+};
+#endif /*CONFIG_OVM7692 ZEUS VGA VT CAMERA*/
+
+#ifdef CONFIG_MT9V114
+
+static struct msm_camera_sensor_flash_data flash_mt9v114_data = {
+	.flash_type = MSM_CAMERA_FLASH_NONE,
+	.flash_src  = 0
+};
+
+static struct msm_camera_sensor_info msm_camera_sensor_mt9v114_data = {
+	.sensor_name    = "mt9v114",
+	.sensor_reset   = 0,
+	.sensor_pwd     = 31,
+	.vcm_pwd        = 0,
+	.pdata          = &msm_camera_device_data_mt9v114,
+	.flash_data     = &flash_mt9v114_data,
+	.resource       = msm_camera_resources,
+	.num_resources  = ARRAY_SIZE(msm_camera_resources)
+};
+
+static struct platform_device msm_camera_sensor_mt9v114 = {
+	.name      = "msm_camera_mt9v114",
+	.dev       = {
+		.platform_data = &msm_camera_sensor_mt9v114_data,
+	},
+};
+#endif /*CONFIG_MT9V114 ZEUS VGA VT CAMERA*/
 
 #ifdef CONFIG_MT9D112
 static struct msm_camera_sensor_flash_data flash_mt9d112 = {
@@ -4636,6 +4792,15 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_kgsl_3d0,
 	&msm_kgsl_2d0,
+#ifdef CONFIG_SEIX006
+	&msm_camera_sensor_seix006,
+#endif /* CONFIG_SEIX006 */
+#ifdef CONFIG_OVM7692
+	&msm_camera_sensor_ovm7692,
+#endif /* CONFIG_OVM7692 */
+#ifdef CONFIG_MT9V114
+	&msm_camera_sensor_mt9v114,
+#endif /* CONFIG_MT9V114 */
 #ifdef CONFIG_MT9T013
 	&msm_camera_sensor_mt9t013,
 #endif
@@ -4727,11 +4892,10 @@ msm_i2c_gpio_config(int adap_id, int config_type)
 	else
 		msm_i2c_table = &msm_i2c_gpios_io[adap_id*2];
 	msm_gpios_enable(msm_i2c_table, 2);
+
+	vreg_helper_on("gp7", 1800);
 }
-/*This needs to be enabled only for OEMS*/
-#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
-static struct regulator *qup_vreg;
-#endif
+
 static void
 qup_i2c_gpio_config(int adap_id, int config_type)
 {
@@ -4747,16 +4911,6 @@ qup_i2c_gpio_config(int adap_id, int config_type)
 	rc = msm_gpios_enable(qup_i2c_table, 2);
 	if (rc < 0)
 		printk(KERN_ERR "QUP GPIO enable failed: %d\n", rc);
-	/*This needs to be enabled only for OEMS*/
-#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
-	if (!IS_ERR_OR_NULL(qup_vreg)) {
-		rc = regulator_enable(qup_vreg);
-		if (rc) {
-			pr_err("%s: regulator_enable failed: %d\n",
-			__func__, rc);
-		}
-	}
-#endif
 }
 
 static struct msm_i2c_platform_data msm_i2c_pdata = {
@@ -4799,15 +4953,6 @@ static void __init qup_device_i2c_init(void)
 		pr_err("failed to request I2C gpios\n");
 
 	qup_device_i2c.dev.platform_data = &qup_i2c_pdata;
-	/*This needs to be enabled only for OEMS*/
-#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
-	qup_vreg = regulator_get(&qup_device_i2c.dev, "lvsw1");
-	if (IS_ERR(qup_vreg)) {
-		dev_err(&qup_device_i2c.dev,
-			"%s: regulator_get failed: %ld\n",
-			__func__, PTR_ERR(qup_vreg));
-	}
-#endif
 }
 
 #ifdef CONFIG_I2C_SSBI
