@@ -303,8 +303,6 @@ obj-$(CONFIG_ARCH_MSM8930) += acpuclock-8930.o acpuclock-8627.o acpuclock-8930aa
 obj-$(CONFIG_ARCH_MPQ8092) += board-8092.o board-8092-gpiomux.o
 
 mogami-objs = board-semc_mogami.o board-semc_mogami-bluedroid.o board-semc_mogami-rfkill.o board-semc_mogami-wifi.o
-obj-$(CONFIG_MACH_SEMC_MOGAMI)   += mogami.o
-
 obj-$(CONFIG_MACH_SEMC_ANZU)     += mogami.o charger-anzu.o     gpio-anzu.o     keypad-anzu.o     leds-anzu.o
 obj-$(CONFIG_MACH_SEMC_COCONUT)  += mogami.o charger-coconut.o  gpio-coconut.o  keypad-coconut.o  leds-coconut.o  touch-coconut.o
 obj-$(CONFIG_MACH_SEMC_HAIDA)    += mogami.o charger-haida.o    gpio-haida.o    keypad-haida.o    leds-haida.o
@@ -314,6 +312,10 @@ obj-$(CONFIG_MACH_SEMC_MANGO)    += mogami.o charger-mango.o    gpio-mango.o    
 obj-$(CONFIG_MACH_SEMC_SATSUMA)  += mogami.o charger-satsuma.o  gpio-satsuma.o  keypad-satsuma.o  leds-satsuma.o  touch-satsuma.o
 obj-$(CONFIG_MACH_SEMC_SMULTRON) += mogami.o charger-smultron.o gpio-smultron.o keypad-smultron.o leds-smultron.o touch-smultron.o
 obj-$(CONFIG_MACH_SEMC_URUSHI)   += mogami.o charger-urushi.o   gpio-urushi.o   keypad-urushi.o   leds-urushi.o
+
+zeus-objs = board-semc_zeus.o
+obj-$(CONFIG_MACH_SEMC_ZEUS)     += zeus.o
+obj-$(CONFIG_MACH_SEMC_PHOENIX)  += zeus.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o

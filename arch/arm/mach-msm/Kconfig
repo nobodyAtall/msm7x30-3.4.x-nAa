@@ -760,6 +760,20 @@ config MACH_SEMC_URUSHI
 	help
 	  Support for the SonyEricsson Urushi devices.
 
+config MACH_SEMC_ZEUS
+	depends on SEMC_PLATFORM
+	default n
+	bool "SonyEricsson Zeus"
+	help
+	  Support for the SonyEricsson Zeus devices.
+
+config MACH_SEMC_PHOENIX
+	depends on SEMC_PLATFORM
+	default n
+	bool "SonyEricsson Phoenix"
+	help
+	  Support for the SonyEricsson Phoenix devices.
+
 config MACH_SAPPHIRE
 	depends on ARCH_MSM7X01A
 	default n
