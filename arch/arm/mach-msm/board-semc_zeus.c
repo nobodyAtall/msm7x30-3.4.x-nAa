@@ -81,6 +81,9 @@
 
 #include "devices.h"
 #include "timer.h"
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+#include <mach/simple_remote_msm7x30_pf.h>
+#endif
 #ifdef CONFIG_USB_G_ANDROID
 #include <linux/usb/android.h>
 #include <mach/usbdiag.h>
@@ -98,6 +101,7 @@
 #include <linux/bma150.h>
 
 #include <linux/leds-as3676.h>
+#include <mach/semc_rpc_server_handset.h>
 
 #include <linux/max17040.h>
 #include <mach/msm_battery.h>
@@ -246,6 +250,73 @@ static void vreg_helper_off(const char *pzName)
 
 	printk(KERN_INFO "Disabled VREG \"%s\"\n", pzName);
 }
+
+static struct input_dev *input_dev_pwr_key = NULL;
+static void msm_pmic_pwr_key_rpc_callback(uint32_t key, uint32_t event)
+{
+	if (!input_dev_pwr_key)
+		return;
+	switch (key) {
+	case HS_PWR_K:
+		key = KEY_POWER;
+		break;
+	case HS_END_K:
+		key = KEY_END;
+		break;
+	default:
+		return;
+	}
+	input_report_key(input_dev_pwr_key, key, event != HS_REL_K);
+	input_sync(input_dev_pwr_key);
+}
+
+static int __init msm_pmic_pwr_key_init(void)
+{
+	input_dev_pwr_key = input_allocate_device();
+	if (!input_dev_pwr_key) {
+		printk(KERN_ERR "%s: Error, unable to alloc pwr key device\n",
+			__func__);
+		return -1;
+	}
+	input_dev_pwr_key->name = "msm_pmic_pwr_key";
+	input_dev_pwr_key->phys = "semc_rpc_server_handset";
+	input_set_capability(input_dev_pwr_key, EV_KEY, KEY_POWER);
+	input_set_capability(input_dev_pwr_key, EV_KEY, KEY_END);
+	if (input_register_device(input_dev_pwr_key)) {
+		printk(KERN_ERR "%s: Error, unable to reg pwr key device\n",
+			__func__);
+		input_free_device(input_dev_pwr_key);
+		return -1;
+	}
+	return 0;
+}
+module_init(msm_pmic_pwr_key_init);
+
+/*
+ * Add callbacks here. Every defined callback will receive
+ * all events. The types are defined in the file
+ * semc_rpc_server_handset.h
+ */
+
+static handset_cb_array_t semc_rpc_hs_callbacks = {
+	&msm_pmic_pwr_key_rpc_callback,
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+	&simple_remote_pf_button_handler,
+#endif
+};
+
+static struct semc_handset_data semc_rpc_hs_data = {
+	.callbacks = semc_rpc_hs_callbacks,
+	.num_callbacks = ARRAY_SIZE(semc_rpc_hs_callbacks),
+};
+
+static struct platform_device semc_rpc_handset_device = {
+	.name = SEMC_HANDSET_DRIVER_NAME,
+	.id = -1,
+	.dev = {
+		.platform_data = &semc_rpc_hs_data,
+	},
+};
 
 struct pm8xxx_gpio_init_info {
 	unsigned			gpio;
@@ -531,167 +602,38 @@ static int pm8058_pwm_enable(struct pwm_device *pwm, int ch, int on)
 	return rc;
 }
 
-static const unsigned int fluid_keymap[] = {
-	KEY(0, 0, KEY_7),
-	KEY(0, 1, KEY_ENTER),
-	KEY(0, 2, KEY_UP),
-	/* drop (0,3) as it always shows up in pair with(0,2) */
-	KEY(0, 4, KEY_DOWN),
-
-	KEY(1, 0, KEY_CAMERA_SNAPSHOT),
-	KEY(1, 1, KEY_SELECT),
-	KEY(1, 2, KEY_1),
-	KEY(1, 3, KEY_VOLUMEUP),
-	KEY(1, 4, KEY_VOLUMEDOWN),
+static const unsigned int keymap_game[] = {
+	KEY(7, 0, KEY_VOLUMEUP),   /* DBZ2, VOL_UP */
+	KEY(7, 1, KEY_VOLUMEDOWN), /* DBZ2, VOL_DOWN */
+#ifdef CONFIG_INPUT_JOYSTICK
+	KEY(7, 2, BTN_SELECT),     /* DBZ2, S1 */
+	KEY(7, 3, KEY_ENTER),      /* DBZ2, S2 */
+#endif
 };
 
-static const unsigned int surf_keymap[] = {
-	KEY(0, 0, KEY_7),
-	KEY(0, 1, KEY_DOWN),
-	KEY(0, 2, KEY_UP),
-	KEY(0, 3, KEY_RIGHT),
-	KEY(0, 4, KEY_ENTER),
-	KEY(0, 5, KEY_L),
-	KEY(0, 6, KEY_BACK),
-	KEY(0, 7, KEY_M),
-
-	KEY(1, 0, KEY_LEFT),
-	KEY(1, 1, KEY_SEND),
-	KEY(1, 2, KEY_1),
-	KEY(1, 3, KEY_4),
-	KEY(1, 4, KEY_CLEAR),
-	KEY(1, 5, KEY_MSDOS),
-	KEY(1, 6, KEY_SPACE),
-	KEY(1, 7, KEY_COMMA),
-
-	KEY(2, 0, KEY_6),
-	KEY(2, 1, KEY_5),
-	KEY(2, 2, KEY_8),
-	KEY(2, 3, KEY_3),
-	KEY(2, 4, KEY_NUMERIC_STAR),
-	KEY(2, 5, KEY_UP),
-	KEY(2, 6, KEY_DOWN), /* SYN */
-	KEY(2, 7, KEY_LEFTSHIFT),
-
-	KEY(3, 0, KEY_9),
-	KEY(3, 1, KEY_NUMERIC_POUND),
-	KEY(3, 2, KEY_0),
-	KEY(3, 3, KEY_2),
-	KEY(3, 4, KEY_SLEEP),
-	KEY(3, 5, KEY_F1),
-	KEY(3, 6, KEY_F2),
-	KEY(3, 7, KEY_F3),
-
-	KEY(4, 0, KEY_BACK),
-	KEY(4, 1, KEY_HOME),
-	KEY(4, 2, KEY_MENU),
-	KEY(4, 3, KEY_VOLUMEUP),
-	KEY(4, 4, KEY_VOLUMEDOWN),
-	KEY(4, 5, KEY_F4),
-	KEY(4, 6, KEY_F5),
-	KEY(4, 7, KEY_F6),
-
-	KEY(5, 0, KEY_R),
-	KEY(5, 1, KEY_T),
-	KEY(5, 2, KEY_Y),
-	KEY(5, 3, KEY_LEFTALT),
-	KEY(5, 4, KEY_KPENTER),
-	KEY(5, 5, KEY_Q),
-	KEY(5, 6, KEY_W),
-	KEY(5, 7, KEY_E),
-
-	KEY(6, 0, KEY_F),
-	KEY(6, 1, KEY_G),
-	KEY(6, 2, KEY_H),
-	KEY(6, 3, KEY_CAPSLOCK),
-	KEY(6, 4, KEY_PAGEUP),
-	KEY(6, 5, KEY_A),
-	KEY(6, 6, KEY_S),
-	KEY(6, 7, KEY_D),
-
-	KEY(7, 0, KEY_V),
-	KEY(7, 1, KEY_B),
-	KEY(7, 2, KEY_N),
-	KEY(7, 3, KEY_MENU), /* REVISIT - SYM */
-	KEY(7, 4, KEY_PAGEDOWN),
-	KEY(7, 5, KEY_Z),
-	KEY(7, 6, KEY_X),
-	KEY(7, 7, KEY_C),
-
-	KEY(8, 0, KEY_P),
-	KEY(8, 1, KEY_J),
-	KEY(8, 2, KEY_K),
-	KEY(8, 3, KEY_INSERT),
-	KEY(8, 4, KEY_LINEFEED),
-	KEY(8, 5, KEY_U),
-	KEY(8, 6, KEY_I),
-	KEY(8, 7, KEY_O),
-
-	KEY(9, 0, KEY_4),
-	KEY(9, 1, KEY_5),
-	KEY(9, 2, KEY_6),
-	KEY(9, 3, KEY_7),
-	KEY(9, 4, KEY_8),
-	KEY(9, 5, KEY_1),
-	KEY(9, 6, KEY_2),
-	KEY(9, 7, KEY_3),
-
-	KEY(10, 0, KEY_F7),
-	KEY(10, 1, KEY_F8),
-	KEY(10, 2, KEY_F9),
-	KEY(10, 3, KEY_F10),
-	KEY(10, 4, KEY_FN),
-	KEY(10, 5, KEY_9),
-	KEY(10, 6, KEY_0),
-	KEY(10, 7, KEY_DOT),
-
-	KEY(11, 0, KEY_LEFTCTRL),
-	KEY(11, 1, KEY_F11),  /* START */
-	KEY(11, 2, KEY_ENTER),
-	KEY(11, 3, KEY_SEARCH),
-	KEY(11, 4, KEY_DELETE),
-	KEY(11, 5, KEY_RIGHT),
-	KEY(11, 6, KEY_LEFT),
-	KEY(11, 7, KEY_RIGHTSHIFT),
-};
-
-static struct matrix_keymap_data surf_keymap_data = {
-	.keymap_size    = ARRAY_SIZE(surf_keymap),
-	.keymap		= surf_keymap,
+static struct matrix_keymap_data keymap_game_data = {
+	.keymap_size	= ARRAY_SIZE(keymap_game),
+	.keymap		= keymap_game,
 };
 
 static struct pm8xxx_keypad_platform_data surf_keypad_data = {
-	.input_name		= "surf_keypad",
-	.input_phys_device	= "surf_keypad/input0",
-	.num_rows		= 12,
+	.input_name		= "keypad-game-zeus",
+	.input_phys_device	= "keypad-game-zeus/input0",
+	.num_rows		= 8,
 	.num_cols		= 8,
 	.rows_gpio_start	= PM8058_GPIO_PM_TO_SYS(8),
 	.cols_gpio_start	= PM8058_GPIO_PM_TO_SYS(0),
-	.debounce_ms		= 15,
+	.debounce_ms		= 10, //{8, 10},
 	.scan_delay_ms		= 32,
 	.row_hold_ns		= 91500,
 	.wakeup			= 1,
-	.keymap_data		= &surf_keymap_data,
+	.keymap_data		= &keymap_game_data,
 };
 
-static struct matrix_keymap_data fluid_keymap_data = {
-	.keymap_size	= ARRAY_SIZE(fluid_keymap),
-	.keymap		= fluid_keymap,
-};
-
-static struct pm8xxx_keypad_platform_data fluid_keypad_data = {
-	.input_name		= "fluid-keypad",
-	.input_phys_device	= "fluid-keypad/input0",
-	.num_rows		= 5,
-	.num_cols		= 5,
-	.rows_gpio_start	= PM8058_GPIO_PM_TO_SYS(8),
-	.cols_gpio_start	= PM8058_GPIO_PM_TO_SYS(0),
-	.debounce_ms		= 15,
-	.scan_delay_ms		= 32,
-	.row_hold_ns		= 91500,
-	.wakeup			= 1,
-	.keymap_data		= &fluid_keymap_data,
-};
+struct pm8xxx_keypad_platform_data *zeus_keypad_data(void)
+{
+	return &surf_keypad_data;
+}
 
 static struct pm8058_pwm_pdata pm8058_pwm_data = {
 	.config         = pm8058_pwm_config,
@@ -1613,10 +1555,7 @@ static int __init buses_init(void)
 		pr_err("%s: gpio_tlmm_config (gpio=%d) failed\n",
 		       __func__, PMIC_GPIO_INT);
 
-	if (machine_is_msm8x60_fluid())
-		pm8058_7x30_data.keypad_pdata = &fluid_keypad_data;
-	else
-		pm8058_7x30_data.keypad_pdata = &surf_keypad_data;
+	pm8058_7x30_data.keypad_pdata = zeus_keypad_data();
 
 	return 0;
 }
@@ -3874,6 +3813,146 @@ bail:
 	return rc;
 }
 
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+#define PLUG_DET_ENA_PIN 80
+#define PLUG_DET_READ_PIN 26
+#define MODE_SWITCH_PIN -1
+
+int simple_remote_pf_initialize_gpio(struct simple_remote_platform_data *data)
+{
+	int err = 0;
+	int i;
+
+	if (!data || -1 == data->headset_detect_enable_pin) {
+		printk(KERN_ERR
+		       "*** %s - Error: Invalid inparameter (GPIO Pins)."
+		       " Aborting!\n", __func__);
+		return -EIO;
+	}
+
+	err = gpio_request(data->headset_detect_enable_pin,
+			   "Simple_remote_plug_detect_enable");
+	if (err) {
+		printk(KERN_CRIT "%s: Error %d - Request hs_detect_enable pin",
+		       __func__, err);
+		goto out;
+	}
+
+	err = gpio_direction_output(data->headset_detect_enable_pin, 1);
+	if (err) {
+		printk(KERN_CRIT "%s: Error %d - Set hs_detect_enable pin"
+		       " as output high\n", __func__, err);
+		goto out_hs_det_enable;
+	}
+
+	err = gpio_request(data->headset_detect_read_pin,
+			   "Simple_remote_plug_detect_read");
+	if (err) {
+		printk(KERN_CRIT "%s - Error %d - Request hs-detect_read pin",
+		       __func__, err);
+		goto out_hs_det_enable;
+	}
+
+	err = gpio_direction_input(data->headset_detect_read_pin);
+	if (err) {
+		printk(KERN_CRIT "%s - Error %d - Set hs-detect pin as input\n",
+		       __func__, err);
+		goto out_hs_det_read;
+	}
+
+	if (BOARD_HWID_DBZ3 != board_hwid || BOARD_HWID_DBZ3_1 != board_hwid ||
+	    BOARD_HWID_DBZ3 != board_hwid)
+		data->invert_plug_det = 1;
+	else
+		data->invert_plug_det = 0;
+
+	if (0 < data->headset_mode_switch_pin) {
+		err = gpio_request(data->headset_mode_switch_pin,
+				   "Simple_remote_headset_mode_switch");
+		if (err) {
+			printk(KERN_CRIT
+			       "%s - Error %d - Request hs-mode_switch pin",
+			       __func__, err);
+			goto out_hs_det_read;
+		}
+
+		err = gpio_direction_output(data->headset_mode_switch_pin, 0);
+		if (err) {
+			printk(KERN_CRIT
+			       "%s - Error %d - Set hs-mode_switch pin as "
+			       "input\n", __func__, err);
+			goto out_hs_mode_switch;
+		}
+	}
+
+	for (i = 0; i < data->num_regs; i++) {
+		data->regs[i].reg = vreg_get(NULL, data->regs[i].name);
+		if (IS_ERR(data->regs[i].reg)) {
+			printk(KERN_ERR "%s - Failed to find regulator %s\n",
+			       __func__, data->regs[i].name);
+			err = PTR_ERR(data->regs[i].reg);
+			if (0 <= data->headset_mode_switch_pin)
+				goto out_hs_mode_switch;
+			else
+				goto out_hs_det_read;
+		}
+	}
+
+	return err;
+
+out_hs_mode_switch:
+	gpio_free(data->headset_mode_switch_pin);
+
+out_hs_det_read:
+	gpio_free(data->headset_detect_read_pin);
+
+out_hs_det_enable:
+	gpio_free(data->headset_detect_enable_pin);
+out:
+	return err;
+}
+
+void simple_remote_pf_deinitialize_gpio(
+	struct simple_remote_platform_data *data)
+{
+	gpio_free(data->headset_detect_read_pin);
+	gpio_free(data->headset_detect_enable_pin);
+}
+
+static struct simple_remote_platform_regulators regs[] =  {
+	{
+		.name = "ncp",
+	},
+	{
+		.name = "s3",
+	},
+	{
+		.name = "s2",
+	},
+
+};
+
+static struct simple_remote_platform_data simple_remote_pf_data = {
+	.headset_detect_enable_pin = PLUG_DET_ENA_PIN,
+	.headset_detect_read_pin = PLUG_DET_READ_PIN,
+	.headset_mode_switch_pin = MODE_SWITCH_PIN,
+	.initialize = &simple_remote_pf_initialize_gpio,
+	.deinitialize = &simple_remote_pf_deinitialize_gpio,
+
+	.regs = regs,
+	.num_regs = ARRAY_SIZE(regs),
+
+	.controller = PM_HSED_CONTROLLER_1,
+};
+
+static struct platform_device simple_remote_pf_device = {
+	.name = SIMPLE_REMOTE_PF_NAME,
+	.dev = {
+		.platform_data = &simple_remote_pf_data,
+	},
+};
+#endif
+
 static void __init msm_fb_add_devices(void)
 {
 	msm_fb_register_device("mdp", &mdp_pdata);
@@ -4477,6 +4556,7 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_i2c,
 	&msm_device_i2c_2,
 	&msm_device_uart_dm1,
+	&semc_rpc_handset_device,
 	&hs_device,
 #ifdef CONFIG_MSM7KV2_AUDIO
 	&msm_aictl_device,
@@ -4524,6 +4604,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_vpe_device,
 #endif
 	&bdata_driver,
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+	&simple_remote_pf_device,
+#endif
 	&novatek_device,
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	&msm_device_tsif,
