@@ -96,7 +96,7 @@
 #include "smd_private.h"
 #include <linux/bma150.h>
 
-#include <linux/leds-as3676_semc.h>
+#include <linux/leds-as3676.h>
 
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
@@ -170,6 +170,23 @@
 #define DDR1_BANK_SIZE 0x08C00000
 #define DDR2_BANK_BASE 0X40000000
 #define DDR2_BANK_SIZE 0X10000000
+
+/* GPIO hardware device identification */
+enum board_hwid {
+	BOARD_HWID_UNK,
+	BOARD_HWID_DP1,
+	BOARD_HWID_SP1,
+	BOARD_HWID_DBZ3,
+	BOARD_HWID_SP1_5,
+	BOARD_HWID_SP1_6,
+	BOARD_HWID_DBZ3_1,
+	BOARD_HWID_SP2,
+	BOARD_HWID_DBZ3_2,
+	BOARD_HWID_SP3,
+	BOARD_HWID_AP1,
+	BOARD_HWID_PQ,
+};
+static u8 board_hwid;
 
 static unsigned int phys_add = DDR2_BANK_BASE;
 unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
@@ -782,6 +799,60 @@ static const struct panel_id *novatek_panels[] = {
 
 struct novatek_i2c_pdata novatek_i2c_pdata = {
 	.panels = novatek_panels,
+};
+
+static struct as3676_als_config as3676_als_config = {
+	.gain = AS3676_GAIN_1,
+	.filter_up = AS3676_FILTER_1HZ,
+	.filter_down = AS3676_FILTER_1HZ,
+	.source = AS3676_ALS_SOURCE_GPIO2,
+	.curve = {
+		[AS3676_AMB_GROUP_1] = {
+			.y0 = 49,
+			.y3 = 255,
+			.k1 = 71,
+			.k2 = 54,
+			.x1 =  1,
+			.x2 = 33,
+		},
+	},
+};
+
+static struct as3676_platform_led as3676_pdata_leds[] = {
+	{
+		.name = "lcd-backlight",
+		.sinks = BIT(AS3676_SINK_01),
+		.flags = AS3676_FLAG_PWM_CTRL | AS3676_FLAG_PWM_INIT
+			| AS3676_FLAG_WAIT_RESUME,
+		.max_current = 20000,
+		.default_brightness = LED_FULL,
+	},
+	{
+		.name = "red",
+		.sinks = BIT(AS3676_SINK_41),
+		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
+		.max_current = 3000,
+	},
+	{
+		.name = "green",
+		.sinks = BIT(AS3676_SINK_42),
+		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
+		.max_current = 3000,
+	},
+	{
+		.name = "blue",
+		.sinks = BIT(AS3676_SINK_43),
+		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
+		.max_current = 3000,
+	},
+};
+
+static struct as3676_platform_data as3676_platform_data = {
+	.leds = as3676_pdata_leds,
+	.num_leds = ARRAY_SIZE(as3676_pdata_leds),
+	.als_config = &as3676_als_config,
+	.als_connected = 1,
+	.dls_connected = 1,
 };
 
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
@@ -5980,7 +6051,6 @@ printk(KERN_NOTICE "msm7x30_init 11\n");
 #ifdef CONFIG_BOSCH_BMA150
 	sensors_ldo_init();
 #endif
-	hdmi_init_regs();
 	msm_fb_add_devices();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
