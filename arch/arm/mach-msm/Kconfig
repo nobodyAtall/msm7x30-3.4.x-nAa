@@ -2339,6 +2339,22 @@ config SEMC_CHARGER_USB_ARCH
 	help
 	  This enables USB interface for charger.
 
+config USE_PMIC_CHARGING_ON_AMSS
+	bool "Charging functionality on PMIC on AMSS"
+	depends on ARCH_MSM7X30
+	default n
+
+config SEMC_BATTERY_SHOW_HEALTH
+	bool "Enable battery health support"
+	depends on BATTERY_SEMC_ARCH
+	default n if BATTERY_CHARGALG
+	default y if !BATTERY_CHARGALG
+	help
+	  Enable if battery health property is not supported
+	  in any other module besides this.
+	  This enables support for power supply class
+	  POWER_SUPPLY_PROP_HEALTH property.
+
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
 	depends on ARCH_MSM8X60 || ARCH_MSM8960 || ARCH_MSM9615

@@ -430,6 +430,12 @@ config CHARGER_BQ24185
 	 Say Y here to enable Support for the TI BQ24185 Battery Charger.
 	 The driver is configured to operate with a single lithium cell.
 
+config BATTERY_ZEUS
+       tristate "Zeus Fuel-gauge"
+       depends on ARCH_MSM
+       help
+         Say Y to enable support for the fuel-gauge in Zeus
+
 config PM8921_CHARGER
 	tristate "PM8921 Charger driver"
 	depends on MFD_PM8921_CORE
