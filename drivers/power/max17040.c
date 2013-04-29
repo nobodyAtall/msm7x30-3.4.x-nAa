@@ -21,6 +21,7 @@
 #include <linux/i2c.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
+#include <linux/slab.h>
 #include <linux/max17040.h>
 
 #include <asm/mach-types.h>
