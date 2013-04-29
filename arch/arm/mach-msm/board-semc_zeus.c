@@ -69,6 +69,7 @@
 #include <linux/i2c/akm8975.h>
 #include <linux/spi/cypress_touch.h>
 #include <linux/hrtimer.h>
+#include <linux/bma150_ng.h>
 #include <mach/mddi_novatek_fwvga.h>
 
 #define CYPRESS_TOUCH_GPIO_RESET        (40)
@@ -76,6 +77,7 @@
 #define NOVATEK_GPIO_RESET              (157)
 
 #define AKM8975_GPIO			(92)
+#define BMA150_GPIO			(51)
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -101,7 +103,6 @@
 #include <mach/qdsp5v2/audio_dev_ctl.h>
 #include <mach/sdio_al.h>
 #include "smd_private.h"
-#include <linux/bma150.h>
 
 #include <linux/leds-as3676.h>
 #include <mach/semc_rpc_server_handset.h>
@@ -751,6 +752,19 @@ struct novatek_i2c_pdata novatek_i2c_pdata = {
 	.panels = novatek_panels,
 };
 
+static int bma150_gpio_setup(bool request)
+{
+	if (request)
+		return gpio_request(BMA150_GPIO, "bma150_irq");
+	else
+		gpio_free(BMA150_GPIO);
+	return 0;
+}
+
+struct bma150_platform_data bma150_ng_platform_data = {
+	.gpio_setup = bma150_gpio_setup,
+};
+
 static struct as3676_als_config as3676_als_config = {
 	.gain = AS3676_GAIN_1,
 	.filter_up = AS3676_FILTER_1HZ,
@@ -806,6 +820,11 @@ static struct as3676_platform_data as3676_platform_data = {
 };
 
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
+	{
+		I2C_BOARD_INFO(MDDI_NOVATEK_I2C_NAME, 0x98 >> 1),
+		.type = MDDI_NOVATEK_I2C_NAME,
+		.platform_data = &novatek_i2c_pdata,
+	},
 #ifdef CONFIG_MT9D112
 	{
 		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
@@ -3032,6 +3051,12 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO(MAX17040_NAME, 0x6C >> 1),
 		.platform_data = &max17040_platform_data,
+	},
+	{
+		I2C_BOARD_INFO("bma150", 0x70 >> 1),
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
+		.platform_data = &bma150_ng_platform_data,
+		.type = "bma150"
 	},
 	{
 		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x18 >> 1),
