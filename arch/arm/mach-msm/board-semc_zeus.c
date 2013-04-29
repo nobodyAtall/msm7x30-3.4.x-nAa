@@ -66,6 +66,7 @@
 #include <mach/msm_tsif.h>
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
+#include <linux/i2c/akm8975.h>
 #include <linux/spi/cypress_touch.h>
 #include <linux/hrtimer.h>
 #include <mach/mddi_novatek_fwvga.h>
@@ -73,6 +74,8 @@
 #define CYPRESS_TOUCH_GPIO_RESET        (40)
 #define CYPRESS_TOUCH_GPIO_IRQ          (42)
 #define NOVATEK_GPIO_RESET              (157)
+
+#define AKM8975_GPIO			(92)
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -2999,6 +3002,23 @@ static struct i2c_board_info bma150_board_info[] __initdata = {
 };
 #endif
 
+static int akm8975_gpio_setup(void)
+{
+	int rc;
+	rc = gpio_request(AKM8975_GPIO, "akm8975_drdy_irq");
+	return rc;
+}
+
+static void akm8975_gpio_shutdown(void)
+{
+	gpio_free(AKM8975_GPIO);
+}
+
+static struct akm8975_platform_data akm8975_platform_data = {
+	.setup = akm8975_gpio_setup,
+	.shutdown = akm8975_gpio_shutdown,
+};
+
 static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("m33c01", OPTNAV_I2C_SLAVE_ADDR),
@@ -3012,6 +3032,11 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO(MAX17040_NAME, 0x6C >> 1),
 		.platform_data = &max17040_platform_data,
+	},
+	{
+		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x18 >> 1),
+		.irq = MSM_GPIO_TO_INT(AKM8975_GPIO),
+		.platform_data = &akm8975_platform_data,
 	},
 };
 
