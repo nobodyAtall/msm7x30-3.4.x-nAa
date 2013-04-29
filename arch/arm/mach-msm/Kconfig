@@ -2339,6 +2339,23 @@ config SEMC_CHARGER_USB_ARCH
 	help
 	  This enables USB interface for charger.
 
+config ACC_CONVERTER_SUPPORT
+	bool "Enable support for acessory conversion"
+	depends on SIMPLE_REMOTE_PLATFORM
+	default n
+	help
+	  Enable support for special accessory that can convert
+	  CTIA connected headsets to OMTP connected headsets and
+	  vice versa.
+
+config CRADLE_SUPPORT
+	bool "This HW supports docking cradle"
+	depends on ACC_CONVERTER_SUPPORT
+	default n
+	help
+	  Provides support for docking cradle. Depends on simple remote
+	  HW specific driver.
+
 config USE_PMIC_CHARGING_ON_AMSS
 	bool "Charging functionality on PMIC on AMSS"
 	depends on ARCH_MSM7X30
