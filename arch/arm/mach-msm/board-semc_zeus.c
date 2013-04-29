@@ -9,7 +9,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * Adapted for SEMC 2011 devices by Vassilis Tsogkas (tsogkas@ceid.upatras.gr)
+ * Adapted for SEMC 2011 devices by Michael Bestas (mikeioannina@gmail.com)
+ * Based on SEMC mogami board work by Vassilis Tsogkas (tsogkas@ceid.upatras.gr)
  */
 
 #include <linux/kernel.h>
@@ -1308,6 +1309,9 @@ static uint32_t audio_pamp_gpio_config =
 static uint32_t audio_fluid_icodec_tx_config =
   GPIO_CFG(85, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 
+static uint32_t HAC_amp_gpio_config =
+   GPIO_CFG(109, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
+
 static int __init snddev_poweramp_gpio_init(void)
 {
 	int rc;
@@ -1319,6 +1323,19 @@ static int __init snddev_poweramp_gpio_init(void)
 			"%s: gpio_tlmm_config(%#x)=%d\n",
 			__func__, audio_pamp_gpio_config, rc);
 	}
+
+	/* Enabling HAC amplifier */
+	rc = gpio_tlmm_config(HAC_amp_gpio_config, GPIO_CFG_ENABLE);
+	if (rc) {
+		printk(KERN_ERR
+			"%s: gpio_tlmm_config(%#x)=%d\n",
+			__func__, HAC_amp_gpio_config, rc);
+	}
+
+	/* Make sure we start with a known state */
+	msm_snddev_poweramp_off();
+	msm_hac_amp_off();
+
 	return rc;
 }
 
@@ -1355,6 +1372,18 @@ void msm_snddev_tx_route_deconfig(void)
 				__func__, audio_fluid_icodec_tx_config, rc);
 		}
 	}
+}
+
+void msm_hac_amp_on(void)
+{
+	pr_info("%s: power on HAC amplifier\n", __func__);
+	gpio_set_value(109, 1); /* enable HAC poweramp */
+}
+
+void msm_hac_amp_off(void)
+{
+	pr_info("%s: power off HAC amplifier\n", __func__);
+	gpio_set_value(109, 0); /* disable HAC poweramp */
 }
 
 void msm_snddev_poweramp_on(void)
