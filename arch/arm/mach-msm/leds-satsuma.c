@@ -18,31 +18,31 @@ static struct as3676_platform_led as3676_leds_mapping[] = {
 		.sinks = BIT(AS3676_SINK_01),
 		.flags = AS3676_FLAG_PWM_CTRL | AS3676_FLAG_PWM_INIT
 			| AS3676_FLAG_WAIT_RESUME,
-		.max_current = 25000,
+		.max_current = 20000,
 		.default_brightness = LED_FULL,
 	},
 	{
 		.name = "button-backlight",
 		.sinks = BIT(AS3676_SINK_RGB2),
-		.max_current = 25000,
+		.max_current = 500,
 	},
 	{
 		.name = "red",
 		.sinks = BIT(AS3676_SINK_41),
 		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
-		.max_current = 25000,
+		.max_current = 3000,
 	},
 	{
 		.name = "green",
 		.sinks = BIT(AS3676_SINK_42),
 		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
-		.max_current = 25000,
+		.max_current = 4500,
 	},
 	{
 		.name = "blue",
 		.sinks = BIT(AS3676_SINK_43),
 		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
-		.max_current = 25000,
+		.max_current = 3000,
 	},
 };
 
