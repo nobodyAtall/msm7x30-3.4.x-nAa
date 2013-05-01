@@ -19,30 +19,35 @@ static struct as3676_platform_led as3676_leds_mapping[] = {
 		.flags = AS3676_FLAG_PWM_CTRL | AS3676_FLAG_PWM_INIT
 			| AS3676_FLAG_WAIT_RESUME,
 		.max_current = 20000,
+		.hw_max_current = 20000,
 		.default_brightness = LED_FULL,
 	},
 	{
 		.name = "torch",
 		.sinks = BIT(AS3676_SINK_30) | BIT(AS3676_SINK_31),
 		.max_current = 30000,
+		.hw_max_current = 30000,
 	},
 	{
 		.name = "red",
 		.sinks = BIT(AS3676_SINK_41),
 		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
 		.max_current = 2400,
+		.hw_max_current = 20000,
 	},
 	{
 		.name = "green",
 		.sinks = BIT(AS3676_SINK_42),
 		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
 		.max_current = 4200,
+		.hw_max_current = 20000,
 	},
 	{
 		.name = "blue",
 		.sinks = BIT(AS3676_SINK_43),
 		.flags = AS3676_FLAG_RGB | AS3676_FLAG_BLINK,
 		.max_current = 3000,
+		.hw_max_current = 20000,
 	},
 };
 

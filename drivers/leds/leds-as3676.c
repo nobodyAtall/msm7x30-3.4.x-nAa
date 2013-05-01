@@ -421,6 +421,7 @@ struct as3676_interface {
 	u64 regs;
 	int flags;
 	int max_current;
+	int hw_max_current;
 	struct led_classdev cdev;
 	struct kobject kobj;
 };
@@ -1342,8 +1343,8 @@ static ssize_t as3676_max_current_store(struct device *dev,
 	as3676_lock(rd);
 	pdata = rd->client->dev.platform_data;
 
-	if (curr_val > pdata->leds[intf->index].max_current)
-		curr_val = pdata->leds[intf->index].max_current;
+	if (curr_val > pdata->leds[intf->index].hw_max_current)
+		curr_val = pdata->leds[intf->index].hw_max_current;
 
 	intf->max_current = (int)curr_val;
 	as3676_unlock(rd);
@@ -1733,6 +1734,7 @@ static int __devinit as3676_probe(struct i2c_client *client,
 #endif
 		intf->flags = led->flags;
 		intf->max_current = led->max_current;
+		intf->hw_max_current = led->hw_max_current;
 		intf->index = i;
 
 		for (j = 0; j < AS3676_SINK_MAX; ++j) {

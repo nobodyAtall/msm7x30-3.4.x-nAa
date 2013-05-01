@@ -120,6 +120,7 @@ struct as3676_platform_led {
 	int sinks;
 	int flags;
 	int max_current;
+	int hw_max_current;
 	int default_brightness;
 };
 
