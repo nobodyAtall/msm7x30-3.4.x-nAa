@@ -118,7 +118,6 @@ static struct resource resources_uart2[] = {
 		.start	= MSM7X30_UART2_PHYS,
 		.end	= MSM7X30_UART2_PHYS + MSM7X30_UART2_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
-		.name  = "uart_resource"
 	},
 };
 
@@ -127,6 +126,7 @@ static struct resource resources_uart3[] = {
 		.start	= INT_UART3,
 		.end	= INT_UART3,
 		.flags	= IORESOURCE_IRQ,
+		.name  = "uart_resource"
 	},
 	{
 		.start	= MSM7X30_UART3_PHYS,
