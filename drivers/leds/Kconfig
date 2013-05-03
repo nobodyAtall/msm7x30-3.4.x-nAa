@@ -371,6 +371,30 @@ config LEDS_BD2802
 	  This option enables support for BD2802GU RGB LED driver chips
 	  accessed via the I2C bus.
 
+config LEDS_AS3676
+        tristate "LED Support for AMS AS3676 I2C chips"
+        depends on LEDS_CLASS && I2C
+        help
+          This option enables support for LEDs connected to AS3676
+          LED driver chips accessed via the I2C bus.
+
+config LEDS_AS3676_SEMC
+	tristate "LED Support for AMS AS3676 I2C chips (Semc)"
+	depends on LEDS_CLASS && I2C && !LEDS_AS3676
+	default n
+	help
+	  This option enables support for LEDs connected to AS3676
+	  LED driver chips accessed via the I2C bus using the semc
+	  supplied driver.
+
+config LEDS_AS3676_HW_BLINK
+        bool "HW blink support for AS3676 chips"
+	default y
+        depends on LEDS_AS3676 && LEDS_TRIGGER_TIMER
+        help
+          This option enables support for HW blinking of LEDs connected to
+          an AS3676 chip. Say Y. Just do it.
+
 config LEDS_MSM_PMIC
         tristate "LED Support for Qualcomm PMIC connected LEDs"
         default n
