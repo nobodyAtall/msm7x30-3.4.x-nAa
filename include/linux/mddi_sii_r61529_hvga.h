@@ -3,7 +3,7 @@
 
 #define MDDI_SII_R61529_HVGA_NAME "mddi_sii_r61529_hvga"
 
-#include <linux/msm_fb_panel.h>
+#include "../../drivers/video/msm/msm_fb_panel.h"
 
 struct sii_hvga_platform_data {
 	void (*power_on)(void);

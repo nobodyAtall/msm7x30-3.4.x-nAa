@@ -2366,6 +2366,14 @@ config FB_MSM_MDDI_HITACHI_HVGA_LCD
 	select FB_MSM_MDDI
 	---help---
 	  Support for Hitachi HVGA MDDI LCD Panel (320x480)
+	  
+config FB_MSM_MDDI_SII_HVGA_LCD
+	depends on FB_MSM
+	bool "MDDI Sii HVGA LCD Panel"
+	select FB_MSM_MDDI
+	default n
+	---help---
+	  Support for Sii HVGA MDDI LCD Panel (320x480)
 
 config FB_MSM_MDDI_AUO_HVGA_LCD
 	depends on FB_MSM
