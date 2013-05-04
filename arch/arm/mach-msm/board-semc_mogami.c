@@ -72,7 +72,15 @@
 #include <mach/msm_memtypes.h>
 #include <linux/akm8975.h>
 #include <linux/cyttsp-qc.h>
-
+#ifdef CONFIG_INPUT_BMA150
+#include <linux/bma150.h>
+#endif
+#ifdef CONFIG_INPUT_BMA150_NG
+#include <linux/bma150_ng.h>
+#endif
+#ifdef CONFIG_INPUT_BMA250
+#include <linux/bma250.h>
+#endif
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
 #include <linux/lm356x.h>
 #define LM356X_HW_RESET_GPIO 2
@@ -108,6 +116,15 @@
 #define NOVATEK_GPIO_RESET              (157)
 
 #define AKM8975_GPIO			(92)
+#ifdef CONFIG_INPUT_BMA150
+#define BMA150_GPIO			(51)
+#endif
+#ifdef CONFIG_INPUT_BMA150_NG
+#define BMA150_GPIO			(51)
+#endif
+#ifdef CONFIG_INPUT_BMA250
+#define BMA250_GPIO			(51)
+#endif
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -855,6 +872,39 @@ static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
 #endif
 
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
+	/*{
+		I2C_BOARD_INFO(MDDI_NOVATEK_I2C_NAME, 0x98 >> 1),
+		.type = MDDI_NOVATEK_I2C_NAME,
+		.platform_data = &novatek_i2c_pdata,
+	},*/
+#ifdef CONFIG_INPUT_BMA150
+	{
+		I2C_BOARD_INFO("bma150", 0x70 >> 1),
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
+		.platform_data = &bma150_platform_data,
+		.type = "bma150"
+	},
+#endif
+#ifdef CONFIG_INPUT_BMA150_NG
+	{
+		I2C_BOARD_INFO("bma150", 0x70 >> 1),
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
+		.platform_data = &bma150_ng_platform_data,
+		.type = "bma150"
+	},
+#endif
+#ifdef CONFIG_SEMC_CAMERA_MODULE
+	{
+		I2C_BOARD_INFO("semc_camera", 0x1A),
+		.type = "semc_camera"
+	},
+#endif
+#ifdef CONFIG_SEMC_SUB_CAMERA_MODULE
+	{
+		I2C_BOARD_INFO("semc_sub_camera", 0x3D),
+		.type = "semc_sub_camera"
+	},
+#endif
 #ifdef CONFIG_MT9D112
 	{
 		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
@@ -3847,74 +3897,68 @@ static struct lm356x_platform_data lm3561_platform_data = {
 };
 #endif
 
-#ifdef CONFIG_BOSCH_BMA150
-
-static struct regulator_bulk_data sensors_ldo[] = {
-	{ .supply = "gp7", .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "gp6", .min_uV = 3050000, .max_uV = 3100000 },
-};
-
-static int __init sensors_ldo_init(void)
+#ifdef CONFIG_INPUT_BMA150
+static int bma150_gpio_setup(struct device *dev)
 {
-	int rc;
+	return gpio_request(BMA150_GPIO, "bma150_irq");
+}
 
-	rc = regulator_bulk_get(NULL, ARRAY_SIZE(sensors_ldo), sensors_ldo);
+static void bma150_gpio_teardown(struct device *dev)
+{
+	gpio_free(BMA150_GPIO);
+}
 
-	if (rc) {
-		pr_err("%s: could not get regulators: %d\n", __func__, rc);
-		goto out;
-	}
+static struct bma150_platform_data bma150_platform_data = {
+	.setup    = bma150_gpio_setup,
+	.teardown = bma150_gpio_teardown,
+};
+#endif
 
-	rc = regulator_bulk_set_voltage(ARRAY_SIZE(sensors_ldo), sensors_ldo);
-
-	if (rc) {
-		pr_err("%s: could not set voltages: %d\n", __func__, rc);
-		goto reg_free;
-	}
-
+#ifdef CONFIG_INPUT_BMA150_NG
+static int bma150_gpio_setup(bool request)
+{
+	if (request)
+		return gpio_request(BMA150_GPIO, "bma150_irq");
+	else
+		gpio_free(BMA150_GPIO);
 	return 0;
-
-reg_free:
-	regulator_bulk_free(ARRAY_SIZE(sensors_ldo), sensors_ldo);
-out:
-	return rc;
 }
 
-static int sensors_ldo_set(int on)
+struct bma150_platform_data bma150_ng_platform_data = {
+	.gpio_setup = bma150_gpio_setup,
+};
+#endif
+
+#ifdef CONFIG_INPUT_BMA250
+static int bma250_gpio_setup(struct device *dev)
 {
-	int rc = on ?
-		regulator_bulk_enable(ARRAY_SIZE(sensors_ldo), sensors_ldo) :
-		regulator_bulk_disable(ARRAY_SIZE(sensors_ldo), sensors_ldo);
-
-	if (rc)
-		pr_err("%s: could not %sable regulators: %d\n",
-				__func__, on ? "en" : "dis", rc);
-
-	return rc;
+	return gpio_request(BMA250_GPIO, "bma250_irq");
 }
 
-static int sensors_ldo_enable(void)
+static void bma250_gpio_teardown(struct device *dev)
 {
-	return sensors_ldo_set(1);
+	gpio_free(BMA250_GPIO);
 }
 
-static void sensors_ldo_disable(void)
-{
-	sensors_ldo_set(0);
-}
-
-static struct bma150_platform_data bma150_data = {
-	.power_on = sensors_ldo_enable,
-	.power_off = sensors_ldo_disable,
+static struct registers bma250_reg_setup = {
+	.range                = BMA250_RANGE_4G,
+	.bw_sel               = BMA250_BW_250HZ,
+	.int_mode_ctrl        = BMA250_MODE_SLEEP_50MS,
+	.int_enable1          = BMA250_INT_SLOPE_Z |
+				BMA250_INT_SLOPE_Y |
+				BMA250_INT_SLOPE_X |
+				BMA250_INT_ORIENT,
+	.int_enable2          = BMA250_INT_NEW_DATA,
+	.int_pin1             = BMA250_INT_PIN1_SLOPE |
+				BMA250_INT_PIN1_ORIENT,
+	.int_new_data         = BMA250_INT_PIN1,
+	.int_pin2             = -1,
 };
 
-static struct i2c_board_info bma150_board_info[] __initdata = {
-	{
-		I2C_BOARD_INFO("bma150", 0x38),
-		.flags = I2C_CLIENT_WAKE,
-		.irq = MSM_GPIO_TO_INT(BMA150_GPIO_INT),
-		.platform_data = &bma150_data,
-	},
+static struct bma250_platform_data bma250_platform_data = {
+	.setup                = bma250_gpio_setup,
+	.teardown             = bma250_gpio_teardown,
+	.reg                  = &bma250_reg_setup,
 };
 #endif
 
@@ -3967,6 +4011,34 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.type = BQ24185_NAME,
 		.irq = PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, BQ24185_GPIO_IRQ - 1),
 	},
+#ifdef CONFIG_INPUT_BMA150
+	{ /* TODO: Remove? Added due to wrong bus connection on Anzu SP1. */
+		I2C_BOARD_INFO("bma150", 0x70 >> 1),
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
+		.platform_data = &bma150_platform_data,
+		.type = "bma150"
+	},
+#endif
+#ifdef CONFIG_INPUT_BMA150_NG
+	{
+		I2C_BOARD_INFO("bma150", 0x70 >> 1),
+		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
+		.platform_data = &bma150_ng_platform_data,
+		.type = "bma150"
+	},
+#endif
+#ifdef CONFIG_INPUT_BMA250
+	{
+		I2C_BOARD_INFO("bma250", 0x18),
+		.irq = MSM_GPIO_TO_INT(BMA250_GPIO),
+		.platform_data = &bma250_platform_data,
+	},
+#endif
+#ifdef CONFIG_INPUT_BMP180
+	{
+		I2C_BOARD_INFO("bmp180", 0x77)
+	},
+#endif
 #ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
 	{
 		I2C_BOARD_INFO("sii9024a", 0x76 >> 1),
