@@ -45,6 +45,23 @@
 /*Replace the max device ID,if any new device is added Specific to RTC only*/
 #define ACDB_ID_MAX                                 ACDB_ID_FM_RX
 
+#define ACDB_ID_SPKR_PHONE_RINGTONE_STEREO		0x108
+#define ACDB_ID_SPKR_PHONE_RINGTONE_MONO		0x107
+#define ACDB_ID_BT_SCO_HFP_MIC				0x109
+#define ACDB_ID_BT_SCO_HFP_SPKR				0x10A
+#define ACDB_ID_BT_DSP_SCO_MIC				0x119
+#define ACDB_ID_BT_DSP_SCO_SPKR				0x11A
+#define ACDB_ID_HANDSET_SPKR_HAC			0x101
+#define ACDB_ID_HEADPHONE_MIC				0x103
+#define ACDB_ID_HEADPHONE_MIC_ENDFIRE			0x12e
+#define ACDB_ID_HANDSET_SPKR_SKT			0x201
+#define ACDB_ID_HANDSET_MIC_SKT				0x202
+#define ACDB_ID_SPKR_PHONE_XLOUD			0x208
+#define ACDB_ID_HANDSET_MIC_ENDFIRE_SKT 		0x22E
+#define ACDB_ID_HANDSET_SPKR_VZW			0x301
+#define ACDB_ID_HANDSET_MIC_VZW				0x302
+#define ACDB_ID_HANDSET_MIC_ENDFIRE_VZW		0x32E
+
 /* ID used for virtual devices */
 #define PSEUDO_ACDB_ID 					0xFFFF
 
