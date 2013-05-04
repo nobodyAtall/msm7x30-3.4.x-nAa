@@ -407,7 +407,9 @@ static inline void mmc_signal_sdio_irq(struct mmc_host *host)
 {
 	host->ops->enable_sdio_irq(host, 0);
 	host->sdio_irq_pending = true;
+#ifndef CONFIG_SEMC_MMC_SDIO_NO_IRQ
 	wake_up_process(host->sdio_irq_thread);
+#endif
 }
 
 struct regulator;
