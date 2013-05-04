@@ -692,6 +692,15 @@ config MACH_SEMC_SMULTRON
 	help
 	  Support for the SonyEricsson Smultron devices.
 
+config MACH_SEMC_COCONUT
+	depends on ARCH_MSM7X30
+	depends on !MSM_STACKED_MEMORY
+	select TI1271
+	default n
+	bool "SonyEricsson Coconut"
+	help
+	  Support for the SonyEricsson Coconut devices.
+
 config MACH_SAPPHIRE
 	depends on ARCH_MSM7X01A
 	default n

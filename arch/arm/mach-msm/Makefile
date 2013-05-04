@@ -301,6 +301,7 @@ obj-$(CONFIG_ARCH_MPQ8092) += board-8092.o board-8092-gpiomux.o
 obj-$(CONFIG_MACH_SEMC_MOGAMI) += board-semc_mogami.o board-semc_mogami-rfkill.o board-semc_mogami-wifi.o
 
 obj-$(CONFIG_MACH_SEMC_SMULTRON) += board-semc_mogami.o leds-smultron.o vibrator-mogami.o charger-smultron.o board-semc_mogami-wifi.o touch-smultron.o gpio-smultron.o keypad-smultron.o board-semc_mogami-rfkill.o
+obj-$(CONFIG_MACH_SEMC_COCONUT) += board-semc_mogami.o leds-coconut.o vibrator-mogami.o charger-coconut.o board-semc_mogami-wifi.o touch-coconut.o gpio-coconut.o keypad-coconut.o board-semc_mogami-rfkill.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
