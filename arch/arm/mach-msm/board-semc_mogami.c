@@ -70,6 +70,7 @@
 #include <mach/msm_tsif.h>
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
+#include <linux/akm8975.h>
 #include <linux/cyttsp-qc.h>
 
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
@@ -106,6 +107,7 @@
 
 #define NOVATEK_GPIO_RESET              (157)
 
+#define AKM8975_GPIO			(92)
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -3916,6 +3918,29 @@ static struct i2c_board_info bma150_board_info[] __initdata = {
 };
 #endif
 
+static struct msm_gpio akm8975_gpio_config_data[] = {
+	{ GPIO_CFG(AKM8975_GPIO, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN,
+		GPIO_CFG_2MA), "akm8975_drdy_irq" },
+};
+
+static int akm8975_gpio_setup(void)
+{
+	return msm_gpios_request_enable(akm8975_gpio_config_data,
+			ARRAY_SIZE(akm8975_gpio_config_data));
+}
+
+static void akm8975_gpio_shutdown(void)
+{
+	msm_gpios_disable_free(akm8975_gpio_config_data,
+		ARRAY_SIZE(akm8975_gpio_config_data));
+
+}
+
+static struct akm8975_platform_data akm8975_platform_data = {
+	.setup = akm8975_gpio_setup,
+	.shutdown = akm8975_gpio_shutdown,
+};
+
 static struct i2c_board_info msm_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("m33c01", OPTNAV_I2C_SLAVE_ADDR),
@@ -3949,6 +3974,11 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.type = "sii9024a"
 	},
 #endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
+	{
+		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x18 >> 1),
+		.irq = MSM_GPIO_TO_INT(AKM8975_GPIO),
+		.platform_data = &akm8975_platform_data,
+	},
 #ifdef CONFIG_LM3560
 	{
 		I2C_BOARD_INFO("lm3560", 0xA6 >> 1),

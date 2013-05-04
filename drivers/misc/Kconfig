@@ -348,6 +348,12 @@ config SENSORS_TSL2550
 	  This driver can also be built as a module.  If so, the module
 	  will be called tsl2550.
 
+config SENSORS_AKM8975
+	tristate "AKM8975 Compass Driver"
+	depends on I2C
+	help
+	 AKM8975 Compass Driver implemented by HTC.
+
 config SENSORS_BH1780
 	tristate "ROHM BH1780GLI ambient light sensor"
 	depends on I2C && SYSFS
