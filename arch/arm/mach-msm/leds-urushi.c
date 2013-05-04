@@ -10,6 +10,7 @@
 
 #include <linux/leds-as3676.h>
 #include <linux/leds.h>
+#include <linux/bug.h>
 
 static struct as3676_platform_led as3676_leds_mapping[] = {
 	{
