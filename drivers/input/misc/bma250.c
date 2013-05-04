@@ -86,6 +86,7 @@
 #include <linux/debugfs.h>
 #include <linux/bma250.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 
 #define BMA250_NAME                      "bma250"
 #define BMA250_VENDORID                  0x0001
@@ -738,7 +739,7 @@ dbfs_err_root:
 	return;
 }
 
-static void __devexit bma250_remove_dbfs_entry(struct driver_data *dd)
+static void /*__devexit*/ bma250_remove_dbfs_entry(struct driver_data *dd)
 {
 	if (dd->dbfs_regs)
 		debugfs_remove(dd->dbfs_regs);
@@ -748,7 +749,7 @@ static void __devexit bma250_remove_dbfs_entry(struct driver_data *dd)
 #else
 static void __devinit bma250_create_dbfs_entry(struct driver_data *dd) { }
 
-static void __devexit bma250_remove_dbfs_entry(struct driver_data *dd) { }
+static void /*__devexit*/ bma250_remove_dbfs_entry(struct driver_data *dd) { }
 #endif
 static int  bma250_power_down(struct driver_data *dd)
 {

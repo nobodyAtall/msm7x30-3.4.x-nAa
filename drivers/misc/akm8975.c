@@ -31,6 +31,7 @@
 #include <linux/workqueue.h>
 #include <linux/freezer.h>
 #include <linux/akm8975.h>
+#include <linux/module.h>
 
 #define AKM8975_DEBUG		1
 #define AKM8975_DEBUG_MSG	1

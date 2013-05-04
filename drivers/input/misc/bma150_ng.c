@@ -23,6 +23,7 @@
  */
 #include <linux/version.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
