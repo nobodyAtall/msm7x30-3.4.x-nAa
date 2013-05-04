@@ -872,6 +872,42 @@ static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
 };
 #endif
 
+static const struct panel_id *novatek_panels[] = {
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS040T8LX01
+	&novatek_panel_id_sharp_ls040t8lx01_rev_c,
+	&novatek_panel_id_sharp_ls040t8lx01_rev_d,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS042T3LX
+	&novatek_panel_id_sharp_ls042t3lx_type1,
+	&novatek_panel_id_sharp_ls042t3lx,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_SONY_ACX424AKM
+	&novatek_panel_id_sony_acx424akm_type1,
+	&novatek_panel_id_sony_acx424akm,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_SONY_ACX427AK
+	&novatek_panel_id_sony_acx427ak,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_SONY_ACX424AK
+	&novatek_panel_id_sony_acx424ak,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_HITACHI_DX09D09VM
+	&novatek_panel_id_hitachi_dx09d09vm_type1,
+	&novatek_panel_id_hitachi_dx09d09vm,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS033T3LX01
+	&novatek_panel_id_sharp_ls033t3lx01,
+#endif
+#ifdef CONFIG_MDDI_NOVATEK_PANEL_TMD_LT033MDV1000
+	&novatek_panel_id_tmd_lt033mdv1000,
+#endif
+	NULL,
+};
+
+struct novatek_i2c_pdata novatek_i2c_pdata = {
+	.panels = novatek_panels,
+};
+
 #ifdef CONFIG_INPUT_BMA150_NG
 static int bma150_gpio_setup(bool request)
 {
@@ -888,11 +924,11 @@ struct bma150_platform_data bma150_ng_platform_data = {
 #endif
 
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
-	/*{
+	{
 		I2C_BOARD_INFO(MDDI_NOVATEK_I2C_NAME, 0x98 >> 1),
 		.type = MDDI_NOVATEK_I2C_NAME,
 		.platform_data = &novatek_i2c_pdata,
-	},*/
+	},
 #ifdef CONFIG_INPUT_BMA150
 	{
 		I2C_BOARD_INFO("bma150", 0x70 >> 1),
@@ -2700,42 +2736,6 @@ static struct platform_device novatek_device = {
 	.dev	= {
 		.platform_data = &novatek_platform_data,
 	}
-};
-
-static const struct panel_id *novatek_panels[] = {
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS040T8LX01
-	&novatek_panel_id_sharp_ls040t8lx01_rev_c,
-	&novatek_panel_id_sharp_ls040t8lx01_rev_d,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS042T3LX
-	&novatek_panel_id_sharp_ls042t3lx_type1,
-	&novatek_panel_id_sharp_ls042t3lx,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SONY_ACX424AKM
-	&novatek_panel_id_sony_acx424akm_type1,
-	&novatek_panel_id_sony_acx424akm,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SONY_ACX427AK
-	&novatek_panel_id_sony_acx427ak,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SONY_ACX424AK
-	&novatek_panel_id_sony_acx424ak,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_HITACHI_DX09D09VM
-	&novatek_panel_id_hitachi_dx09d09vm_type1,
-	&novatek_panel_id_hitachi_dx09d09vm,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS033T3LX01
-	&novatek_panel_id_sharp_ls033t3lx01,
-#endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_TMD_LT033MDV1000
-	&novatek_panel_id_tmd_lt033mdv1000,
-#endif
-	NULL,
-};
-
-struct novatek_i2c_pdata novatek_i2c_pdata = {
-	.panels = novatek_panels,
 };
 
 #ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
