@@ -307,6 +307,7 @@ obj-$(CONFIG_MACH_SEMC_URUSHI) += board-semc_mogami.o leds-urushi.o vibrator-mog
 obj-$(CONFIG_MACH_SEMC_MANGO) += board-semc_mogami.o leds-mango.o vibrator-mogami.o charger-mango.o board-semc_mogami-wifi.o touch-mango.o gpio-mango.o keypad-mango.o board-semc_mogami-rfkill.o
 obj-$(CONFIG_MACH_SEMC_ANZU) += board-semc_mogami.o board-semc_mogami-rfkill.o keypad-anzu.o leds-anzu.o  vibrator-mogami.o gpio-anzu.o charger-anzu.o board-semc_mogami-wifi.o
 obj-$(CONFIG_MACH_SEMC_IYOKAN) += board-semc_mogami.o leds-iyokan.o vibrator-mogami.o charger-iyokan.o board-semc_mogami-wifi.o touch-iyokan.o gpio-iyokan.o keypad-iyokan.o board-semc_mogami-rfkill.o
+obj-$(CONFIG_MACH_SEMC_HALLON) += board-semc_mogami.o leds-hallon.o vibrator-mogami.o charger-hallon.o board-semc_mogami-rfkill.o keypad-hallon.o gpio-hallon.o board-semc_mogami-wifi.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o

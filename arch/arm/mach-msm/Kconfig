@@ -714,6 +714,7 @@ config MACH_SEMC_HAIDA
 	bool "SonyEricsson Haida"
 	help
 	  Support for the SonyEricsson Haida devices.
+
 config MACH_SEMC_URUSHI
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
@@ -741,6 +742,15 @@ config MACH_SEMC_IYOKAN
 	bool "SonyEricsson Iyokan"
 	help
 	  Support for the SonyEricsson Iyokan devices.
+
+config MACH_SEMC_HALLON
+	depends on ARCH_MSM7X30
+	depends on !MSM_STACKED_MEMORY
+	select SUPPORT_ALIEN_USB_CHARGER
+	default y
+	bool "SonyEricsson Hallon"
+	help
+	  Support for the SonyEricsson Hallon devices.
 
 config MACH_SAPPHIRE
 	depends on ARCH_MSM7X01A
