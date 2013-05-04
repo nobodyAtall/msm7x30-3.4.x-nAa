@@ -5252,6 +5252,24 @@ static void __init msm_fb_add_devices(void)
 #endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 }
 
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+#define MSM_RAM_CONSOLE_SIZE 256*1024
+static struct resource ram_console_resources[] = {
+	{
+		.start  = 0,
+		.end    = 0,
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device ram_console_device = {
+	.name           = "ram_console",
+	.id             = -1,
+	.num_resources  = ARRAY_SIZE(ram_console_resources),
+	.resource       = ram_console_resources,
+};
+#endif
+
 static struct msm_psy_batt_pdata msm_psy_batt_data = {
 	.voltage_min_design 	= 2800,
 	.voltage_max_design	= 4300,
@@ -5453,6 +5471,9 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_BT
 	&mogami_device_rfkill,
+#endif
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+	&ram_console_device,
 #endif
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	&msm_device_tsif,
@@ -7164,6 +7185,18 @@ static void __init msm7x30_allocate_memory_regions(void)
 	msm_fb_resources[0].end = msm_fb_resources[0].start + size - 1;
 	pr_info("allocating %lu bytes at %p (%lx physical) for fb\n",
 		size, addr, __pa(addr));
+
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+	/* RAM Console can't use alloc_bootmem(), since that zeroes the
+	 * region */
+	size = MSM_RAM_CONSOLE_SIZE;
+	ram_console_resources[0].start = msm_fb_resources[0].end+1;
+	ram_console_resources[0].end = ram_console_resources[0].start + size - 1;
+	pr_info("allocating %lu bytes at (%lx physical) for ram console\n",
+		size, (unsigned long)ram_console_resources[0].start);
+	/* We still have to reserve it, though */
+	reserve_bootmem(ram_console_resources[0].start,size,0);
+#endif
 }
 
 static void __init msm7x30_map_io(void)
