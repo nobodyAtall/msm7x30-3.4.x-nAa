@@ -70,7 +70,7 @@
 #include <mach/msm_tsif.h>
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
-#include <linux/akm8975.h>
+#include <linux/i2c/akm8975.h>
 #include <linux/cyttsp-qc.h>
 #ifdef CONFIG_INPUT_BMA150
 #include <linux/bma150.h>
