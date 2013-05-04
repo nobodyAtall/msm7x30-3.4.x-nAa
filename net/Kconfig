@@ -337,12 +337,41 @@ menuconfig WIRELESS
 	depends on !S390
 	default y
 
-if WIRELESS
+#
+# Compat-drivers
+#
 
-source "net/wireless/Kconfig"
-source "net/mac80211/Kconfig"
+config COMPAT_WIRELESS
+       tristate "Compat Wireless"
+       default n
+       ---help---
+         To compile this code as a module, choose M here.
+if COMPAT_WIRELESS
 
-endif # WIRELESS
+config COMPAT_WIRELESS_MODULES
+       tristate "Wireless modules"
+       default n
+       ---help---
+         To compile this code as a module, choose M here.
+
+source "net/compat-drivers/net/wireless/Kconfig"
+source "net/compat-drivers/net/mac80211/Kconfig"
+source "net/compat-drivers/drivers/net/wireless/ti/Kconfig"
+
+endif
+
+#
+# End compat-drivers
+#
+
+#if !COMPAT_WIRELESS
+#if WIRELESS
+
+#source "net/wireless/Kconfig"
+#source "net/mac80211/Kconfig"
+
+#endif # WIRELESS
+#endif #!COMPAT_WIRELESS
 
 source "net/wimax/Kconfig"
 
