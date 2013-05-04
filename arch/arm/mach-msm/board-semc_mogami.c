@@ -114,6 +114,7 @@
 
 #include "devices.h"
 #include "timer.h"
+#include "board-semc_mogami-gpio.h"
 #ifdef CONFIG_USB_G_ANDROID
 #include <linux/usb/android.h>
 #include <mach/usbdiag.h>
@@ -133,12 +134,20 @@
 
 #include <linux/leds-as3676_semc.h>
 #include "board-semc_mogami-leds.h"
-
+#include "board-semc_mogami-touch.h"
 #include <linux/i2c/bq24185_charger.h>
 #include <linux/i2c/bq27520_battery_semc.h>
 #include <linux/battery_chargalg.h>
 #include <mach/semc_battery_data.h>
+
 #define BQ24185_GPIO_IRQ		(31)
+#define CYPRESS_TOUCH_GPIO_RESET	(40)
+#define CYPRESS_TOUCH_GPIO_IRQ		(42)
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD
+#define SYNAPTICS_TOUCH_GPIO_IRQ	(42)
+#endif
+#define CYPRESS_TOUCH_GPIO_SPI_CS	(46)
+
 #define GPIO_BQ27520_SOC_INT 20
 #define LIPO_BAT_MAX_VOLTAGE 4200
 #define LIPO_BAT_MIN_VOLTAGE 3000
@@ -243,7 +252,7 @@ static int vreg_helper_on(const char *pzName, unsigned mv)
 	int rc = 0;
 
 	reg = vreg_get(NULL, pzName);
-	if (reg == NULL) {
+	if (IS_ERR(reg)) {
 		printk(KERN_ERR "Unable to resolve VREG name \"%s\"\n", pzName);
 		return rc;
 	}
@@ -272,7 +281,7 @@ static void vreg_helper_off(const char *pzName)
 	int rc;
 
 	reg = vreg_get(NULL, pzName);
-	if (reg == NULL) {
+	if (IS_ERR(reg)) {
 		printk(KERN_ERR "Unable to resolve VREG name \"%s\"\n", pzName);
 		return;
 	}
@@ -551,162 +560,6 @@ static struct platform_device msm_proccomm_regulator_dev = {
 	}
 };
 #endif
-
-/*virtual key support */
-static ssize_t tma300_vkeys_show(struct kobject *kobj,
-			struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf,
-	__stringify(EV_KEY) ":" __stringify(KEY_BACK) ":50:842:80:100"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_MENU) ":170:842:80:100"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_HOME) ":290:842:80:100"
-	":" __stringify(EV_KEY) ":" __stringify(KEY_SEARCH) ":410:842:80:100"
-	"\n");
-}
-
-static struct kobj_attribute tma300_vkeys_attr = {
-	.attr = {
-		.mode = S_IRUGO,
-	},
-	.show = &tma300_vkeys_show,
-};
-
-static struct attribute *tma300_properties_attrs[] = {
-	&tma300_vkeys_attr.attr,
-	NULL
-};
-
-static struct attribute_group tma300_properties_attr_group = {
-	.attrs = tma300_properties_attrs,
-};
-
-static struct kobject *properties_kobj;
-static struct regulator_bulk_data cyttsp_regs[] = {
-	{ .supply = "ldo8",  .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "ldo15", .min_uV = 3050000, .max_uV = 3100000 },
-};
-
-#define CYTTSP_TS_GPIO_IRQ	150
-static int cyttsp_platform_init(struct i2c_client *client)
-{
-	int rc = -EINVAL;
-
-	rc = regulator_bulk_get(NULL, ARRAY_SIZE(cyttsp_regs), cyttsp_regs);
-
-	if (rc) {
-		pr_err("%s: could not get regulators: %d\n", __func__, rc);
-		goto out;
-	}
-
-	rc = regulator_bulk_set_voltage(ARRAY_SIZE(cyttsp_regs), cyttsp_regs);
-
-	if (rc) {
-		pr_err("%s: could not set regulator voltages: %d\n", __func__,
-				rc);
-		goto regs_free;
-	}
-
-	rc = regulator_bulk_enable(ARRAY_SIZE(cyttsp_regs), cyttsp_regs);
-
-	if (rc) {
-		pr_err("%s: could not enable regulators: %d\n", __func__, rc);
-		goto regs_free;
-	}
-
-	/* check this device active by reading first byte/register */
-	rc = i2c_smbus_read_byte_data(client, 0x01);
-	if (rc < 0) {
-		pr_err("%s: i2c sanity check failed\n", __func__);
-		goto regs_disable;
-	}
-
-	rc = gpio_tlmm_config(GPIO_CFG(CYTTSP_TS_GPIO_IRQ, 0, GPIO_CFG_INPUT,
-					GPIO_CFG_PULL_UP, GPIO_CFG_6MA), GPIO_CFG_ENABLE);
-	if (rc) {
-		pr_err("%s: Could not configure gpio %d\n",
-					 __func__, CYTTSP_TS_GPIO_IRQ);
-		goto regs_disable;
-	}
-
-	/* virtual keys */
-	tma300_vkeys_attr.attr.name = "virtualkeys.cyttsp-i2c";
-	properties_kobj = kobject_create_and_add("board_properties",
-				NULL);
-	if (properties_kobj)
-		rc = sysfs_create_group(properties_kobj,
-			&tma300_properties_attr_group);
-	if (!properties_kobj || rc)
-		pr_err("%s: failed to create board_properties\n",
-				__func__);
-
-	return CY_OK;
-
-regs_disable:
-	regulator_bulk_disable(ARRAY_SIZE(cyttsp_regs), cyttsp_regs);
-regs_free:
-	regulator_bulk_free(ARRAY_SIZE(cyttsp_regs), cyttsp_regs);
-out:
-	return rc;
-}
-
-/* TODO: Put the regulator to LPM / HPM in suspend/resume*/
-static int cyttsp_platform_suspend(struct i2c_client *client)
-{
-	msleep(20);
-
-	return CY_OK;
-}
-
-static int cyttsp_platform_resume(struct i2c_client *client)
-{
-	/* add any special code to strobe a wakeup pin or chip reset */
-	mdelay(10);
-
-	return CY_OK;
-}
-
-static struct cyttsp_platform_data cyttsp_data = {
-	.fw_fname = "cyttsp_7630_fluid.hex",
-	.panel_maxx = 479,
-	.panel_maxy = 799,
-	.disp_maxx = 469,
-	.disp_maxy = 799,
-	.disp_minx = 10,
-	.disp_miny = 0,
-	.flags = 0,
-	.gen = CY_GEN3,	/* or */
-	.use_st = CY_USE_ST,
-	.use_mt = CY_USE_MT,
-	.use_hndshk = CY_SEND_HNDSHK,
-	.use_trk_id = CY_USE_TRACKING_ID,
-	.use_sleep = CY_USE_DEEP_SLEEP_SEL | CY_USE_LOW_POWER_SEL,
-	.use_gestures = CY_USE_GESTURES,
-	/* activate up to 4 groups
-	 * and set active distance
-	 */
-	.gest_set = CY_GEST_GRP1 | CY_GEST_GRP2 |
-				CY_GEST_GRP3 | CY_GEST_GRP4 |
-				CY_ACT_DIST,
-	/* change act_intrvl to customize the Active power state
-	 * scanning/processing refresh interval for Operating mode
-	 */
-	.act_intrvl = CY_ACT_INTRVL_DFLT,
-	/* change tch_tmout to customize the touch timeout for the
-	 * Active power state for Operating mode
-	 */
-	.tch_tmout = CY_TCH_TMOUT_DFLT,
-	/* change lp_intrvl to customize the Low Power power state
-	 * scanning/processing refresh interval for Operating mode
-	 */
-	.lp_intrvl = CY_LP_INTRVL_DFLT,
-	.resume = cyttsp_platform_resume,
-	.suspend = cyttsp_platform_suspend,
-	.init = cyttsp_platform_init,
-	.sleep_gpio = -1,
-	.resout_gpio = -1,
-	.irq_gpio = CYTTSP_TS_GPIO_IRQ,
-	.correct_fw_ver = 2,
-};
 
 static int pm8058_pwm_config(struct pwm_device *pwm, int ch, int on)
 {
@@ -1054,16 +907,6 @@ static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
 	},
 };
 #endif
-
-static struct i2c_board_info cy8info[] __initdata = {
-	{
-		I2C_BOARD_INFO(CY_I2C_NAME, 0x24),
-		.platform_data = &cyttsp_data,
-#ifndef CY_USE_TIMER
-		.irq = MSM_GPIO_TO_INT(CYTTSP_TS_GPIO_IRQ),
-#endif /* CY_USE_TIMER */
-	},
-};
 
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 #ifdef CONFIG_MT9D112
@@ -3482,6 +3325,261 @@ static struct platform_device mddi_auo_hvga_display_device = {
 };
 #endif   /* CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD  */
 
+#if defined(CONFIG_TOUCHSCREEN_CY8CTMA300_SPI) || \
+	defined(CONFIG_TOUCHSCREEN_CYTTSP_SPI)
+struct msm_gpio ttsp_gpio_cfg_data[] = {
+	{ GPIO_CFG(42, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),
+		"ttsp_irq" },
+};
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
+static int cypress_touch_gpio_init(void);
+static int cypress_touch_spi_cs_set(bool val);
+
+static struct cypress_touch_platform_data cypress_touch_data = {
+	.x_max = CONFIG_CY8CTMA300_SPI_MAX_X,
+	.y_max = CONFIG_CY8CTMA300_SPI_MAX_Y,
+	.z_max = CONFIG_CY8CTMA300_SPI_MAX_Z,
+	.width_major = CONFIG_CY8CTMA300_SPI_WIDTH_MAJOR,
+	.gpio_init = cypress_touch_gpio_init,
+	.gpio_irq_pin = CYPRESS_TOUCH_GPIO_IRQ,
+	.gpio_reset_pin = CYPRESS_TOUCH_GPIO_RESET,
+	.spi_cs_set = cypress_touch_spi_cs_set,
+};
+
+static int cypress_touch_gpio_init(void)
+{
+	int rc;
+
+	msleep(10);
+
+	rc = msm_gpios_enable(ttsp_gpio_cfg_data,
+				ARRAY_SIZE(ttsp_gpio_cfg_data));
+	if (rc)
+		return rc;
+
+	gpio_set_value(CYPRESS_TOUCH_GPIO_RESET, 1);
+	return 0;
+}
+
+static int cypress_touch_spi_cs_set(bool val)
+{
+	int rc = 0;
+	int cfg;
+
+	if (val) {
+		gpio_set_value(CYPRESS_TOUCH_GPIO_SPI_CS, 1);
+		cfg = GPIO_CFG(CYPRESS_TOUCH_GPIO_SPI_CS, 1, GPIO_CFG_OUTPUT,
+					GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
+		rc = gpio_tlmm_config(cfg, GPIO_CFG_ENABLE);
+		if (rc)
+			pr_err("%s: Enabling of GPIO failed. "
+				"gpio_tlmm_config(%#x, enable)=%d\n",
+				__func__, cfg, rc);
+	} else {
+		cfg = GPIO_CFG(CYPRESS_TOUCH_GPIO_SPI_CS, 0, GPIO_CFG_OUTPUT,
+					GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
+		rc = gpio_tlmm_config(cfg, GPIO_CFG_ENABLE);
+		if (rc)
+			pr_err("%s: Enabling of GPIO failed. "
+				"gpio_tlmm_config(%#x, enable)=%d\n",
+				__func__, cfg, rc);
+		gpio_set_value(CYPRESS_TOUCH_GPIO_SPI_CS, 0);
+	}
+	return rc;
+}
+#endif /* CONFIG_TOUCHSCREEN_CY8CTMA300_SPI */
+
+#ifdef CONFIG_TOUCHSCREEN_CYTTSP_SPI
+int cyttsp_xres(void)
+{
+	int polarity;
+	int rc;
+printk(KERN_ERR "cyttsp_xres 1\n");
+	rc = gpio_direction_input(CYPRESS_TOUCH_GPIO_RESET);
+	if (rc) {
+		printk(KERN_ERR "%s: failed to set direction input, %d\n",
+		       __func__, rc);
+		return -EIO;
+	}
+printk(KERN_ERR "cyttsp_xres 2\n");
+	polarity = gpio_get_value(CYPRESS_TOUCH_GPIO_RESET) & 0x01;
+	printk(KERN_INFO "%s: %d\n", __func__, polarity);
+	rc = gpio_direction_output(CYPRESS_TOUCH_GPIO_RESET, polarity ^ 1);
+	if (rc) {
+		printk(KERN_ERR "%s: failed to set direction output, %d\n",
+		       __func__, rc);
+		return -EIO;
+	}
+	msleep(1);
+	gpio_set_value(CYPRESS_TOUCH_GPIO_RESET, polarity);
+printk(KERN_ERR "cyttsp_xres 3\n");
+	return 0;
+}
+
+int cyttsp_init(int on)
+{
+	int rc = -1;
+	if (on) {
+		if (gpio_request(CYPRESS_TOUCH_GPIO_IRQ, "ttsp_irq"))
+			goto ttsp_irq_err;
+		if (gpio_request(CYPRESS_TOUCH_GPIO_RESET, "ttsp_reset"))
+			goto ttsp_reset_err;
+
+		rc = msm_gpios_enable(ttsp_gpio_cfg_data,
+					ARRAY_SIZE(ttsp_gpio_cfg_data));
+		if (rc)
+			goto ttsp_gpio_cfg_err;
+		return 0;
+	} else {
+		rc = 0;
+	}
+ttsp_gpio_cfg_err:
+	gpio_free(CYPRESS_TOUCH_GPIO_RESET);
+ttsp_reset_err:
+	gpio_free(CYPRESS_TOUCH_GPIO_IRQ);
+ttsp_irq_err:
+	return rc;
+}
+
+int cyttsp_wakeup(void)
+{
+	int ret;
+
+	ret = gpio_direction_output(CYPRESS_TOUCH_GPIO_IRQ, 0);
+	if (ret) {
+		printk(KERN_ERR "%s: Failed to request gpio_direction_output\n",
+		__func__);
+                return ret;
+	}
+	msleep(50);
+	gpio_set_value(CYPRESS_TOUCH_GPIO_IRQ, 0);
+	msleep(1);
+	gpio_set_value(CYPRESS_TOUCH_GPIO_IRQ, 1);
+	udelay(100);
+	gpio_set_value(CYPRESS_TOUCH_GPIO_IRQ, 0);
+	msleep(1);
+	gpio_set_value(CYPRESS_TOUCH_GPIO_IRQ, 1);
+	printk(KERN_INFO "%s: wakeup\n", __func__);
+	ret = gpio_direction_input(CYPRESS_TOUCH_GPIO_IRQ);
+	if (ret) {
+		printk(KERN_ERR "%s: Failed to request gpio_direction_input\n",
+		__func__);
+		return ret;
+	}
+	msleep(50);
+	return 0;
+}
+
+#ifdef CONFIG_TOUCHSCREEN_CYTTSP_KEY
+#define TT_KEY_BACK_FLAG	0x01
+#define TT_KEY_MENU_FLAG	0x02
+#define TT_KEY_HOME_FLAG	0x04
+
+static struct input_dev *input_dev_cyttsp_key;
+
+static int __init cyttsp_key_init(void)
+{
+	input_dev_cyttsp_key = input_allocate_device();
+	if (!input_dev_cyttsp_key) {
+		pr_err("%s: Error, unable to alloc cyttsp key device\n", __func__);
+		return -ENOMEM;
+	}
+	input_dev_cyttsp_key->name = "cyttsp_key";
+	input_dev_cyttsp_key->phys = "/sys/bus/spi/devices/spi0.0/";
+	input_set_capability(input_dev_cyttsp_key, EV_KEY, KEY_MENU);
+	input_set_capability(input_dev_cyttsp_key, EV_KEY, KEY_BACK);
+	input_set_capability(input_dev_cyttsp_key, EV_KEY, KEY_HOME);
+	if (input_register_device(input_dev_cyttsp_key)) {
+		pr_err("%s: Error, unable to reg cyttsp key device\n", __func__);
+		input_free_device(input_dev_cyttsp_key);
+		return -ENODEV;
+	}
+	return 0;
+}
+module_init(cyttsp_key_init);
+
+int cyttsp_key_rpc_callback(u8 data[], int size)
+{
+	static u8 last;
+	u8 toggled = last ^ data[0];
+
+	if (toggled & TT_KEY_MENU_FLAG)
+		input_report_key(input_dev_cyttsp_key, KEY_MENU,
+			!!(*data & TT_KEY_MENU_FLAG));
+
+	if (toggled & TT_KEY_BACK_FLAG)
+		input_report_key(input_dev_cyttsp_key, KEY_BACK,
+			!!(*data & TT_KEY_BACK_FLAG));
+
+	if (toggled & TT_KEY_HOME_FLAG)
+		input_report_key(input_dev_cyttsp_key, KEY_HOME,
+			!!(*data & TT_KEY_HOME_FLAG));
+
+	last = data[0];
+	return 0;
+}
+#endif /* CONFIG_TOUCHSCREEN_CYTTSP_KEY */
+
+#endif /* CONFIG_TOUCHSCREEN_CYTTSP_SPI */
+
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD
+static struct msm_gpio clearpad_gpio_config_data[] = {
+	{ GPIO_CFG(SYNAPTICS_TOUCH_GPIO_IRQ, 0, GPIO_CFG_INPUT,
+		   GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "clearpad3000_irq" },
+};
+
+static int clearpad_gpio_configure(int enable)
+{
+	int rc = 0;
+
+	if (enable)
+		rc = msm_gpios_request_enable(clearpad_gpio_config_data,
+				ARRAY_SIZE(clearpad_gpio_config_data));
+	else
+		msm_gpios_free(clearpad_gpio_config_data,
+				ARRAY_SIZE(clearpad_gpio_config_data));
+	return rc;
+}
+
+static struct synaptics_button synaptics_menu_key = {
+	.type = EV_KEY,
+	.code = KEY_MENU,
+};
+
+static struct synaptics_button synaptics_back_key = {
+	.type = EV_KEY,
+	.code = KEY_BACK,
+};
+
+static struct synaptics_funcarea clearpad_funcarea_array[] = {
+	{ 0, 0, 479, 853, SYN_FUNCAREA_POINTER, NULL },
+	{ 0, 854, 479, 863, SYN_FUNCAREA_BOTTOM_EDGE, NULL},
+	{ 0, 884, 159, 921, SYN_FUNCAREA_BUTTON, &synaptics_back_key },
+	{ 0, 864, 179, 921, SYN_FUNCAREA_BTN_INBOUND, &synaptics_back_key },
+	{ 320, 884, 479, 921, SYN_FUNCAREA_BUTTON, &synaptics_menu_key },
+	{ 300, 864, 479, 921, SYN_FUNCAREA_BTN_INBOUND, &synaptics_menu_key },
+	{ .func = SYN_FUNCAREA_END }
+};
+
+static void clearpad_vreg_off(void)
+{
+	int i;
+
+	vreg_helper_off(VREG_L20);
+	for (i = 0; i < 500; i++)
+		udelay(1000);
+}
+
+static struct clearpad_platform_data clearpad_platform_data = {
+	.irq = MSM_GPIO_TO_INT(SYNAPTICS_TOUCH_GPIO_IRQ),
+	.funcarea = clearpad_funcarea_array,
+	.gpio_configure = clearpad_gpio_configure,
+	.vreg_off = clearpad_vreg_off,
+};
+#endif
+
 static struct msm_gpio optnav_config_data[] = {
 	{ GPIO_CFG(OPTNAV_CHIP_SELECT, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA),
 	"optnav_chip_select" },
@@ -3923,6 +4021,31 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 #endif
 };
 
+static struct spi_board_info spi_board_info[] __initdata = {
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
+	{
+		.modalias       = "cypress_touchscreen",
+		.mode           = SPI_MODE_0,
+		.platform_data  = &cypress_touch_data,
+		.bus_num        = 0,
+		.chip_select    = 0,
+		.max_speed_hz   = 1 * 1000 * 1000,
+		.irq		= MSM_GPIO_TO_INT(CYPRESS_TOUCH_GPIO_IRQ),
+	},
+#endif
+#ifdef CONFIG_TOUCHSCREEN_CYTTSP_SPI
+        {
+                .modalias       = CY_SPI_NAME,
+                .mode           = SPI_MODE_0,
+                .irq            = MSM_GPIO_TO_INT(CYPRESS_TOUCH_GPIO_IRQ),
+                .platform_data  = &cyttsp_data,
+                .bus_num        = 0,
+                .chip_select    = 0,
+                .max_speed_hz   = 1 *  1000 * 1000,
+        },
+#endif /* CONFIG_TOUCHSCREEN_CYTTSP_SPI */
+};
+
 static struct i2c_board_info msm_marimba_board_info[] = {
 	{
 		I2C_BOARD_INFO("marimba", 0xc),
@@ -4102,44 +4225,16 @@ static struct platform_device qsd_device_spi = {
 	.resource	= qsd_spi_resources,
 };
 
-#ifdef CONFIG_SPI_QSD
-static struct spi_board_info lcdc_sharp_spi_board_info[] __initdata = {
-	{
-		.modalias	= "lcdc_sharp_ls038y7dx01",
-		.mode		= SPI_MODE_1,
-		.bus_num	= 0,
-		.chip_select	= 0,
-		.max_speed_hz	= 26331429,
-	}
-};
-static struct spi_board_info lcdc_toshiba_spi_board_info[] __initdata = {
-	{
-		.modalias       = "lcdc_toshiba_ltm030dd40",
-		.mode           = SPI_MODE_3|SPI_CS_HIGH,
-		.bus_num        = 0,
-		.chip_select    = 0,
-		.max_speed_hz   = 9963243,
-	}
-};
-#endif
-
-static struct msm_gpio qsd_spi_gpio_config_data[] = {
-	{ GPIO_CFG(45, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "spi_clk" },
-	{ GPIO_CFG(46, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "spi_cs0" },
-	{ GPIO_CFG(47, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_8MA), "spi_mosi" },
-	{ GPIO_CFG(48, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "spi_miso" },
-};
-
 static int msm_qsd_spi_gpio_config(void)
 {
 	return msm_gpios_request_enable(qsd_spi_gpio_config_data,
-		ARRAY_SIZE(qsd_spi_gpio_config_data));
+					qsd_spi_gpio_config_data_size);
 }
 
 static void msm_qsd_spi_gpio_release(void)
 {
 	msm_gpios_disable_free(qsd_spi_gpio_config_data,
-		ARRAY_SIZE(qsd_spi_gpio_config_data));
+			       qsd_spi_gpio_config_data_size);
 }
 
 static struct msm_spi_platform_data qsd_spi_pdata = {
@@ -5656,25 +5751,6 @@ static struct platform_device *devices[] __initdata = {
 	&msm_ebi1_thermal
 };
 
-static struct msm_gpio msm_i2c_gpios_hw[] = {
-	{ GPIO_CFG(70, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_scl" },
-	{ GPIO_CFG(71, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_sda" },
-};
-
-static struct msm_gpio msm_i2c_gpios_io[] = {
-	{ GPIO_CFG(70, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_scl" },
-	{ GPIO_CFG(71, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_sda" },
-};
-
-static struct msm_gpio qup_i2c_gpios_io[] = {
-	{ GPIO_CFG(16, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_scl" },
-	{ GPIO_CFG(17, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_sda" },
-};
-static struct msm_gpio qup_i2c_gpios_hw[] = {
-	{ GPIO_CFG(16, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_scl" },
-	{ GPIO_CFG(17, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_sda" },
-};
-
 static void
 msm_i2c_gpio_config(int adap_id, int config_type)
 {
@@ -5731,7 +5807,7 @@ static struct msm_i2c_platform_data msm_i2c_pdata = {
 
 static void __init msm_device_i2c_init(void)
 {
-	if (msm_gpios_request(msm_i2c_gpios_hw, ARRAY_SIZE(msm_i2c_gpios_hw)))
+	if (msm_gpios_request(msm_i2c_gpios_hw, msm_i2c_gpios_hw_size))
 		pr_err("failed to request I2C gpios\n");
 
 	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
@@ -5756,7 +5832,7 @@ static struct msm_i2c_platform_data qup_i2c_pdata = {
 
 static void __init qup_device_i2c_init(void)
 {
-	if (msm_gpios_request(qup_i2c_gpios_hw, ARRAY_SIZE(qup_i2c_gpios_hw)))
+	if (msm_gpios_request(qup_i2c_gpios_hw, qup_i2c_gpios_hw_size))
 		pr_err("failed to request I2C gpios\n");
 
 	qup_device_i2c.dev.platform_data = &qup_i2c_pdata;
@@ -6678,14 +6754,11 @@ out3:
 static void __init mogami_temp_fixups(void)
 {
 printk(KERN_NOTICE "mogami_temp_fixups 1\n");
-	//vreg_helper_off("gp3");	/* L0 */
-printk(KERN_NOTICE "mogami_temp_fixups 2\n");
-	//vreg_helper_off("gp5");	/* L23 */
-printk(KERN_NOTICE "mogami_temp_fixups 3\n");
+	vreg_helper_off("gp3");	/* L0 */
+	vreg_helper_off("gp5");	/* L23 */
 	gpio_set_value(46, 1);	/* SPI_CS0_N */
 	gpio_set_value(134, 1);	/* UART1DM_RFR_N */
 	gpio_set_value(137, 1);	/* UART1DM_TXD */
-printk(KERN_NOTICE "mogami_temp_fixups 4\n");
 }
 
 static void __init shared_vreg_on(void)
@@ -7068,125 +7141,6 @@ static struct platform_device flip_switch_device = {
 	}
 };
 
-static struct regulator_bulk_data regs_tma300[] = {
-	{ .supply = "gp6", .min_uV = 3050000, .max_uV = 3100000 },
-	{ .supply = "gp7", .min_uV = 1800000, .max_uV = 1800000 },
-};
-
-static int tma300_power(int vreg_on)
-{
-	int rc;
-
-	rc = vreg_on ?
-		regulator_bulk_enable(ARRAY_SIZE(regs_tma300), regs_tma300) :
-		regulator_bulk_disable(ARRAY_SIZE(regs_tma300), regs_tma300);
-
-	if (rc)
-		pr_err("%s: could not %sable regulators: %d\n",
-				__func__, vreg_on ? "en" : "dis", rc);
-	return rc;
-}
-
-#define TS_GPIO_IRQ 150
-
-static int tma300_dev_setup(bool enable)
-{
-	int rc;
-
-	if (enable) {
-		rc = regulator_bulk_get(NULL, ARRAY_SIZE(regs_tma300),
-				regs_tma300);
-
-		if (rc) {
-			pr_err("%s: could not get regulators: %d\n",
-					__func__, rc);
-			goto out;
-		}
-
-		rc = regulator_bulk_set_voltage(ARRAY_SIZE(regs_tma300),
-				regs_tma300);
-
-		if (rc) {
-			pr_err("%s: could not set voltages: %d\n",
-					__func__, rc);
-			goto reg_free;
-		}
-
-		/* enable interrupt gpio */
-		rc = gpio_tlmm_config(GPIO_CFG(TS_GPIO_IRQ, 0, GPIO_CFG_INPUT,
-				GPIO_CFG_PULL_UP, GPIO_CFG_6MA), GPIO_CFG_ENABLE);
-		if (rc) {
-			pr_err("%s: Could not configure gpio %d\n",
-					__func__, TS_GPIO_IRQ);
-			goto reg_free;
-		}
-
-		/* virtual keys */
-		tma300_vkeys_attr.attr.name = "virtualkeys.msm_tma300_ts";
-		properties_kobj = kobject_create_and_add("board_properties",
-					NULL);
-		if (!properties_kobj) {
-			pr_err("%s: failed to create a kobject "
-					"for board_properties\n", __func__);
-			rc = -ENOMEM;
-			goto reg_free;
-		}
-		rc = sysfs_create_group(properties_kobj,
-				&tma300_properties_attr_group);
-		if (rc) {
-			pr_err("%s: failed to create a sysfs entry %s\n",
-					__func__, tma300_vkeys_attr.attr.name);
-			goto kobj_free;
-		}
-	} else {
-		regulator_bulk_free(ARRAY_SIZE(regs_tma300), regs_tma300);
-		/* destroy virtual keys */
-		if (properties_kobj) {
-			sysfs_remove_group(properties_kobj,
-				&tma300_properties_attr_group);
-			kobject_put(properties_kobj);
-		}
-	}
-	return 0;
-
-kobj_free:
-	kobject_put(properties_kobj);
-	properties_kobj = NULL;
-reg_free:
-	regulator_bulk_free(ARRAY_SIZE(regs_tma300), regs_tma300);
-out:
-	return rc;
-}
-
-static struct cy8c_ts_platform_data cy8ctma300_pdata = {
-	.power_on = tma300_power,
-	.dev_setup = tma300_dev_setup,
-	.ts_name = "msm_tma300_ts",
-	.dis_min_x = 0,
-	.dis_max_x = 479,
-	.dis_min_y = 0,
-	.dis_max_y = 799,
-	.res_x	 = 479,
-	.res_y	 = 1009,
-	.min_tid = 1,
-	.max_tid = 255,
-	.min_touch = 0,
-	.max_touch = 255,
-	.min_width = 0,
-	.max_width = 255,
-	.invert_y = 1,
-	.nfingers = 4,
-	.irq_gpio = TS_GPIO_IRQ,
-	.resout_gpio = -1,
-};
-
-static struct i2c_board_info cy8ctma300_board_info[] = {
-	{
-		I2C_BOARD_INFO("cy8ctma300", 0x2),
-		.platform_data = &cy8ctma300_pdata,
-	}
-};
-
 static void __init msm7x30_init(void)
 {
 	int rc;
@@ -7203,7 +7157,6 @@ static void __init msm7x30_init(void)
 	wlan_init_seq();
 	msm_clock_init(&msm7x30_clock_init_data);
 printk(KERN_NOTICE "msm7x30_init 1\n");
-	mogami_temp_fixups();
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
 	msm7x30_init_uart3();
 #endif
@@ -7255,6 +7208,7 @@ printk(KERN_NOTICE "msm7x30_init 8\n");
 	platform_add_devices(msm_footswitch_devices,
 			     msm_num_footswitch_devices);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
+	mogami_temp_fixups();
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
@@ -7263,19 +7217,11 @@ printk(KERN_NOTICE "msm7x30_init 8\n");
 #endif
 printk(KERN_NOTICE "msm7x30_init 9\n");
 	msm7x30_init_mmc();
+	msm_qsd_spi_init();
 printk(KERN_NOTICE "msm7x30_init 10\n");
 	msm7x30_init_nand();
-	msm_qsd_spi_init();
 printk(KERN_NOTICE "msm7x30_init 11\n");
-#ifdef CONFIG_SPI_QSD
-	if (machine_is_msm7x30_fluid())
-		spi_register_board_info(lcdc_sharp_spi_board_info,
-			ARRAY_SIZE(lcdc_sharp_spi_board_info));
-	else
-		spi_register_board_info(lcdc_toshiba_spi_board_info,
-			ARRAY_SIZE(lcdc_toshiba_spi_board_info));
-#endif
-printk(KERN_NOTICE "msm7x30_init 12\n");
+
 	atv_dac_power_init();
 #ifdef CONFIG_BOSCH_BMA150
 	sensors_ldo_init();
@@ -7297,18 +7243,14 @@ printk(KERN_NOTICE "msm7x30_init 13\n");
 #endif
 	hw_id_class_init();
 	shared_vreg_on();
-
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
+	cypress_touch_gpio_init();
+#endif /* CONFIG_TOUCHSCREEN_CY8CTMA300_SPI */
 	msm_init_pmic_vibrator();
 
 	i2c_register_board_info(0, msm_i2c_board_info,
 			ARRAY_SIZE(msm_i2c_board_info));
 
-	if (!machine_is_msm8x55_svlte_ffa() && !machine_is_msm7x30_fluid())
-		marimba_pdata.tsadc = &marimba_tsadc_pdata;
-
-	if (machine_is_msm7x30_fluid())
-		i2c_register_board_info(0, cy8info,
-					ARRAY_SIZE(cy8info));
 #ifdef CONFIG_BOSCH_BMA150
 	if (machine_is_msm7x30_fluid())
 		i2c_register_board_info(0, bma150_board_info,
@@ -7323,6 +7265,8 @@ printk(KERN_NOTICE "msm7x30_init 13\n");
 
 	i2c_register_board_info(4 /* QUP ID */, msm_camera_boardinfo,
 				ARRAY_SIZE(msm_camera_boardinfo));
+	spi_register_board_info(spi_board_info,
+		ARRAY_SIZE(spi_board_info));
 
 	bt_power_init();
 #ifdef CONFIG_I2C_SSBI
@@ -7343,17 +7287,6 @@ printk(KERN_NOTICE "msm7x30_init 13\n");
 		platform_device_register(&flip_switch_device);
 
 	pm8058_gpios_init();
-
-	if (machine_is_msm7x30_fluid()) {
-		/* Initialize platform data for fluid v2 hardware */
-		if (SOCINFO_VERSION_MAJOR(
-				socinfo_get_platform_version()) == 2) {
-			cy8ctma300_pdata.res_y = 920;
-			cy8ctma300_pdata.invert_y = 0;
-		}
-		i2c_register_board_info(0, cy8ctma300_board_info,
-			ARRAY_SIZE(cy8ctma300_board_info));
-	}
 
 	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa()) {
 		rc = gpio_tlmm_config(usb_hub_gpio_cfg_value, GPIO_CFG_ENABLE);
