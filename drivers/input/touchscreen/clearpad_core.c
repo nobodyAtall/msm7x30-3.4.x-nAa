@@ -10,6 +10,8 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/slab.h>
+#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/irq.h>
 #include <linux/input.h>
@@ -1425,7 +1427,8 @@ static int synaptics_clearpad_command_open(struct synaptics_clearpad *this,
 	return rc;
 }
 
-static ssize_t synaptics_clearpad_fwdata_write(struct kobject *kobj,
+static ssize_t synaptics_clearpad_fwdata_write(struct file *file,
+		struct kobject *kobj,
 		struct bin_attribute *bin_attr,
 		char *buf, loff_t pos, size_t size)
 {

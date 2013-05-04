@@ -106,6 +106,10 @@
 #include <linux/mddi_auo_s6d05a1_hvga.h>
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD
+#include <linux/clearpad.h>
+#endif
+
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_SII_HVGA_LCD) || \
@@ -3940,6 +3944,12 @@ static struct akm8975_platform_data akm8975_platform_data = {
 };
 
 static struct i2c_board_info msm_i2c_board_info[] = {
+#ifdef CONFIG_TOUCHSCREEN_CLEARPAD_I2C
+	{
+		I2C_BOARD_INFO(CLEARPADI2C_NAME, 0x58 >> 1),
+		.platform_data = &clearpad_platform_data,
+	},
+#endif
 	{
 		I2C_BOARD_INFO("m33c01", OPTNAV_I2C_SLAVE_ADDR),
 		.irq		= MSM_GPIO_TO_INT(OPTNAV_IRQ),
