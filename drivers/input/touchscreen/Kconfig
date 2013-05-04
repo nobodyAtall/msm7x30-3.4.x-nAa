@@ -919,6 +919,124 @@ config TOUCHSCREEN_CY8C_TS
 	  To compile this driver as a module, choose M here: the
 	  module will be called cy8c_ts.
 
+config TOUCHSCREEN_CY8CTMA300
+	default y
+	depends on (MACH_SEMC_ZEUS || MACH_SEMC_PHOENIX) && SPI
+        tristate "Cypress CY8CTMA300 hardware"
+        help
+          Capactive touchscreen for SEMC devices using new Cypress hardware.
+
+config TOUCHSCREEN_CY8CTMA300_SPI
+	default n
+	depends on SPI_MASTER
+	tristate "Cypress CY8CTMA300 spi touchscreen"
+	help
+	  Say Y here if you have a Cypress CY8CTMA300 touchscreen
+	  connected to your system's spi bus.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cy8ctma300_spi.
+
+config CY8CTMA300_SPI_MAX_X
+	int "The maximum x coordinate of Touchscreen"
+	default "480"
+	depends on TOUCHSCREEN_CY8CTMA300_SPI
+	help
+	  The default value is 480. Change this according to the LCD
+	  screen resolution.
+
+config CY8CTMA300_SPI_MAX_Y
+	int "The maximum y coordinate of Touchscreen"
+	default "854"
+	depends on TOUCHSCREEN_CY8CTMA300_SPI
+	help
+	  The default value is 854. Change this according to the LCD
+	  screen resolution.
+
+config CY8CTMA300_SPI_MAX_Z
+	int "The maximum z value (pressure) of Touchscreen"
+	default "255"
+	depends on TOUCHSCREEN_CY8CTMA300_SPI
+	help
+	  The default value is 255 (the maximum value).
+
+config CY8CTMA300_SPI_WIDTH_MAJOR
+	int "Pseudo value for ABS_MT_WIDTH_MAJOR reporting"
+	default "10"
+	depends on TOUCHSCREEN_CY8CTMA300_SPI
+	help
+	  The device doesn't have actual tool width.
+	  This pseudo value is used to report ABS_MT_WIDTH_MAJOR.
+
+config TOUCHSCREEN_CYTTSP_I2C
+	default n
+	tristate "Cypress TTSP i2c touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have a Cypress TTSP touchscreen
+	  connected to your system's i2c bus.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cyttsp_i2c.
+
+config TOUCHSCREEN_CYTTSP_SPI
+	default n
+	tristate "Cypress TTSP spi touchscreen"
+	depends on SPI_MASTER
+	help
+	  Say Y here if you have a Cypress TTSP touchscreen
+	  connected to your system's spi bus.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cyttsp_spi.
+
+config TOUCHSCREEN_CYTTSP_CORE
+	default y
+	bool "Cypress TTSP touchscreen core"
+	depends on TOUCHSCREEN_CYTTSP_I2C || TOUCHSCREEN_CYTTSP_SPI
+	help
+	  Always activated for Cypress TTSP touchscreen
+
+config TOUCHSCREEN_CYTTSP_MAX_X
+	default 479
+	int "Cypress TTSP touchscreen X resolution"
+	depends on TOUCHSCREEN_CYTTSP_CORE
+
+config TOUCHSCREEN_CYTTSP_MAX_Y
+	default 853
+	int "Cypress TTSP touchscreen Y resolution"
+	depends on TOUCHSCREEN_CYTTSP_CORE
+
+config TOUCHSCREEN_CYTTSP_MAX_Z
+	default 100
+	int "Cypress TTSP touchscreen Z resolution"
+	depends on TOUCHSCREEN_CYTTSP_CORE
+
+config TOUCHSCREEN_CYTTSP_KEY
+	default n
+	bool "Cypress TTSP touchkey"
+	depends on TOUCHSCREEN_CYTTSP_CORE
+	help
+	  Activated for Cypress TTSP touchkey function
+
+config TOUCHSCREEN_CYTTSP_CHARGER_MODE
+	default n
+	bool "Cypress TTSP touch CHARGER MODE"
+	depends on TOUCHSCREEN_CYTTSP_CORE
+	help
+	  Activated for Cypress TTSP touch charger mode
+
+config TOUCHSCREEN_CYTTSP_ACT_INTRVL
+	default 0
+	int "Cypress TTSP active interval"
+	depends on TOUCHSCREEN_CYTTSP_CORE
+
 config TOUCHSCREEN_CYTTSP_I2C_QC
        tristate "Cypress TTSP based touchscreens"
        depends on I2C
