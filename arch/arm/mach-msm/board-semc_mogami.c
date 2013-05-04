@@ -156,7 +156,6 @@
 #include <mach/qdsp5v2/audio_dev_ctl.h>
 #include <mach/sdio_al.h>
 #include "smd_private.h"
-#include <linux/bma150.h>
 
 #include <linux/leds-as3676_semc.h>
 #include "board-semc_mogami-leds.h"
@@ -870,6 +869,21 @@ static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
 		.name			= "pm8058-core",
 		.platform_data		= &pm8058_7x30_data,
 	},
+};
+#endif
+
+#ifdef CONFIG_INPUT_BMA150_NG
+static int bma150_gpio_setup(bool request)
+{
+	if (request)
+		return gpio_request(BMA150_GPIO, "bma150_irq");
+	else
+		gpio_free(BMA150_GPIO);
+	return 0;
+}
+
+struct bma150_platform_data bma150_ng_platform_data = {
+	.gpio_setup = bma150_gpio_setup,
 };
 #endif
 
@@ -3820,21 +3834,6 @@ static void bma150_gpio_teardown(struct device *dev)
 static struct bma150_platform_data bma150_platform_data = {
 	.setup    = bma150_gpio_setup,
 	.teardown = bma150_gpio_teardown,
-};
-#endif
-
-#ifdef CONFIG_INPUT_BMA150_NG
-static int bma150_gpio_setup(bool request)
-{
-	if (request)
-		return gpio_request(BMA150_GPIO, "bma150_irq");
-	else
-		gpio_free(BMA150_GPIO);
-	return 0;
-}
-
-struct bma150_platform_data bma150_ng_platform_data = {
-	.gpio_setup = bma150_gpio_setup,
 };
 #endif
 

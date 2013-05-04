@@ -21,6 +21,7 @@
  * Protocol driver for Bosch BMA150 accelerometer
  *
  */
+#include <linux/slab.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
