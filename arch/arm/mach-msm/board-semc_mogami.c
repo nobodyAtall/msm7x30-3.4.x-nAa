@@ -579,7 +579,7 @@ static int pm8058_gpios_init(void)
 		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1),
 		{
 			.direction      = PM_GPIO_DIR_IN,
-			.pull           = PM_GPIO_PULL_NO,
+			.pull           = PM_GPIO_PULL_UP_1P5,
 			.vin_sel        = 2,
 			.function       = PM_GPIO_FUNC_NORMAL,
 			.inv_int_pol    = 0,
@@ -5740,6 +5740,13 @@ static uint32_t msm_sdcc_setup_gpio(int dev_id, unsigned int enable)
 		if (curr->sleep_cfg_data) {
 			msm_gpios_enable(curr->sleep_cfg_data, curr->size);
 			msm_gpios_free(curr->sleep_cfg_data, curr->size);
+			if (dev_id == 4) {
+				/*
+				 * 200 milliseconds delay should be sufficient to allow
+				 * microSD reaches zero voltage when uSD is power off.
+				 */
+				msleep(200);
+			}
 		} else {
 			msm_gpios_disable_free(curr->cfg_data, curr->size);
 		}
