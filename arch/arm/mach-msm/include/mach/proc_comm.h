@@ -146,8 +146,13 @@ enum {
 	PCOM_OEM_TEST_CMD = PCOM_OEM_FIRST_CMD,
 
 	/* add OEM PROC COMM commands here */
-
-	PCOM_OEM_LAST = PCOM_OEM_TEST_CMD,
+	/* BEGIN: ID:s for 3.5mm Audio Jack driver */
+	PCOM_OEM_GET_HEADSET_ADC_VALUE,
+	PCOM_OEM_ENABLE_HSED_ISR,
+	PCOM_OEM_GET_CRADLE_ADC_VALUE,
+	/* END: ID:s for 3.5mm Audio Jack driver */
+ 
+	PCOM_OEM_LAST = PCOM_OEM_GET_CRADLE_ADC_VALUE,
 };
 
 enum {

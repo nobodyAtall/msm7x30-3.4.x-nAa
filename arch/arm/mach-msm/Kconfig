@@ -1813,6 +1813,13 @@ config SURF_FFA_GPIO_KEYPAD
 	help
 	  Select if the GPIO keypad is attached.
 
+config MOGAMI_SLIDER
+	bool "Mogami slider"
+	depends on INPUT_GPIO = "y"
+	default n
+	help
+	  Select if GPIO slider switch is attached.
+
 config MOGAMI_VIBRATOR
 	bool "Mogami Vibrator"
 	default n
@@ -2219,6 +2226,22 @@ config MSM_MEMORY_DUMP
 		subsystems to register respective dump regions. At the time
 		of deadlocks or cpu hangs these dump regions are captured to
 		give a snapshot of the system at the time of the crash.
+
+config SEMC_RPC_SERVER_HANDSET
+	bool "Enable SEMC handset rpc dispatcher"
+	depends on ARCH_MSM7X30 && MSM_ONCRPCROUTER && !MSM_RPCSERVER_HANDSET
+	default y
+	help
+	 This enables the SEMC version of rpc_server_handset message dispatcher.
+	 This cannot cooperate with MSM_RPCSERVER_HANDSET. If this is set,
+	 an error will be generated.
+
+config SIMPLE_REMOTE_PLATFORM
+	bool "Simple Remote platform specific driver"
+	default n
+	help
+	  Provides support for detecting 3.5mm audio jack, such as wired
+	  headset. This is the platform specific layer.
 
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
