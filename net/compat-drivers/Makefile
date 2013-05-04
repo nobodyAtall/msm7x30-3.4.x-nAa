@@ -84,12 +84,12 @@ $(error "The path to this compat-drivers directory has spaces in it." \
 	"Please put it somewhere where there is no space")
 endif
 $(shell cat $(PWD)/net/compat-drivers/.compat_base)
-export CFLAGS += \
-        -DCOMPAT_BASE="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base)\"" \
-        -DCOMPAT_BASE_TREE="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base_tree)\"" \
-        -DCOMPAT_BASE_TREE_VERSION="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base_tree_version)\"" \
-        -DCOMPAT_PROJECT="\"Compat-drivers\"" \
-        -DCOMPAT_VERSION="\"$(shell cat $(PWD)/net/compat-drivers/.compat_version)\""
+#export CFLAGS += \
+#        -DCOMPAT_BASE="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base)\"" \
+#        -DCOMPAT_BASE_TREE="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base_tree)\"" \
+#        -DCOMPAT_BASE_TREE_VERSION="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base_tree_version)\"" \
+#        -DCOMPAT_PROJECT="\"Compat-drivers\"" \
+#        -DCOMPAT_VERSION="\"$(shell cat $(PWD)/net/compat-drivers/.compat_version)\""
 
 # These exported as they are used by the scripts
 # to check config and compat autoconf

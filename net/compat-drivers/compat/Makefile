@@ -15,11 +15,7 @@ obj-y += compat.o \
 	compat-3.8.o \
 	compat-3.7.o \
 	compat-3.5.o \
-	user_namespace.o \
-	compat-3.4.o \
-	compat-3.3.o \
-	compat-3.2.o \
-	compat-3.1.o
+	user_namespace.o
 
 else
 obj-m += compat.o

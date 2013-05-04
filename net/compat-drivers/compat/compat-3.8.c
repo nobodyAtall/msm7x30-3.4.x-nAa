@@ -267,7 +267,7 @@ static const struct hid_device_id hid_mouse_ignore_list[] = {
 	{ }
 };
 
-static bool hid_match_one_id(struct hid_device *hdev,
+/*static bool hid_match_one_id(struct hid_device *hdev,
 		const struct hid_device_id *id)
 {
 	return (id->bus == HID_BUS_ANY || id->bus == hdev->bus) &&
@@ -286,7 +286,7 @@ const struct hid_device_id *hid_match_id(struct hid_device *hdev,
 			return id;
 
 	return NULL;
-}
+}*/
 
 bool hid_ignore(struct hid_device *hdev)
 {
