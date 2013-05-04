@@ -304,6 +304,8 @@ obj-$(CONFIG_MACH_SEMC_SMULTRON) += board-semc_mogami.o leds-smultron.o vibrator
 obj-$(CONFIG_MACH_SEMC_COCONUT) += board-semc_mogami.o leds-coconut.o vibrator-mogami.o charger-coconut.o board-semc_mogami-wifi.o touch-coconut.o gpio-coconut.o keypad-coconut.o board-semc_mogami-rfkill.o
 obj-$(CONFIG_MACH_SEMC_HAIDA) += board-semc_mogami.o leds-haida.o vibrator-mogami.o charger-haida.o board-semc_mogami-rfkill.o keypad-haida.o gpio-haida.o board-semc_mogami-wifi.o
 
+obj-$(CONFIG_MACH_SEMC_MANGO) += board-semc_mogami.o leds-mango.o vibrator-mogami.o charger-mango.o board-semc_mogami-wifi.o touch-mango.o gpio-mango.o keypad-mango.o board-semc_mogami-rfkill.o 
+
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-mmc.o board-sapphire-wifi.o
