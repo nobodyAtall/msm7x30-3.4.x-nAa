@@ -72,6 +72,9 @@
 #include <mach/msm_memtypes.h>
 #include <linux/i2c/akm8975.h>
 #include <linux/cyttsp-qc.h>
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
+#include <linux/spi/cy8ctma300_touch.h>
+#endif
 #ifdef CONFIG_INPUT_BMA150
 #include <linux/bma150.h>
 #endif
