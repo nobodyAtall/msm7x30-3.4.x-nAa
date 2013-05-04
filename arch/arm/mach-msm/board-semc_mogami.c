@@ -5452,7 +5452,8 @@ static struct platform_device *devices[] __initdata = {
 	&msm_batt_device,
 	&msm_adc_device,
 	&msm_ebi0_thermal,
-	&msm_ebi1_thermal
+	&msm_ebi1_thermal,
+	&msm_adsp_device,
 };
 
 static void
