@@ -2311,6 +2311,15 @@ config SIMPLE_REMOTE_PLATFORM
 	  Provides support for detecting 3.5mm audio jack, such as wired
 	  headset. This is the platform specific layer.
 
+config SIMPLE_REMOTE_INVERT_PLUG_DETECTION_STATE
+	bool "Invert state of plug detection"
+	depends on SIMPLE_REMOTE_PLATFORM
+	help
+	  This option enables to invert headphone plug detection state,
+	  currently the plug detection state was low state when headphone
+	  was inserted, but it is high state on some products, so that
+	  we need invert this state on these products.
+
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
 	depends on ARCH_MSM8X60 || ARCH_MSM8960 || ARCH_MSM9615
