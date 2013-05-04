@@ -2992,10 +2992,10 @@ static struct sii9024_platform_data sii9024_platform_data = {
 static void semc_mogami_lcd_regulators_on(void)
 {
 	vreg_helper_on("gp7",1800);  /* L8 */
-#ifdef CONFIG_MACH_SEMC_ANZU
-	vreg_helper_on("gp6",2850);  /* L15 */
-#else
+#ifdef CONFIG_MSM_UNDERVOLT_LCD
 	vreg_helper_on("gp6",2300);  /* L15 */
+#else
+	vreg_helper_on("gp6",2850);  /* L15 */
 #endif
 }
 
@@ -3897,7 +3897,11 @@ static struct bma250_platform_data bma250_platform_data = {
 
 #ifdef CONFIG_INPUT_APDS9702
 #define APDS9702_DOUT_GPIO   88
+#ifdef CONFIG_MSM_UNDERVOLT_PROXIMITY
 #define APDS9702_VDD_VOLTAGE 2400
+#else
+#define APDS9702_VDD_VOLTAGE 2900
+#endif
 #define APDS9702_WAIT_TIME   5000
 
 static int apds9702_gpio_setup(int request)
@@ -6358,7 +6362,11 @@ static uint32_t wifi_setup_power(struct device *dv, unsigned int vdd)
 }
 
 static struct mmc_platform_data msm7x30_sdc3_data = {
+#ifdef CONFIG_MSM_UNDERVOLT_WIFI
 	.ocr_mask	= MMC_VDD_20_21 | MMC_VDD_21_22,
+#else
+	.ocr_mask	= MMC_VDD_27_28 | MMC_VDD_28_29,
+#endif
 	.translate_vdd	= wifi_setup_power,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA | MMC_CAP_POWER_OFF_CARD,
 	.sdiowakeup_irq = MSM_GPIO_TO_INT(118),
@@ -6534,12 +6542,16 @@ static void __init mogami_temp_fixups(void)
 
 static void __init shared_vreg_on(void)
 {
+#ifdef CONFIG_MSM_UNDERVOLT_TOUCH
 	vreg_helper_on(VREG_L20, 2800);
-	vreg_helper_on(VREG_L10, 2600);
-#ifdef CONFIG_MACH_SEMC_ANZU
-	vreg_helper_on(VREG_L15, 2900);
 #else
+	vreg_helper_on(VREG_L20, 3050);
+#endif
+	vreg_helper_on(VREG_L10, 2600);
+#ifdef CONFIG_MSM_UNDERVOLT_LCD
 	vreg_helper_on(VREG_L15, 2300);
+#else
+	vreg_helper_on(VREG_L15, 2900);
 #endif
 	vreg_helper_on(VREG_L8, 1800);
 }
