@@ -194,7 +194,11 @@
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
 
-#define MSM_PMEM_SF_SIZE	0x1600000
+#ifdef CONFIG_FB_MSM_HDPI
+#define MSM_PMEM_SF_SIZE  0x1C00000
+#else
+#define MSM_PMEM_SF_SIZE  0x1600000
+#endif
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_PRIM_BUF_SIZE   (864 * 480 * 4 * 3) /* 4bpp * 3 Pages */
 #else
