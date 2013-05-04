@@ -725,6 +725,15 @@ config MACH_SEMC_URUSHI
 	help
 	  Support for the SonyEricsson Urushi devices.
 
+config MACH_SEMC_ANZU
+	depends on ARCH_MSM7X30
+	depends on !MSM_STACKED_MEMORY
+	select SUPPORT_ALIEN_USB_CHARGER
+	default y
+	bool "SonyEricsson Anzu"
+	help
+	  Support for the SonyEricsson Anzu devices.
+
 config MACH_SAPPHIRE
 	depends on ARCH_MSM7X01A
 	default n
