@@ -1096,15 +1096,6 @@ struct msm_camera_device_platform_data msm_camera_device_data = {
 	.ioclk.vfe_clk_rate  = 147456000,
 };
 
-static struct msm_camera_sensor_flash_src msm_flash_src_pwm = {
-	.flash_sr_type = MSM_CAMERA_FLASH_SRC_PWM,
-	._fsrc.pwm_src.freq  = 1000,
-	._fsrc.pwm_src.max_load = 300,
-	._fsrc.pwm_src.low_load = 30,
-	._fsrc.pwm_src.high_load = 100,
-	._fsrc.pwm_src.channel = 7,
-};
-
 #ifdef CONFIG_MT9D112
 static struct msm_camera_sensor_flash_data flash_mt9d112 = {
 	.flash_type = MSM_CAMERA_FLASH_LED,
@@ -5118,6 +5109,43 @@ static struct msm_panel_common_pdata mdp_pdata = {
 	.mem_hid = MEMTYPE_EBI0,
 };
 
+#ifdef CONFIG_BT
+static uint32_t bt_config_on_gpios[] = {
+	GPIO_CFG(134, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
+	GPIO_CFG(135, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(136, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(137, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
+	GPIO_CFG(103, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static uint32_t bt_config_off_gpios[] = {
+	GPIO_CFG(134, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(135, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(136, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(137, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	GPIO_CFG(103, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+};
+
+static int bluetooth_power(int on)
+{
+	if (on) {
+		config_gpio_table(bt_config_on_gpios,
+				  ARRAY_SIZE(bt_config_on_gpios));
+		gpio_set_value(103, 1);
+	} else {
+		gpio_set_value(103, 0);
+		config_gpio_table(bt_config_off_gpios,
+				  ARRAY_SIZE(bt_config_off_gpios));
+	}
+	return 0;
+}
+
+static struct platform_device mogami_device_rfkill = {
+	.name = "mogami-rfkill",
+	.dev.platform_data = &bluetooth_power,
+};
+#endif
+
 static struct regulator *atv_s4, *atv_ldo9;
 
 static int __init atv_dac_power_init(void)
@@ -5300,480 +5328,6 @@ static void __init msm_fb_add_devices(void)
 #endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 }
 
-#if defined(CONFIG_MARIMBA_CORE) && \
-   (defined(CONFIG_MSM_BT_POWER) || defined(CONFIG_MSM_BT_POWER_MODULE))
-static struct platform_device msm_bt_power_device = {
-	.name = "bt_power",
-	.id     = -1
-};
-
-enum {
-	BT_RFR,
-	BT_CTS,
-	BT_RX,
-	BT_TX,
-};
-
-static struct msm_gpio bt_config_power_on[] = {
-	{ GPIO_CFG(134, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL,   GPIO_CFG_2MA),
-		"UART1DM_RFR" },
-	{ GPIO_CFG(135, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL,   GPIO_CFG_2MA),
-		"UART1DM_CTS" },
-	{ GPIO_CFG(136, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL,   GPIO_CFG_2MA),
-		"UART1DM_Rx" },
-	{ GPIO_CFG(137, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL,   GPIO_CFG_2MA),
-		"UART1DM_Tx" }
-};
-
-static struct msm_gpio bt_config_power_off[] = {
-	{ GPIO_CFG(134, 0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN,   GPIO_CFG_2MA),
-		"UART1DM_RFR" },
-	{ GPIO_CFG(135, 0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN,   GPIO_CFG_2MA),
-		"UART1DM_CTS" },
-	{ GPIO_CFG(136, 0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN,   GPIO_CFG_2MA),
-		"UART1DM_Rx" },
-	{ GPIO_CFG(137, 0, GPIO_CFG_INPUT,  GPIO_CFG_PULL_DOWN,   GPIO_CFG_2MA),
-		"UART1DM_Tx" }
-};
-
-static u8 bahama_version;
-
-static struct regulator_bulk_data regs_bt_marimba[] = {
-	{ .supply = "smps3", .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "smps2", .min_uV = 1300000, .max_uV = 1300000 },
-	{ .supply = "ldo24", .min_uV = 1200000, .max_uV = 1200000 },
-	{ .supply = "ldo13", .min_uV = 2900000, .max_uV = 3050000 },
-};
-
-static struct regulator_bulk_data regs_bt_bahama_v1[] = {
-	{ .supply = "smps3", .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "ldo7",  .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "smps2", .min_uV = 1300000, .max_uV = 1300000 },
-	{ .supply = "ldo13", .min_uV = 2900000, .max_uV = 3050000 },
-};
-
-static struct regulator_bulk_data regs_bt_bahama_v2[] = {
-	{ .supply = "smps3", .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "ldo7",  .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "ldo13", .min_uV = 2900000, .max_uV = 3050000 },
-};
-
-static struct regulator_bulk_data *regs_bt;
-static int regs_bt_count;
-
-static int marimba_bt(int on)
-{
-	int rc;
-	int i;
-	struct marimba config = { .mod_id = MARIMBA_SLAVE_ID_MARIMBA };
-
-	struct marimba_config_register {
-		u8 reg;
-		u8 value;
-		u8 mask;
-	};
-
-	struct marimba_variant_register {
-		const size_t size;
-		const struct marimba_config_register *set;
-	};
-
-	const struct marimba_config_register *p;
-
-	u8 version;
-
-	const struct marimba_config_register v10_bt_on[] = {
-		{ 0xE5, 0x0B, 0x0F },
-		{ 0x05, 0x02, 0x07 },
-		{ 0x06, 0x88, 0xFF },
-		{ 0xE7, 0x21, 0x21 },
-		{ 0xE3, 0x38, 0xFF },
-		{ 0xE4, 0x06, 0xFF },
-	};
-
-	const struct marimba_config_register v10_bt_off[] = {
-		{ 0xE5, 0x0B, 0x0F },
-		{ 0x05, 0x08, 0x0F },
-		{ 0x06, 0x88, 0xFF },
-		{ 0xE7, 0x00, 0x21 },
-		{ 0xE3, 0x00, 0xFF },
-		{ 0xE4, 0x00, 0xFF },
-	};
-
-	const struct marimba_config_register v201_bt_on[] = {
-		{ 0x05, 0x08, 0x07 },
-		{ 0x06, 0x88, 0xFF },
-		{ 0xE7, 0x21, 0x21 },
-		{ 0xE3, 0x38, 0xFF },
-		{ 0xE4, 0x06, 0xFF },
-	};
-
-	const struct marimba_config_register v201_bt_off[] = {
-		{ 0x05, 0x08, 0x07 },
-		{ 0x06, 0x88, 0xFF },
-		{ 0xE7, 0x00, 0x21 },
-		{ 0xE3, 0x00, 0xFF },
-		{ 0xE4, 0x00, 0xFF },
-	};
-
-	const struct marimba_config_register v210_bt_on[] = {
-		{ 0xE9, 0x01, 0x01 },
-		{ 0x06, 0x88, 0xFF },
-		{ 0xE7, 0x21, 0x21 },
-		{ 0xE3, 0x38, 0xFF },
-		{ 0xE4, 0x06, 0xFF },
-	};
-
-	const struct marimba_config_register v210_bt_off[] = {
-		{ 0x06, 0x88, 0xFF },
-		{ 0xE7, 0x00, 0x21 },
-		{ 0xE9, 0x00, 0x01 },
-		{ 0xE3, 0x00, 0xFF },
-		{ 0xE4, 0x00, 0xFF },
-	};
-
-	const struct marimba_variant_register bt_marimba[2][4] = {
-		{
-			{ ARRAY_SIZE(v10_bt_off), v10_bt_off },
-			{ 0, NULL },
-			{ ARRAY_SIZE(v201_bt_off), v201_bt_off },
-			{ ARRAY_SIZE(v210_bt_off), v210_bt_off }
-		},
-		{
-			{ ARRAY_SIZE(v10_bt_on), v10_bt_on },
-			{ 0, NULL },
-			{ ARRAY_SIZE(v201_bt_on), v201_bt_on },
-			{ ARRAY_SIZE(v210_bt_on), v210_bt_on }
-		}
-	};
-
-	on = on ? 1 : 0;
-
-	rc = marimba_read_bit_mask(&config, 0x11,  &version, 1, 0x1F);
-	if (rc < 0) {
-		printk(KERN_ERR
-			"%s: version read failed: %d\n",
-			__func__, rc);
-		return rc;
-	}
-
-	if ((version >= ARRAY_SIZE(bt_marimba[on])) ||
-	    (bt_marimba[on][version].size == 0)) {
-		printk(KERN_ERR
-			"%s: unsupported version\n",
-			__func__);
-		return -EIO;
-	}
-
-	p = bt_marimba[on][version].set;
-
-	printk(KERN_INFO "%s: found version %d\n", __func__, version);
-
-	for (i = 0; i < bt_marimba[on][version].size; i++) {
-		u8 value = (p+i)->value;
-		rc = marimba_write_bit_mask(&config,
-			(p+i)->reg,
-			&value,
-			sizeof((p+i)->value),
-			(p+i)->mask);
-		if (rc < 0) {
-			printk(KERN_ERR
-				"%s: reg %d write failed: %d\n",
-				__func__, (p+i)->reg, rc);
-			return rc;
-		}
-		printk(KERN_INFO "%s: reg 0x%02x value 0x%02x mask 0x%02x\n",
-				__func__, (p+i)->reg,
-				value, (p+i)->mask);
-	}
-	return 0;
-}
-
-static int bahama_bt(int on)
-{
-	int rc;
-	int i;
-	struct marimba config = { .mod_id = SLAVE_ID_BAHAMA };
-
-	struct bahama_variant_register {
-		const size_t size;
-		const struct bahama_config_register *set;
-	};
-
-	const struct bahama_config_register *p;
-
-
-	const struct bahama_config_register v10_bt_on[] = {
-		{ 0xE9, 0x00, 0xFF },
-		{ 0xF4, 0x80, 0xFF },
-		{ 0xF0, 0x06, 0xFF },
-		{ 0xE4, 0x00, 0xFF },
-		{ 0xE5, 0x00, 0x0F },
-#ifdef CONFIG_WLAN
-		{ 0xE6, 0x38, 0x7F },
-		{ 0xE7, 0x06, 0xFF },
-#endif
-		{ 0x11, 0x13, 0xFF },
-		{ 0xE9, 0x21, 0xFF },
-		{ 0x01, 0x0C, 0x1F },
-		{ 0x01, 0x08, 0x1F },
-	};
-
-	const struct bahama_config_register v20_bt_on_fm_off[] = {
-		{ 0x11, 0x0C, 0xFF },
-		{ 0x13, 0x01, 0xFF },
-		{ 0xF4, 0x80, 0xFF },
-		{ 0xF0, 0x00, 0xFF },
-		{ 0xE9, 0x00, 0xFF },
-#ifdef CONFIG_WLAN
-		{ 0x81, 0x00, 0xFF },
-		{ 0x82, 0x00, 0xFF },
-		{ 0xE6, 0x38, 0x7F },
-		{ 0xE7, 0x06, 0xFF },
-#endif
-		{ 0xE9, 0x21, 0xFF }
-	};
-
-	const struct bahama_config_register v20_bt_on_fm_on[] = {
-		{ 0x11, 0x0C, 0xFF },
-		{ 0x13, 0x01, 0xFF },
-		{ 0xF4, 0x86, 0xFF },
-		{ 0xF0, 0x06, 0xFF },
-		{ 0xE9, 0x00, 0xFF },
-#ifdef CONFIG_WLAN
-		{ 0x81, 0x00, 0xFF },
-		{ 0x82, 0x00, 0xFF },
-		{ 0xE6, 0x38, 0x7F },
-		{ 0xE7, 0x06, 0xFF },
-#endif
-		{ 0xE9, 0x21, 0xFF }
-	};
-
-	const struct bahama_config_register v10_bt_off[] = {
-		{ 0xE9, 0x00, 0xFF },
-	};
-
-	const struct bahama_config_register v20_bt_off_fm_off[] = {
-		{ 0xF4, 0x84, 0xFF },
-		{ 0xF0, 0x04, 0xFF },
-		{ 0xE9, 0x00, 0xFF }
-	};
-
-	const struct bahama_config_register v20_bt_off_fm_on[] = {
-		{ 0xF4, 0x86, 0xFF },
-		{ 0xF0, 0x06, 0xFF },
-		{ 0xE9, 0x00, 0xFF }
-	};
-
-	const struct bahama_variant_register bt_bahama[2][3] = {
-		{
-			{ ARRAY_SIZE(v10_bt_off), v10_bt_off },
-			{ ARRAY_SIZE(v20_bt_off_fm_off), v20_bt_off_fm_off },
-			{ ARRAY_SIZE(v20_bt_off_fm_on), v20_bt_off_fm_on }
-		},
-		{
-			{ ARRAY_SIZE(v10_bt_on), v10_bt_on },
-			{ ARRAY_SIZE(v20_bt_on_fm_off), v20_bt_on_fm_off },
-			{ ARRAY_SIZE(v20_bt_on_fm_on), v20_bt_on_fm_on }
-		}
-	};
-
-	u8 offset = 0; /* index into bahama configs */
-
-	on = on ? 1 : 0;
-
-
-	if (bahama_version == VER_2_0) {
-		if (marimba_get_fm_status(&config))
-			offset = 0x01;
-	}
-
-	p = bt_bahama[on][bahama_version + offset].set;
-
-	dev_info(&msm_bt_power_device.dev,
-		"%s: found version %d\n", __func__, bahama_version);
-
-	for (i = 0; i < bt_bahama[on][bahama_version + offset].size; i++) {
-		u8 value = (p+i)->value;
-		rc = marimba_write_bit_mask(&config,
-			(p+i)->reg,
-			&value,
-			sizeof((p+i)->value),
-			(p+i)->mask);
-		if (rc < 0) {
-			dev_err(&msm_bt_power_device.dev,
-				"%s: reg %d write failed: %d\n",
-				__func__, (p+i)->reg, rc);
-			return rc;
-		}
-		dev_info(&msm_bt_power_device.dev,
-			"%s: reg 0x%02x write value 0x%02x mask 0x%02x\n",
-				__func__, (p+i)->reg,
-				value, (p+i)->mask);
-	}
-	/* Update BT status */
-	if (on)
-		marimba_set_bt_status(&config, true);
-	else
-		marimba_set_bt_status(&config, false);
-
-	return 0;
-}
-
-static int bluetooth_regs_init(int bahama_not_marimba)
-{
-	int rc = 0;
-	struct device *const dev = &msm_bt_power_device.dev;
-
-	if (bahama_not_marimba) {
-		bahama_version = read_bahama_ver();
-
-		switch (bahama_version) {
-		case VER_1_0:
-			regs_bt = regs_bt_bahama_v1;
-			regs_bt_count = ARRAY_SIZE(regs_bt_bahama_v1);
-			break;
-		case VER_2_0:
-			regs_bt = regs_bt_bahama_v2;
-			regs_bt_count = ARRAY_SIZE(regs_bt_bahama_v2);
-			break;
-		case VER_UNSUPPORTED:
-		default:
-			dev_err(dev,
-				"%s: i2c failure or unsupported version: %d\n",
-				__func__, bahama_version);
-			rc = -EIO;
-			goto out;
-		}
-	} else {
-		regs_bt = regs_bt_marimba;
-		regs_bt_count = ARRAY_SIZE(regs_bt_marimba);
-	}
-
-	rc = regulator_bulk_get(&msm_bt_power_device.dev,
-			regs_bt_count, regs_bt);
-	if (rc) {
-		dev_err(dev, "%s: could not get regulators: %d\n",
-				__func__, rc);
-		goto out;
-	}
-
-	rc = regulator_bulk_set_voltage(regs_bt_count, regs_bt);
-	if (rc) {
-		dev_err(dev, "%s: could not set voltages: %d\n",
-				__func__, rc);
-		goto reg_free;
-	}
-
-	return 0;
-
-reg_free:
-	regulator_bulk_free(regs_bt_count, regs_bt);
-out:
-	regs_bt_count = 0;
-	regs_bt = NULL;
-	return rc;
-}
-
-static int bluetooth_power(int on)
-{
-	int rc;
-	const char *id = "BTPW";
-
-	int bahama_not_marimba = bahama_present();
-
-	if (bahama_not_marimba == -1) {
-		printk(KERN_WARNING "%s: bahama_present: %d\n",
-				__func__, bahama_not_marimba);
-		return -ENODEV;
-	}
-
-	if (unlikely(regs_bt_count == 0)) {
-		rc = bluetooth_regs_init(bahama_not_marimba);
-		if (rc)
-			return rc;
-	}
-
-	if (on) {
-		rc = regulator_bulk_enable(regs_bt_count, regs_bt);
-		if (rc)
-			return rc;
-
-		rc = pmapp_clock_vote(id, PMAPP_CLOCK_ID_DO,
-					  PMAPP_CLOCK_VOTE_ON);
-		if (rc < 0)
-			return -EIO;
-
-		if (machine_is_msm8x55_svlte_surf() ||
-				machine_is_msm8x55_svlte_ffa()) {
-					rc = marimba_gpio_config(1);
-					if (rc < 0)
-						return -EIO;
-		}
-
-		rc = (bahama_not_marimba ? bahama_bt(on) : marimba_bt(on));
-		if (rc < 0)
-			return -EIO;
-
-		msleep(10);
-
-		rc = pmapp_clock_vote(id, PMAPP_CLOCK_ID_DO,
-					  PMAPP_CLOCK_VOTE_PIN_CTRL);
-		if (rc < 0)
-			return -EIO;
-
-		if (machine_is_msm8x55_svlte_surf() ||
-				machine_is_msm8x55_svlte_ffa()) {
-					rc = marimba_gpio_config(0);
-					if (rc < 0)
-						return -EIO;
-		}
-
-		rc = msm_gpios_enable(bt_config_power_on,
-			ARRAY_SIZE(bt_config_power_on));
-
-		if (rc < 0)
-			return rc;
-
-	} else {
-		rc = msm_gpios_enable(bt_config_power_off,
-					ARRAY_SIZE(bt_config_power_off));
-		if (rc < 0)
-			return rc;
-
-		/* check for initial RFKILL block (power off) */
-		if (platform_get_drvdata(&msm_bt_power_device) == NULL)
-			goto out;
-
-		rc = (bahama_not_marimba ? bahama_bt(on) : marimba_bt(on));
-		if (rc < 0)
-			return -EIO;
-
-		rc = pmapp_clock_vote(id, PMAPP_CLOCK_ID_DO,
-					  PMAPP_CLOCK_VOTE_OFF);
-		if (rc < 0)
-			return -EIO;
-
-		rc = regulator_bulk_disable(regs_bt_count, regs_bt);
-		if (rc)
-			return rc;
-
-	}
-
-out:
-	printk(KERN_DEBUG "Bluetooth power switch: %d\n", on);
-
-	return 0;
-}
-
-static void __init bt_power_init(void)
-{
-	msm_bt_power_device.dev.platform_data = &bluetooth_power;
-}
-#else
-#define bt_power_init(x) do {} while (0)
-#endif
-
 static struct msm_psy_batt_pdata msm_psy_batt_data = {
 	.voltage_min_design 	= 2800,
 	.voltage_max_design	= 4300,
@@ -5911,10 +5465,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 	&msm_device_adspdec,
 	&qup_device_i2c,
-#if defined(CONFIG_MARIMBA_CORE) && \
-   (defined(CONFIG_MSM_BT_POWER) || defined(CONFIG_MSM_BT_POWER_MODULE))
-	&msm_bt_power_device,
-#endif
 	&msm_kgsl_3d0,
 	&msm_kgsl_2d0,
 #ifdef CONFIG_MT9T013
@@ -5968,6 +5518,9 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_MOGAMI_SLIDER
 	&slider_device_mogami,
+#endif
+#ifdef CONFIG_BT
+	&mogami_device_rfkill,
 #endif
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	&msm_device_tsif,
@@ -7462,7 +7015,9 @@ printk(KERN_NOTICE "msm7x30_init 9\n");
 printk(KERN_NOTICE "msm7x30_init 10\n");
 	msm7x30_init_nand();
 printk(KERN_NOTICE "msm7x30_init 11\n");
-
+#ifdef CONFIG_BT
+	bluetooth_power(0);
+#endif
 	atv_dac_power_init();
 #ifdef CONFIG_BOSCH_BMA150
 	sensors_ldo_init();
@@ -7509,7 +7064,6 @@ printk(KERN_NOTICE "msm7x30_init 13\n");
 	spi_register_board_info(spi_board_info,
 		ARRAY_SIZE(spi_board_info));
 
-	bt_power_init();
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi7.dev.platform_data = &msm_i2c_ssbi7_pdata;
 #endif

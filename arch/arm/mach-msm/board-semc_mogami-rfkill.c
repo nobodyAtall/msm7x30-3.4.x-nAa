@@ -21,6 +21,7 @@
 #include <linux/rfkill.h>
 #include <asm/gpio.h>
 #include <asm/mach-types.h>
+#include <linux/slab.h>
 
 static struct rfkill *bt_rfk;
 static const char bt_name[] = "wl127x";
