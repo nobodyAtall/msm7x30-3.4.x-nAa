@@ -963,7 +963,11 @@ static struct resource msm_vidc_720p_resources[] = {
 };
 
 struct msm_vidc_platform_data vidc_platform_data = {
+#ifdef MSM_MULTIMEDIA_USE_ION
 	.memtype = ION_CAMERA_HEAP_ID,
+#else
+	.memtype = MEMTYPE_EBI0,
+#endif
 	.enable_ion = 1,
 	.disable_dmx = 0,
 	.cont_mode_dpb_count = 8
