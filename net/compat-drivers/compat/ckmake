@@ -185,6 +185,62 @@ def sig_handler(signal, frame):
 	clean()
 	sys.exit(-2)
 
+def get_rel_spec(rel):
+	if ("rc" in rel):
+		m = re.match(r"v*(?P<VERSION>\d+)\.+" \
+			     "(?P<PATCHLEVEL>\d+)[.]+" \
+			     "(?P<SUBLEVEL>\d+)[-]+" \
+			     "\d+rc(?P<EXTRAVERSION>\d+)\-*",
+			     rel)
+	else:
+		m = re.match(r"v*(?P<VERSION>\d+)\.+" \
+			     "(?P<PATCHLEVEL>\d+)[.]+" \
+			     "(?P<SUBLEVEL>\d+)[-]+" \
+			     "(?P<EXTRAVERSION>\d+)\-*",
+                              rel)
+        if (not m):
+                return m
+        rel_specs = m.groupdict()
+        return rel_specs
+
+def krel_same_base(new_rel, rel):
+	if (int(new_rel['ver']) != int(rel['ver'])):
+		return False
+	if (int(new_rel['pat']) != int(rel['pat'])):
+		return False
+	if (int(new_rel['ver']) == 3):
+		return True
+	if (int(new_rel['ver']) != 2):
+		return False
+	if (int(new_rel['sub']) == int(rel['sub'])):
+		return True
+	return False
+
+def krel_base_update(new_rel, rel):
+	if (not krel_same_base(new_rel, rel)):
+		return False
+	if (int(new_rel['sub']) > int(rel['sub'])):
+		return True
+	if (int(new_rel['sub']) < int(rel['sub'])):
+		return False
+
+	# Too lazy to deal with 2.x kernels,
+	if (not new_rel['is_rc']):
+		return False
+
+	if (int(new_rel['ext']) <= int(rel['ext'])):
+		return False
+	return True
+
+def krel_base_smaller(new_rel, rel):
+	if (not krel_same_base(new_rel, rel)):
+		return False
+	if (int(new_rel['sub']) > int(rel['sub'])):
+		return False
+	if (int(new_rel['sub']) < int(rel['sub'])):
+		return True
+	return False
+
 class kernel_set():
 	def __init__(self, stdscr):
 		self.queue = Queue()
@@ -221,38 +277,47 @@ class kernel_set():
 		self.lock.acquire()
 		self.stdscr.refresh()
 		self.lock.release()
+	def evaluate_new_rel(self, new_rel):
+		for rel in self.releases:
+			if (krel_base_update(new_rel, rel)):
+				new_rel['idx'] = rel['idx']
+				self.releases.remove(rel)
+				break
+			if (krel_base_smaller(new_rel, rel)):
+				return
+		self.releases.insert(new_rel['idx'], new_rel)
 	def parse_releases(self):
 		for dirname, dirnames, filenames in os.walk(modules):
 			dirnames.sort()
 			for subdirname in dirnames:
-				m = re.match(r"v*(?P<VERSION>\w+.)" \
-					     "(?P<PATCHLEVEL>\w+.*)" \
-					     "(?P<SUBLEVEL>\w*)" \
-					     "(?P<EXTRAVERSION>[.-]\w*)" \
-					     "(?P<RELMOD>[-]\w*).*", \
-					     subdirname)
-				if not m:
+				specifics = get_rel_spec(subdirname)
+				if (not specifics):
 					continue
+				rc = False
 
-				specifics = m.groupdict()
+				ver = specifics['VERSION'] + '.' + \
+				      specifics['PATCHLEVEL']
 
-				ver = specifics['VERSION'] + \
-				      specifics['PATCHLEVEL'] + \
-				      specifics['SUBLEVEL']
-
-				for rel in self.releases:
-					if (rel['version'] == ver):
-						continue
+				if ("rc" in subdirname):
+					rc = True
+					ver = ver + '-rc' + specifics['EXTRAVERSION']
+				else:
+					ver = ver + '.' + specifics['SUBLEVEL']
 
 				rel = dict(idx=len(self.releases),
 					   name=subdirname,
 					   full_path=dirname + '/' +
-						     subdirname,
+							 subdirname,
 					   version=ver,
+					   is_rc = rc,
+					   ver=specifics['VERSION'],
+					   pat=specifics['PATCHLEVEL'],
+					   sub=specifics['SUBLEVEL'],
+					   ext=specifics['EXTRAVERSION'],
 					   processed=False,
 					   log='',
 					   status=1234)
-				self.releases.insert(rel['idx'], rel)
+				self.evaluate_new_rel(rel)
 		self.refresh()
 	def setup_screen(self):
 		for i in range(0, len(self.releases)):

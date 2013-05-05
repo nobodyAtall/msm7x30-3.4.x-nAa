@@ -40,6 +40,7 @@ extern void compat_wake_up_locked(wait_queue_head_t *q, unsigned int mode, int n
 
 /* SIZE_MAX is backported in compat-3.5.h so include it */
 #include <linux/compat-3.5.h>
+#define kmalloc_array backport_kmalloc_array
 static inline void *kmalloc_array(size_t n, size_t size, gfp_t flags)
 {
 	if (size != 0 && n > SIZE_MAX / size)
@@ -72,6 +73,7 @@ extern int simple_open(struct inode *inode, struct file *file);
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12))
+#define eth_hw_addr_random backport_eth_hw_addr_random
 static inline void eth_hw_addr_random(struct net_device *dev)
 {
 #error eth_hw_addr_random() needs to be implemented for < 2.6.12
@@ -79,6 +81,7 @@ static inline void eth_hw_addr_random(struct net_device *dev)
 #else  /* kernels >= 2.6.12 */
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31))
+#define eth_hw_addr_random backport_eth_hw_addr_random
 static inline void eth_hw_addr_random(struct net_device *dev)
 {
 	get_random_bytes(dev->dev_addr, ETH_ALEN);
@@ -95,12 +98,14 @@ static inline void eth_hw_addr_random(struct net_device *dev)
 #define NET_ADDR_RANDOM                1       /* address is generated randomly */
 #define NET_ADDR_STOLEN                2       /* address is stolen from other device */
 
+#define eth_hw_addr_random backport_eth_hw_addr_random
 static inline void eth_hw_addr_random(struct net_device *dev)
 {
 	random_ether_addr(dev->dev_addr);
 }
 
 #else /* 2.6.36 and on */
+#define eth_hw_addr_random backport_eth_hw_addr_random
 static inline void eth_hw_addr_random(struct net_device *dev)
 {
 	dev_hw_addr_random(dev, dev->dev_addr);

@@ -55,15 +55,12 @@ endif
 obj-y := compat/
 
 obj-$(CONFIG_COMPAT_RFKILL) += net/rfkill/
-obj-$(CONFIG_COMPAT_VIDEO_MODULES) += drivers/gpu/drm/
 
 ifeq ($(BT),)
 obj-$(CONFIG_COMPAT_WIRELESS) += net/wireless/ net/mac80211/
 obj-$(CONFIG_COMPAT_WIRELESS_MODULES) += drivers/net/wireless/
 
 
-obj-$(CONFIG_COMPAT_NETWORK_MODULES) += drivers/net/ethernet/atheros/
-obj-$(CONFIG_COMPAT_NETWORK_MODULES) += drivers/net/ethernet/broadcom/
 
 
 ifeq ($(CONFIG_STAGING_EXCLUDE_BUILD),)
@@ -71,8 +68,6 @@ endif
 
 endif
 
-obj-$(CONFIG_COMPAT_BLUETOOTH) += net/bluetooth/
-obj-$(CONFIG_COMPAT_BLUETOOTH_MODULES) += drivers/bluetooth/
 
 else
 

@@ -15,10 +15,6 @@
  */
 /* ****************** SDIO CARD Interface Functions **************************/
 
-#undef pr_fmt
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
-#include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/netdevice.h>
 #include <linux/export.h>

@@ -197,6 +197,9 @@ static inline s64 nla_get_s64(struct nlattr *nla)
 	return tmp;
 }
 
+#define PLATFORM_DEVID_NONE	(-1)
+#define PLATFORM_DEVID_AUTO	(-1)
+
 #else /* (LINUX_VERSION_CODE > KERNEL_VERSION(3,7,0)) */
 #define netlink_notify_portid(__notify) (__notify->portid)
 #define genl_info_snd_portid(__genl_info) (__genl_info->snd_portid)

@@ -139,6 +139,59 @@ static inline int is_unicast_ether_addr(const u8 *addr)
 	return !is_multicast_ether_addr(addr);
 }
 
+/* Backport of:
+ *
+ * commit 7ef88ad561457c0346355dfd1f53e503ddfde719
+ * Author: Rusty Russell <rusty@rustcorp.com.au>
+ * Date:   Mon Jan 24 14:45:10 2011 -0600
+ *
+ *     BUILD_BUG_ON: make it handle more cases
+ */
+#undef BUILD_BUG_ON
+/**
+ * BUILD_BUG_ON - break compile if a condition is true.
+ * @condition: the condition which the compiler should know is false.
+ *
+ * If you have some code which relies on certain constants being equal, or
+ * other compile-time-evaluated condition, you should use BUILD_BUG_ON to
+ * detect if someone changes it.
+ *
+ * The implementation uses gcc's reluctance to create a negative array, but
+ * gcc (as of 4.4) only emits that error for obvious cases (eg. not arguments
+ * to inline functions).  So as a fallback we use the optimizer; if it can't
+ * prove the condition is false, it will cause a link error on the undefined
+ * "__build_bug_on_failed".  This error message can be harder to track down
+ * though, hence the two different methods.
+ */
+#ifndef __OPTIMIZE__
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
+#else
+extern int __build_bug_on_failed;
+#define BUILD_BUG_ON(condition)					\
+	do {							\
+		((void)sizeof(char[1 - 2*!!(condition)]));	\
+		if (condition) __build_bug_on_failed = 1;	\
+	} while(0)
+#endif
+
+/* Backport of:
+ *
+ * commit e159489baa717dbae70f9903770a6a4990865887
+ * Author: Tejun Heo <tj@kernel.org>
+ * Date:   Sun Jan 9 23:32:15 2011 +0100
+ *
+ *     workqueue: relax lockdep annotation on flush_work()
+ */
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+# ifdef CONFIG_PROVE_LOCKING
+#  define lock_map_acquire_read(l)	lock_acquire(l, 0, 0, 2, 2, NULL, _THIS_IP_)
+# else
+#  define lock_map_acquire_read(l)	lock_acquire(l, 0, 0, 2, 1, NULL, _THIS_IP_)
+# endif
+#else
+# define lock_map_acquire_read(l)		do { } while (0)
+#endif
+
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,38)) */
 
 #endif /* LINUX_26_38_COMPAT_H */

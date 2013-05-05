@@ -166,6 +166,18 @@ static inline bool skb_has_frag_list(const struct sk_buff *skb)
 	return skb_shinfo(skb)->frag_list != NULL;
 }
 
+/**
+ * backport:
+ *
+ * commit 67bdbffd696f29a0b68aa8daa285783a06651583
+ * Author: Arnd Bergmann <arnd@arndb.de>
+ * Date:   Thu Feb 25 16:55:13 2010 +0100
+ *
+ *     rculist: avoid __rcu annotations
+ */
+#define hlist_first_rcu(head)	(*((struct hlist_node __rcu **)(&(head)->first)))
+#define hlist_next_rcu(node)	(*((struct hlist_node __rcu **)(&(node)->next)))
+
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)) */
 
 #endif /* LINUX_26_37_COMPAT_H */

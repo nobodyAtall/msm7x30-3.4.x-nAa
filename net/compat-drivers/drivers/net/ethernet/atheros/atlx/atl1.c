@@ -3061,7 +3061,7 @@ static int atl1_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (atl1_read_mac_addr(&adapter->hw)) {
 		/* mark random mac */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36))
-		netdev->addr_assign_type |= NET_ADDR_RANDOM;
+		netdev->addr_assign_type = NET_ADDR_RANDOM;
 #endif
 	}
 	memcpy(netdev->dev_addr, adapter->hw.mac_addr, netdev->addr_len);

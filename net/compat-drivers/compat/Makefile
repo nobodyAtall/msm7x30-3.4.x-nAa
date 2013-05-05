@@ -4,11 +4,11 @@ export COMPAT_WLAN_BUILT_IN ?= y
 ifeq ($(COMPAT_WLAN_BUILT_IN),y)
 
 EXTRA_CFLAGS +=  \
-        -DCOMPAT_BASE="\"compat-v3.8-1\"" \
-	-DCOMPAT_BASE_TREE="\"linux.git\"" \
-        -DCOMPAT_BASE_TREE_VERSION="\"v3.8\"" \
-        -DCOMPAT_PROJECT="\"Compat-drivers\"" \
-        -DCOMPAT_VERSION="\"compat-drivers-v3.8-1\""
+	-DCOMPAT_BASE="\"compat-v3.9-rc4-1\"" \
+	-DCOMPAT_BASE_TREE="\"linux-stable.git\"" \
+	-DCOMPAT_BASE_TREE_VERSION="\"v3.9-rc4\"" \
+	-DCOMPAT_PROJECT="\"Compat-drivers\"" \
+	-DCOMPAT_VERSION="\"compat-drivers-v3.9-rc4-2-su\""
 
 obj-y += compat.o \
 	kstrtox.o \

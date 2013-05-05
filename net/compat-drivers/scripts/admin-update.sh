@@ -26,6 +26,9 @@ UNDERLINE="\033[02m"
 # File in which code metrics will be written
 CODE_METRICS=code-metrics.txt
 
+STABLE_PREFIX=".stable_"
+PENDING_STABLE_DIR="patches/pending-stable"
+
 # The GIT URL's for linux-next and compat trees
 GIT_URL="git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git"
 GIT_COMPAT_URL="git://github.com/mcgrof/compat.git"
@@ -353,6 +356,7 @@ DRIVERS_WLAN="drivers/net/wireless/ath
 	      drivers/net/wireless/iwlwifi
 	      drivers/net/wireless/iwlwifi/pcie
 	      drivers/net/wireless/iwlwifi/dvm
+	      drivers/net/wireless/iwlwifi/mvm
 	      drivers/net/wireless/rt2x00
 	      drivers/net/wireless/zd1211rw
 	      drivers/net/wireless/libertas
@@ -443,7 +447,8 @@ mkdir -p include/net/bluetooth \
 	 $DRIVERS_WLAN \
 	 $DRIVERS_ETH \
 	 $DRIVERS_BT \
-	 $DRIVERS_DRM
+	 $DRIVERS_DRM \
+	 drivers/video
 
 
 
@@ -676,8 +681,14 @@ if [[ "$ENABLE_DRM" == "1" ]]; then
 
 	# Finally get the DRM top-level makefile
 	cp $GIT_TREE/drivers/gpu/drm/Makefile drivers/gpu/drm
+
+	DIR="drivers/video"
+	cp $GIT_TREE/$DIR/hdmi.c $DIR
+	echo "obj-\$(CONFIG_COMPAT_HDMI) += hdmi.o" > $DIR/Makefile
+	cp $GIT_TREE/include/linux/hdmi.h include/linux/hdmi.h
 else
 	touch drivers/gpu/drm/Makefile
+	touch drivers/video/Makefile
 fi
 
 # Staging drivers in their own directory
@@ -696,7 +707,7 @@ UNIFIED_DRIVERS+="alx"
 unified_driver_git_tree() {
 	case $1 in
 	"alx")
-		echo "git://github.com/mcgrof/alx.git"
+		echo "git://github.com/erikarn/alx.git"
 		;;
 	*)
 		;;
@@ -784,7 +795,7 @@ refresh_compat
 find -type f -name "*.mod.c" -exec rm -f {} \;
 
 # files we suck in for wireless drivers
-export WSTABLE="
+export NETWORK_STABLE="
 	net/wireless/
 	net/mac80211/
 	net/rfkill/
@@ -794,7 +805,6 @@ export WSTABLE="
 	drivers/net/ethernet/atheros/atl1c/
 	drivers/net/ethernet/atheros/atl1e/
 	drivers/net/ethernet/atheros/atlx/
-	include/uapi/drm
 	include/uapi/linux/nl80211.h
 	include/uapi/linux/rfkill.h
 	include/linux/rfkill.h
@@ -805,6 +815,58 @@ export WSTABLE="
 	include/net/bluetooth/hci_core.h
 	include/net/bluetooth/mgmt.h
 	include/net/cfg80211.h"
+
+export DRM_STABLE="
+	include/uapi/drm
+	include/drm/
+	drivers/gpu/drm/
+	"
+
+get_stable_patches() {
+	SUBSYS=$1
+	STABLE_TARGET="${PENDING_STABLE_DIR}/${SUBSYS}"
+	STABLE_FILE_LIST="${STABLE_PREFIX}${SUBSYS}"
+	STABLE_FILES=$(cat ${STABLE_FILE_LIST})
+
+	rm -rf $STABLE_TARGET
+	mkdir -p $STABLE_TARGET
+
+	echo -e "${GREEN}Generating stable cherry picks for ${SUBSYS}... ${NORMAL}"
+	echo -e "\nUsing command on directory $PWD:"
+
+	echo -e "\ngit format-patch --grep=\"stable@vger.kernel.org\" -o "
+	echo -e "\t$STABLE_TARGET ${LAST_STABLE_UPDATE}.. "
+	for i in $STABLE_FILES; do
+		echo -e "\t$i"
+	done
+
+	git format-patch --grep="stable@vger.kernel.org" -o \
+		$STABLE_TARGET ${LAST_STABLE_UPDATE}.. \
+		$STABLE_FILES
+
+	if [ ! -d ${LAST_DIR}/${STABLE_TARGET} ]; then
+		echo -e "Assumption that ${LAST_DIR}/${STABLE_TARGET} directory exists failed"
+		exit 1
+	fi
+
+	echo -e "${GREEN}Purging old stable cherry picks... ${NORMAL}"
+	rm -f ${LAST_DIR}/${STABLE_TARGET}/*.patch
+
+	FOUND=$(find ${STABLE_TARGET}/ -maxdepth 1 -name \*.patch | wc -l)
+	if [ $FOUND -ne 0 ]; then
+		cp ${STABLE_TARGET}/*.patch ${LAST_DIR}/${STABLE_TARGET}/
+	else
+		echo "No stable pending-stable $SUBSYS patches found on linux-next"
+	fi
+	if [ -f ${LAST_DIR}/${STABLE_TARGET}/.ignore ]; then
+		for i in $(cat ${LAST_DIR}/${STABLE_TARGET}/.ignore) ; do
+			echo -e "Skipping $i from generated stable patches..."
+			rm -f ${LAST_DIR}/${STABLE_TARGET}/*$i*
+		done
+	fi
+	echo -e "${GREEN}Updated stable cherry picks, review with git diff "
+	echo -e "and update hunks with ./scripts/admin-update.sh -s refresh${NORMAL}"
+}
 
 # Stable pending, if -n was passed
 if [[ "$GET_STABLE_PENDING" = y ]]; then
@@ -836,7 +898,6 @@ if [[ "$GET_STABLE_PENDING" = y ]]; then
 	cd $GIT_TREE
 	LAST_STABLE_UPDATE=$(git describe --abbrev=0)
 	cd $NEXT_TREE
-	PENDING_STABLE_DIR="pending-stable/"
 
 	rm -rf $PENDING_STABLE_DIR
 
@@ -845,25 +906,21 @@ if [[ "$GET_STABLE_PENDING" = y ]]; then
 		echo -e "${BLUE}Tag $LAST_STABLE_UPDATE not found on $NEXT_TREE tree: bailing out${NORMAL}"
 		exit 1
 	fi
-	echo -e "${GREEN}Generating stable cherry picks... ${NORMAL}"
-	echo -e "\nUsing command on directory $PWD:"
-	echo -e "\ngit format-patch --grep=\"stable@vger.kernel.org\" -o $PENDING_STABLE_DIR ${LAST_STABLE_UPDATE}.. $WSTABLE"
-	git format-patch --grep="stable@vger.kernel.org" -o $PENDING_STABLE_DIR ${LAST_STABLE_UPDATE}.. $WSTABLE
-	if [ ! -d ${LAST_DIR}/${PENDING_STABLE_DIR} ]; then
-		echo -e "Assumption that ${LAST_DIR}/${PENDING_STABLE_DIR} directory exists failed"
-		exit 1
+
+	echo $NETWORK_STABLE > ${STABLE_PREFIX}network
+	echo $DRM_STABLE > ${STABLE_PREFIX}drm
+
+	if [[ "$ENABLE_NETWORK" == "1" ]]; then
+		get_stable_patches network
 	fi
-	echo -e "${GREEN}Purging old stable cherry picks... ${NORMAL}"
-	rm -f ${LAST_DIR}/${PENDING_STABLE_DIR}/*.patch
-	cp ${PENDING_STABLE_DIR}/*.patch ${LAST_DIR}/${PENDING_STABLE_DIR}/
-	if [ -f ${LAST_DIR}/${PENDING_STABLE_DIR}/.ignore ]; then
-		for i in $(cat ${LAST_DIR}/${PENDING_STABLE_DIR}/.ignore) ; do
-			echo -e "Skipping $i from generated stable patches..."
-			rm -f ${LAST_DIR}/${PENDING_STABLE_DIR}/*$i*
-		done
+
+	if [[ "$ENABLE_DRM" == "1" ]]; then
+		get_stable_patches drm
 	fi
-	echo -e "${GREEN}Updated stable cherry picks, review with git diff and update hunks with ./scripts/admin-update.sh -s refresh${NORMAL}"
+
+	rm -f ${STABLE_PREFIX}network ${STABLE_PREFIX}drm
 	cd $LAST_DIR
+
 fi
 
 ORIG_CODE=$(find ./ -type f -name  \*.[ch] |
@@ -896,6 +953,34 @@ for subsystem in $SUBSYSTEMS; do
 		fi
 
 		for i in $(ls $PATCHDIR/*.patch); do
+			# GNU Patch does not yet support giving a different
+			# error return value for patches detected as reversed or
+			# already applied. We can add that support but for now
+			# we distinguish this by grep'ing the results. We nuke
+			# already applied patches, this typically would come from
+			# linux-next, on linux-stable branches given that there is
+			# no linearity between the two.
+			#
+			# To support this change however it means we now have
+			# the double amount of time it takes to apply patches
+			# given that we now need a dry run first. The algorithm
+			# for checking if a patch is reversed only works by
+			# analyzing the first hunk of a patch though so perhaps
+			# what we need on GNU Patch is a check for asking if
+			# a patch is reversed, that would not cause much
+			# overhead here, it would just dry run on the first
+			# hunk by reducing the search space considerably.
+			patch --dry-run -p1 -N -t < $i > /dev/null 2>&1
+			RET=$?
+			if [[ $RET -ne 0 ]]; then
+				patch --dry-run -p1 -N -t < $i | grep "Reversed" > /dev/null 2>&1
+				if [[ $? -eq 0 ]]; then
+					echo -e "${CYAN}Deleting${NORMAL} ${GREEN}already applied ${NORMAL}${BLUE}${i}"
+					rm -f $i
+					continue
+				fi
+			fi
+
 			echo -e "${GREEN}Applying backport patch${NORMAL}: ${BLUE}$i${NORMAL}"
 			patch -p1 -N -t < $i
 			RET=$?

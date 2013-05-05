@@ -476,9 +476,6 @@ static int atl1c_set_mac_addr(struct net_device *netdev, void *p)
 
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
 	memcpy(adapter->hw.mac_addr, addr->sa_data, netdev->addr_len);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36))
-	netdev->addr_assign_type &= ~NET_ADDR_RANDOM;
-#endif
 
 	atl1c_hw_set_mac_addr(&adapter->hw, adapter->hw.mac_addr);
 
@@ -1002,11 +999,9 @@ static int atl1c_setup_ring_resources(struct atl1c_adapter *adapter)
 	size = sizeof(struct atl1c_buffer) * (tpd_ring->count * 2 +
 		rfd_ring->count);
 	tpd_ring->buffer_info = kzalloc(size, GFP_KERNEL);
-	if (unlikely(!tpd_ring->buffer_info)) {
-		dev_err(&pdev->dev, "kzalloc failed, size = %d\n",
-			size);
+	if (unlikely(!tpd_ring->buffer_info))
 		goto err_nomem;
-	}
+
 	for (i = 0; i < AT_MAX_TRANSMIT_QUEUE; i++) {
 		tpd_ring[i].buffer_info =
 			(tpd_ring->buffer_info + count);
@@ -2094,7 +2089,7 @@ static int atl1c_tx_map(struct atl1c_adapter *adapter,
 		if (unlikely(pci_dma_mapping_error(adapter->pdev,
 						   buffer_info->dma)))
 			goto err_dma;
-
+		ATL1C_SET_BUFFER_STATE(buffer_info, ATL1C_BUFFER_BUSY);
 		ATL1C_SET_PCIMAP_TYPE(buffer_info, ATL1C_PCIMAP_SINGLE,
 			ATL1C_PCIMAP_TODEVICE);
 		mapped_len += map_len;
@@ -2628,11 +2623,10 @@ static int atl1c_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (atl1c_read_mac_addr(&adapter->hw)) {
 		/* got a random MAC address, set NET_ADDR_RANDOM to netdev */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,36))
-		netdev->addr_assign_type |= NET_ADDR_RANDOM;
+		netdev->addr_assign_type = NET_ADDR_RANDOM;
 #endif
 	}
 	memcpy(netdev->dev_addr, adapter->hw.mac_addr, netdev->addr_len);
-	memcpy(netdev->perm_addr, adapter->hw.mac_addr, netdev->addr_len);
 	if (netif_msg_probe(adapter))
 		dev_dbg(&pdev->dev, "mac address : %pM\n",
 			adapter->hw.mac_addr);

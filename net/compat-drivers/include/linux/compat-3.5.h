@@ -8,6 +8,32 @@
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0))
 
+#include <net/netlink.h>
+
+/*
+ * This backports:
+ * commit 569a8fc38367dfafd87454f27ac646c8e6b54bca
+ * Author: David S. Miller <davem@davemloft.net>
+ * Date:   Thu Mar 29 23:18:53 2012 -0400
+ *
+ *     netlink: Add nla_put_be{16,32,64}() helpers.
+ */
+
+static inline int nla_put_be16(struct sk_buff *skb, int attrtype, __be16 value)
+{
+	return nla_put(skb, attrtype, sizeof(__be16), &value);
+}
+
+static inline int nla_put_be32(struct sk_buff *skb, int attrtype, __be32 value)
+{
+	return nla_put(skb, attrtype, sizeof(__be32), &value);
+}
+
+static inline int nla_put_be64(struct sk_buff *skb, int attrtype, __be64 value)
+{
+	return nla_put(skb, attrtype, sizeof(__be64), &value);
+}
+
 /*
  * This backports:
  *
@@ -267,6 +293,9 @@ do {								\
 	net_ratelimited_function(pr_info, fmt, ##__VA_ARGS__)
 #define net_dbg_ratelimited(fmt, ...)				\
 	net_ratelimited_function(pr_debug, fmt, ##__VA_ARGS__)
+
+#define ktime_get_monotonic_offset backport_ktime_get_monotonic_offset
+extern ktime_t ktime_get_monotonic_offset(void);
 
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0)) */
 

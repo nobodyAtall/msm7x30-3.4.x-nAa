@@ -2,27 +2,15 @@
 #define COMPAT_AUTOCONF_INCLUDED
 /*
  * Automatically generated C config: don't edit
- * Παρ 19 Απρ 2013 11:34:26 μμ EEST 
- * compat-drivers: compat-drivers-v3.8-1
- * linux: v3.8
+ * Κυρ 05 Μάι 2013 06:54:02 μμ EEST 
+ * compat-drivers: compat-drivers-v3.9-rc4-2-su
+ * linux: v3.9-rc4
  */
-#define COMPAT_RELEASE "compat-drivers-v3.8-1"
-#define COMPAT_KERNEL_RELEASE "v3.8"
+#define COMPAT_RELEASE "compat-drivers-v3.9-rc4-2-su"
+#define COMPAT_KERNEL_RELEASE "v3.9-rc4"
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24))
 #error Compat-wireless requirement: Linux >= 2,6,24
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24) */ 
-#ifndef CONFIG_COMPAT_KERNEL_3_1
-#define CONFIG_COMPAT_KERNEL_3_1 1
-#endif /* CONFIG_COMPAT_KERNEL_3_1 */ 
-#ifndef CONFIG_COMPAT_KERNEL_3_2
-#define CONFIG_COMPAT_KERNEL_3_2 1
-#endif /* CONFIG_COMPAT_KERNEL_3_2 */ 
-#ifndef CONFIG_COMPAT_KERNEL_3_3
-#define CONFIG_COMPAT_KERNEL_3_3 1
-#endif /* CONFIG_COMPAT_KERNEL_3_3 */ 
-#ifndef CONFIG_COMPAT_KERNEL_3_4
-#define CONFIG_COMPAT_KERNEL_3_4 1
-#endif /* CONFIG_COMPAT_KERNEL_3_4 */ 
 #ifndef CONFIG_COMPAT_KERNEL_3_5
 #define CONFIG_COMPAT_KERNEL_3_5 1
 #endif /* CONFIG_COMPAT_KERNEL_3_5 */ 
@@ -185,9 +173,11 @@
 #define CONFIG_BT_MRVL 1
 #endif /* CONFIG_BT_MRVL */ 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,39))
+#if defined(CONFIG_TI_ST) || defined(CONFIG_TI_ST_MODULE)
 #ifndef CONFIG_BT_WILINK
 #define CONFIG_BT_WILINK 1
 #endif /* CONFIG_BT_WILINK */ 
+#endif /* CONFIG_TI_ST */
 #endif /* CONFIG_COMPAT_KERNEL_2_6_39 */
 #if defined(CONFIG_PCMCIA) || defined(CONFIG_PCMCIA_MODULE)
 #ifndef CONFIG_BT_HCIDTL1
@@ -214,9 +204,11 @@
 #define CONFIG_COMPAT_STAGING 1
 #endif /* CONFIG_COMPAT_STAGING */ 
 #endif /* CONFIG_STAGING */
-#ifndef CONFIG_MAC80211_HWSIM
-#define CONFIG_MAC80211_HWSIM 1
-#endif /* CONFIG_MAC80211_HWSIM */ 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31))
+#ifndef CONFIG_COMPAT_MAC80211_HWSIM
+#define CONFIG_COMPAT_MAC80211_HWSIM 1
+#endif /* CONFIG_COMPAT_MAC80211_HWSIM */ 
+#endif /* CONFIG_COMPAT_KERNEL_2_6_31 */
 #ifndef CONFIG_ATH5K
 #define CONFIG_ATH5K 1
 #endif /* CONFIG_ATH5K */ 
@@ -261,6 +253,9 @@
 #ifndef CONFIG_IWLDVM
 #define CONFIG_IWLDVM 1
 #endif /* CONFIG_IWLDVM */ 
+#ifndef CONFIG_IWLMVM
+#define CONFIG_IWLMVM 1
+#endif /* CONFIG_IWLMVM */ 
 #ifndef CONFIG_IWLWIFI_P2P
 #define CONFIG_IWLWIFI_P2P 1
 #endif /* CONFIG_IWLWIFI_P2P */ 
@@ -841,6 +836,9 @@
 #endif /* CONFIG_RFKILL_BACKPORT_INPUT */ 
 #endif /* CONFIG_COMPAT_KERNEL_2_6_31 */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0))
+#ifndef CONFIG_COMPAT_HDMI
+#define CONFIG_COMPAT_HDMI 1
+#endif /* CONFIG_COMPAT_HDMI */ 
 #ifndef CONFIG_COMPAT_VIDEO_MODULES
 #define CONFIG_COMPAT_VIDEO_MODULES 1
 #endif /* CONFIG_COMPAT_VIDEO_MODULES */ 

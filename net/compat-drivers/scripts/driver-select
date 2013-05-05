@@ -20,9 +20,6 @@ SSB_MAKEFILE="drivers/ssb/Makefile"
 BCMA_MAKEFILE="drivers/bcma/Makefile"
 
 # used to backup files from foo to foo.${BACKUP_EXT}
-# If you change this also modify restore_compat() and
-# restore_file() below I couldn't find a way to use
-# the $BACKUP_EXT there.
 BACKUP_EXT="bk"
 
 # Pretty colors
@@ -35,7 +32,7 @@ PURPLE="\033[35m"
 CYAN="\033[36m"
 UNDERLINE="\033[02m"
 
-SUPPORTED_80211_DRIVERS="ath5k ath9k ath9k_ap ath9k_htc carl9170 ath6kl wil6210 b43 zd1211rw rt2x00 wl1251 wl12xx brcmsmac brcmfmac"
+SUPPORTED_80211_DRIVERS="ath5k ath9k ath9k_ap ath9k_htc carl9170 ath6kl ar5523 wil6210 b43 zd1211rw rt2x00 wl1251 wl12xx brcmsmac brcmfmac mac80211_hwsim"
 
 # b43 needs some more work for driver-select, the SSB stuff, plus
 # what if you update b44 but not b43? It will bust.
@@ -65,8 +62,8 @@ function usage {
 
 	# These should match the switch below.
 	echo -e "\nSupported group drivers:"
-	echo -e "\t${CYAN}atheros${NORMAL} < ${PURPLE} ath5k ath9k carl9170 zd1211rw ath6kl wil6210${NORMAL}>"
-	echo -e "\t${CYAN}ath${NORMAL} < ${PURPLE} ath5k ath9k carl9170 ath6kl wil6210${NORMAL}>"
+	echo -e "\t${CYAN}atheros${NORMAL} < ${PURPLE} ath5k ath9k carl9170 zd1211rw ath6kl wil6210 ar5523${NORMAL}>"
+	echo -e "\t${CYAN}ath${NORMAL} < ${PURPLE} ath5k ath9k carl9170 ath6kl wil6210 ar5523${NORMAL}>"
 	echo -e "\t${CYAN}brcm80211${NORMAL} < ${PURPLE} brcmsmac brcmfmac ${NORMAL}>"
 	echo -e "\t${CYAN}intel${NORMAL} < ${PURPLE} iwlwifi, iwlegacy ${NORMAL}>"
 	echo -e "\t${CYAN}rtl818x${NORMAL} < ${PURPLE} rtl8180 rtl8187 ${NORMAL}>"
@@ -90,7 +87,7 @@ function backup_file {
 		return
 	fi
 	echo -e "Backing up makefile: ${CYAN}${1}.${BACKUP_EXT}${NORMAL}"
-	cp $1 $1.bk
+	cp "${1}" "${1}.${BACKUP_EXT}"
 }
 
 function disable_makefile
@@ -301,16 +298,14 @@ function select_brcm80211_driver
 }
 
 function restore_file {
-	#ORIG=$(shell ${1%%.${BACKUP_EXT}})
-	ORIG=${1%%.bk}
+	local ORIG="${1%%.${BACKUP_EXT}}"
 	cp $1 $ORIG
 	rm -f $1
 	echo -e "Restored makefile: ${CYAN}${ORIG}${NORMAL} (and removed backup)"
 }
 
 function restore_compat {
-	#FILES=$(find ./ -type f -name *.$BACKUP_EXT)
-	FILES=$(find ./ -type f -name *.bk)
+	local FILES=$(find ./ -type f -name *\."${BACKUP_EXT}")
 	for i in $FILES; do
 		restore_file $i
 	done
@@ -462,6 +457,12 @@ case $1 in
 		select_drivers		CONFIG_ATH_CARDS
 		select_ath_no_common	CONFIG_WIL6210
 		;;
+	ar5523)
+		disable_staging
+		disable_bt_usb_ethernet_var
+		select_drivers		CONFIG_ATH_CARDS
+		select_ath_no_common	CONFIG_AR5523
+		;;
 	brcmsmac)
 		disable_staging
 		disable_bt_usb_ethernet_var
@@ -506,6 +507,11 @@ case $1 in
 		select_ti_drivers	CONFIG_WL18XX
 		disable_staging
 		disable_var_01
+		;;
+	mac80211_hwsim)
+		select_drivers		CONFIG_COMPAT_MAC80211_HWSIM
+		disable_staging
+		disable_bt_usb_ethernet_var
 		;;
 # Ethernet and Bluetooth drivers
 	atl1)
