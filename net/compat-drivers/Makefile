@@ -78,7 +78,7 @@ ifneq (,$(findstring  $() ,$(PWD)))
 $(error "The path to this compat-drivers directory has spaces in it." \
 	"Please put it somewhere where there is no space")
 endif
-$(shell cat $(PWD)/net/compat-drivers/.compat_base)
+#$(shell cat $(PWD)/net/compat-drivers/.compat_base)
 #export CFLAGS += \
 #        -DCOMPAT_BASE="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base)\"" \
 #        -DCOMPAT_BASE_TREE="\"$(shell cat $(PWD)/net/compat-drivers/.compat_base_tree)\"" \
@@ -92,7 +92,7 @@ export COMPAT_CONFIG_CW=$(PWD)/config.mk
 export COMPAT_CONFIG=$(PWD)/.config
 export CONFIG_CHECK=$(PWD)/.config.mk_md5sum.txt
 export COMPAT_AUTOCONF=include/linux/compat_autoconf.h
-export CREL=$(shell cat $(PWD)/.compat_version)
+#export CREL=$(shell cat $(PWD)/.compat_version)
 export CREL_PRE:=.compat_autoconf_
 export CREL_CHECK:=$(PWD)/$(CREL_PRE)$(CREL)
 
