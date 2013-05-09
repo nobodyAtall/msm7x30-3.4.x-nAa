@@ -46,8 +46,9 @@ int msm_chg_rpc_close(void);
 int hsusb_chg_init(int connect);
 void hsusb_chg_vbus_draw(unsigned mA);
 void hsusb_chg_connected(enum chg_type chgtype);
+void hsusb_chg_set_supplicants(char **supplied_to, size_t num_supplicants);
+unsigned int hsusb_get_chg_current_ma(void);
 #endif
-
 
 int msm_fsusb_rpc_init(struct msm_otg_ops *ops);
 int msm_fsusb_init_phy(void);
@@ -82,6 +83,9 @@ static inline int msm_chg_rpc_close(void) { return 0; }
 static inline int hsusb_chg_init(int connect) { return 0; }
 static inline void hsusb_chg_vbus_draw(unsigned mA) { }
 static inline void hsusb_chg_connected(enum chg_type chgtype) { }
+static inline void hsusb_chg_set_supplicants(char **supplied_to,
+					     size_t num_supplicants) { }
+static inline unsigned int hsusb_get_chg_current_ma(void) { return 0; }
 #endif
 
 static inline int msm_fsusb_rpc_init(struct msm_otg_ops *ops) { return 0; }

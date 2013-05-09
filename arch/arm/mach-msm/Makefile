@@ -300,7 +300,7 @@ obj-$(CONFIG_ARCH_MPQ8092) += board-8092.o board-8092-gpiomux.o
  
 obj-$(CONFIG_MACH_SEMC_MOGAMI) += board-semc_mogami.o board-semc_mogami-rfkill.o board-semc_mogami-wifi.o
 
-obj-$(CONFIG_MACH_SEMC_SMULTRON) += board-semc_mogami.o leds-smultron.o vibrator-mogami.o
+obj-$(CONFIG_MACH_SEMC_SMULTRON) += board-semc_mogami.o leds-smultron.o vibrator-mogami.o charger-smultron.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
@@ -348,6 +348,10 @@ obj-$(CONFIG_ARCH_MSM8X60) += board-msm8x60-vcm.o
 endif
 obj-$(CONFIG_MSM_OCMEM) += ocmem.o ocmem_allocator.o ocmem_notifier.o
 obj-$(CONFIG_MSM_OCMEM) += ocmem_sched.o ocmem_api.o ocmem_rdm.o ocmem_core.o
+
+ifdef CONFIG_MSM_RPC_OEM_RAPI
+	obj-$(CONFIG_BATTERY_SEMC_ARCH)	+= semc_battery_data.o
+endif
 
 obj-$(CONFIG_ARCH_MSM7X27) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o

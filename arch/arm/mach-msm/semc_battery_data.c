@@ -17,7 +17,7 @@
 #include <linux/power_supply.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
-
+#include <linux/module.h>
 #include <mach/oem_rapi_client.h>
 #include <mach/semc_battery_data.h>
 

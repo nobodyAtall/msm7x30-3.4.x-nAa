@@ -103,6 +103,8 @@
 #define ID_A			14
 #define ID_B			15
 #define ID_C			16
+#define ACA_ID_INPUTS		17
+#define VBUS_DROP_DET		18
 
 #define USB_IDCHG_MIN	500
 #define USB_IDCHG_MAX	1500
@@ -154,9 +156,12 @@ struct msm_otg {
 	struct work_struct otg_resume_work;
 	struct notifier_block usbdev_nb;
 	struct msm_xo_voter *xo_handle; /*handle to vote for TCXO D1 buffer*/
+	unsigned long wait_charger_init_start;
 #ifdef CONFIG_USB_MSM_ACA
 	struct timer_list	id_timer;	/* drives id_status polling */
 	unsigned		b_max_power;	/* ACA: max power of accessory*/
+	u8			aca_connection;	/* ACA: connection status */
+	int			wait_id_stable_duration;
 #endif
 };
 
@@ -167,5 +172,8 @@ static inline int can_phy_power_collapse(struct msm_otg *dev)
 
 	return dev->pdata->phy_can_powercollapse;
 }
+
+/* When detected VBUS drop, it is notified from a charger. */
+void msm_otg_notify_vbus_drop(void);
 
 #endif
