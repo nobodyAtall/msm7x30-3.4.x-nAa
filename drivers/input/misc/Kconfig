@@ -663,4 +663,53 @@ config STM_LIS3DH
           If you say yes here you get support for STMicroelectronics's
           acceleration sensors LIS3DH.
 
+config INPUT_BMA150
+	tristate "Bosch BMA150 accelerometer"
+	default n
+	help
+	  Say Y here if you want support for the BMA150 accelerometer
+	  SPI device.
+
+	  This driver supports both SPI and I2C, but if you need I2C,
+	  the recommended driver is BMA150_NG which will replace this
+	  driver eventually.
+
+config INPUT_BMA150_NG
+	tristate "Bosch BMA150 accelerometer (next gen)"
+	default n
+	depends on I2C && ! INPUT_BMA150
+	help
+	  Say Y here if you want support for the BMA150 accelerometer
+	  device.
+
+	  This driver should not be selected together with the regular
+	  BMA150 driver. It does NOT support SPI like the old one.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called bma150_ng.
+
+config INPUT_BMA150_NG_REG_ACCESS
+	bool "Enable debug fs access to registers"
+	default n
+	depends on INPUT_BMA150_NG && CONFIG_DEBUG_FS
+	help
+	  Enables access to registers from debug fs
+
+config INPUT_BMA150_RATE_MSEC
+	int "Default delay between samples, in msecs"
+	default 33
+	depends on INPUT_BMA150_NG
+	help
+	  Specifies the approximate delay between successive
+	  measurements from the accelerometer.  The value
+	  specified here is a default applied only when
+	  platform data does not provide a per-device setting.
+
+config INPUT_BMA250
+	tristate "Bosch BMA250 accelerometer"
+	default n
+	depends on I2C
+	help
+	  Say Y here if you want support for the BMA250 accelerometer
+	  device. This driver only supports I2C communication.
 endif

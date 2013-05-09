@@ -24,8 +24,6 @@
 struct bma150_platform_data {
 	int (*setup)(struct device *);
 	void (*teardown)(struct device *);
-	int (*power_on)(void);
-	void (*power_off)(void);
 };
 
 #endif /* LINUX_BMA150_MODULE_H */
