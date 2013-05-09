@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,9 +11,9 @@
  *
  */
 #include <linux/memory_alloc.h>
-#include <linux/delay.h>
 #include <mach/msm_subsystem_map.h>
 #include <mach/peripheral-loader.h>
+#include <linux/delay.h>
 #include "vcd_ddl_utils.h"
 #include "vcd_ddl.h"
 #include "vcd_res_tracker_api.h"
@@ -45,6 +45,7 @@ void *ddl_pmem_alloc(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 	unsigned long iova = 0;
 	unsigned long buffer_size = 0;
 	unsigned long *kernel_vaddr = NULL;
+	unsigned long ionflag = 0;
 	unsigned long flags = 0;
 	int ret = 0;
 	ion_phys_addr_t phyaddr = 0;
@@ -70,15 +71,20 @@ void *ddl_pmem_alloc(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 		alloc_size = (alloc_size+4095) & ~4095;
 		addr->alloc_handle = ion_alloc(
 		ddl_context->video_ion_client, alloc_size, SZ_4K,
-			res_trk_get_mem_type(), res_trk_get_ion_flags());
+			res_trk_get_mem_type());
 		if (IS_ERR_OR_NULL(addr->alloc_handle)) {
 			DDL_MSG_ERROR("%s() :DDL ION alloc failed\n",
 						 __func__);
 			goto bail_out;
 		}
+		if (res_trk_check_for_sec_session() ||
+			addr->mem_type == DDL_FW_MEM)
+			ionflag = UNCACHED;
+		else
+			ionflag = CACHED;
 		kernel_vaddr = (unsigned long *) ion_map_kernel(
 					ddl_context->video_ion_client,
-					addr->alloc_handle);
+					addr->alloc_handle, ionflag);
 		if (IS_ERR_OR_NULL(kernel_vaddr)) {
 				DDL_MSG_ERROR("%s() :DDL ION map failed\n",
 							 __func__);
@@ -105,18 +111,18 @@ void *ddl_pmem_alloc(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 					0,
 					&iova,
 					&buffer_size,
-					0, 0);
-			if (ret || !iova) {
+					UNCACHED, 0);
+			if (ret) {
 				DDL_MSG_ERROR(
-				"%s():DDL ION ion map iommu failed, ret = %d iova = 0x%lx\n",
-					__func__, ret, iova);
+				"%s():DDL ION ion map iommu failed\n",
+				 __func__);
 				goto unmap_ion_alloc;
 			}
 			addr->alloced_phys_addr = (phys_addr_t) iova;
 		}
 		if (!addr->alloced_phys_addr) {
 			DDL_MSG_ERROR("%s():DDL ION client physical failed\n",
-						__func__);
+						 __func__);
 			goto unmap_ion_alloc;
 		}
 		addr->mapped_buffer = NULL;
@@ -356,16 +362,15 @@ u32 ddl_fw_init(struct ddl_buf_addr *dram_base)
 			pr_err("Failed to enable footswitch");
 			return false;
 		}
-		if (res_trk_enable_iommu_clocks()) {
+		if(res_trk_enable_iommu_clocks()) {
 			res_trk_disable_footswitch();
 			pr_err("Failed to enable iommu clocks\n");
 			return false;
 		}
 		dram_base->pil_cookie = pil_get("vidc");
-		if (res_trk_disable_iommu_clocks())
+		if(res_trk_disable_iommu_clocks())
 			pr_err("Failed to disable iommu clocks\n");
 		if (IS_ERR_OR_NULL(dram_base->pil_cookie)) {
-			res_trk_disable_footswitch();
 			pr_err("pil_get failed\n");
 			return false;
 		}
@@ -382,32 +387,32 @@ u32 ddl_fw_init(struct ddl_buf_addr *dram_base)
 void ddl_fw_release(struct ddl_buf_addr *dram_base)
 {
 	void *cookie = dram_base->pil_cookie;
-	if (res_trk_is_cp_enabled() &&
-		res_trk_check_for_sec_session()) {
-		res_trk_close_secure_session();
-		if (IS_ERR_OR_NULL(cookie)) {
-			pr_err("Invalid params");
-		return;
-	}
-	if (res_trk_enable_footswitch()) {
-		pr_err("Failed to enable footswitch");
-		return;
-	}
-	if (res_trk_enable_iommu_clocks()) {
-		res_trk_disable_footswitch();
-		pr_err("Failed to enable iommu clocks\n");
-		return;
-	}
-	pil_put(cookie);
-	if (res_trk_disable_iommu_clocks())
-		pr_err("Failed to disable iommu clocks\n");
-	if (res_trk_disable_footswitch())
-		pr_err("Failed to disable footswitch\n");
-	} else {
-	if (res_trk_check_for_sec_session())
-		res_trk_close_secure_session();
+   if (res_trk_is_cp_enabled() &&
+         res_trk_check_for_sec_session()) {
+      res_trk_close_secure_session();
+      if (IS_ERR_OR_NULL(cookie)){
+         pr_err("Invalid params");
+         return;
+      }
+      if (res_trk_enable_footswitch()) {
+         pr_err("Failed to enable footswitch");
+         return;
+      }
+      if(res_trk_enable_iommu_clocks()) {
+         res_trk_disable_footswitch();
+         pr_err("Failed to enable iommu clocks\n");
+         return;
+      }
+      pil_put(cookie);
+      if(res_trk_disable_iommu_clocks())
+         pr_err("Failed to disable iommu clocks\n");
+      if(res_trk_disable_footswitch())
+         pr_err("Failed to disable footswitch\n");
+   } else {
+         if (res_trk_check_for_sec_session())
+            res_trk_close_secure_session();
 		res_trk_release_fw_addr();
-	}
+   }
 }
 
 void ddl_set_core_start_time(const char *func_name, u32 index)
@@ -421,7 +426,7 @@ void ddl_set_core_start_time(const char *func_name, u32 index)
 		time_data->ddl_t1 = act_time;
 		DDL_MSG_LOW("\n%s(): Start Time (%u)", func_name, act_time);
 	} else if (vidc_msg_timing) {
-		DDL_MSG_LOW("\n%s(): Timer already started! St(%u) Act(%u)",
+		DDL_MSG_TIME("\n%s(): Timer already started! St(%u) Act(%u)",
 			func_name, time_data->ddl_t1, act_time);
 	}
 }
@@ -456,36 +461,6 @@ void ddl_calc_core_proc_time(const char *func_name, u32 index,
 		}
 		time_data->ddl_t1 = 0;
 	}
-}
-
-void ddl_calc_core_proc_time_cnt(const char *func_name, u32 index, u32 count)
-{
-	struct time_data *time_data = &proc_time[index];
-	if (time_data->ddl_t1) {
-		int ddl_t2;
-		struct timeval ddl_tv;
-		do_gettimeofday(&ddl_tv);
-		ddl_t2 = (ddl_tv.tv_sec * 1000) + (ddl_tv.tv_usec / 1000);
-		time_data->ddl_ttotal += (ddl_t2 - time_data->ddl_t1);
-		time_data->ddl_count += count;
-		DDL_MSG_TIME("\n%s(): cnt(%u) End Time (%u) Diff(%u) Avg(%u)",
-			func_name, time_data->ddl_count, ddl_t2,
-			ddl_t2 - time_data->ddl_t1,
-			time_data->ddl_ttotal/time_data->ddl_count);
-		time_data->ddl_t1 = 0;
-	}
-}
-
-void ddl_update_core_start_time(const char *func_name, u32 index)
-{
-	u32 act_time;
-	struct timeval ddl_tv;
-	struct time_data *time_data = &proc_time[index];
-	do_gettimeofday(&ddl_tv);
-	act_time = (ddl_tv.tv_sec * 1000) + (ddl_tv.tv_usec / 1000);
-	time_data->ddl_t1 = act_time;
-	DDL_MSG_LOW("\n%s(): Start time updated Act(%u)",
-				func_name, act_time);
 }
 
 void ddl_reset_core_time_variables(u32 index)

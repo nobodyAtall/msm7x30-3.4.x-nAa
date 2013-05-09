@@ -13,7 +13,7 @@
 #ifndef _VCD_CORE_H_
 #define _VCD_CORE_H_
 
-#include <linux/msm_ion.h>
+#include <linux/ion.h>
 #include <media/msm/vcd_api.h>
 #include "vcd_ddl_api.h"
 
@@ -25,7 +25,7 @@
 
 #define VCD_MIN_PERF_LEVEL                   37900
 
-#define VCD_DRIVER_CLIENTS_MAX              6
+#define VCD_DRIVER_INSTANCE_MAX              4
 
 #define VCD_MAX_CLIENT_TRANSACTIONS          32
 
@@ -37,7 +37,6 @@
 
 #define VCD_TIMESTAMP_RESOLUTION             1000000
 #define VCD_DEC_INITIAL_FRAME_RATE           30
-#define VCD_MAXPERF_FPS_THRESHOLD_X_1000     (59*1000)
 
 #define VCD_FIRST_IP_RCVD                    0x00000004
 #define VCD_FIRST_OP_RCVD                    0x00000008
@@ -126,7 +125,7 @@ struct vcd_dev_ctxt {
 
 	struct vcd_init_config config;
 
-	u32 driver_ids[VCD_DRIVER_CLIENTS_MAX];
+	u32 driver_ids[VCD_DRIVER_INSTANCE_MAX];
 	u32 refs;
 	u8 *device_base_addr;
 	void *hw_timer_handle;
@@ -186,7 +185,6 @@ struct vcd_clnt_ctxt {
 	u32 live;
 	u32 decoding;
 	u32 bframe;
-	u32 num_slices;
 
 	struct vcd_property_frame_rate frm_rate;
 	u32 frm_p_units;
@@ -212,8 +210,8 @@ struct vcd_clnt_ctxt {
 	u32 vcd_enable_ion;
 	struct vcd_clnt_ctxt *next;
 	u32 meta_mode;
-	int perf_set_by_client;
 	int secure;
+	int perf_set_by_client;
 	bool is_turbo_enabled;
 };
 

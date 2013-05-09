@@ -1,7 +1,7 @@
 /* drivers/video/msm/src/drv/mdp/mdp_ppp.c
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2009, 2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2009, 2012 Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -1311,7 +1311,7 @@ int get_img(struct mdp_img *img, struct mdp_blit_req *req,
 		}
 	}
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-		*srcp_ihdl = ion_import_dma_buf(mfd->iclient, img->memory_id);
+		*srcp_ihdl = ion_import_fd(mfd->iclient, img->memory_id);
 		if (IS_ERR_OR_NULL(*srcp_ihdl))
 			return PTR_ERR(*srcp_ihdl);
 

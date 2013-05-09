@@ -129,16 +129,10 @@ void vcd_ddl_callback(u32 event, u32 status, void *payload,
 		{
 			transc = (struct vcd_transc *)client_data;
 
-			if (!transc || !transc->in_use || !transc->cctxt) {
+			if (!transc || !transc->in_use
+				|| !transc->cctxt) {
 				VCD_MSG_ERROR("Invalid clientdata "
-					"received from DDL, transc = 0x%x\n",
-					(u32)transc);
-				if (transc) {
-					VCD_MSG_ERROR("transc->in_use = %u, "
-						"transc->cctxt = 0x%x\n",
-						transc->in_use,
-						(u32)transc->cctxt);
-				}
+							  "received from DDL ");
 			} else {
 				cctxt = transc->cctxt;
 
@@ -537,12 +531,12 @@ static u32 vcd_init_cmn
 	*driver_handle = 0;
 
 	driver_id = 0;
-	while (driver_id < VCD_DRIVER_CLIENTS_MAX &&
+	while (driver_id < VCD_DRIVER_INSTANCE_MAX &&
 		   dev_ctxt->driver_ids[driver_id]) {
 		++driver_id;
 	}
 
-	if (driver_id == VCD_DRIVER_CLIENTS_MAX) {
+	if (driver_id == VCD_DRIVER_INSTANCE_MAX) {
 		VCD_MSG_ERROR("Max driver instances reached");
 
 		return VCD_ERR_FAIL;
@@ -857,7 +851,7 @@ static u32 vcd_close_in_ready
 	} else {
 		VCD_MSG_ERROR("Unsupported API in client state %d",
 				  cctxt->clnt_state.state);
-		vcd_destroy_client_context(cctxt);
+
 		rc = VCD_ERR_BAD_STATE;
 	}
 

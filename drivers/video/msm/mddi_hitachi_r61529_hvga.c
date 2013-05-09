@@ -16,7 +16,7 @@
 #include <linux/fb.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/mddi_hitachi_r61529_hvga.h>
 
 #if defined(CONFIG_MACH_SEMC_SATSUMA) || defined(CONFIG_MACH_SEMC_SMULTRON)

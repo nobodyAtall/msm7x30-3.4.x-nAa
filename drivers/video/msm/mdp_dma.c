@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -482,26 +482,53 @@ void mdp_dma2_update(struct msm_fb_data_type *mfd)
 #endif
 {
 	unsigned long flag;
+	static int first_vsync;
+	int need_wait = 0;
 
 	down(&mfd->dma->mutex);
-	if ((mfd) && (!mfd->dma->busy) && (mfd->panel_power_on)) {
+	if ((mfd) && (mfd->panel_power_on)) {
 		down(&mfd->sem);
+		spin_lock_irqsave(&mdp_spin_lock, flag);
+		if (mfd->dma->busy == TRUE)
+			need_wait++;
+		spin_unlock_irqrestore(&mdp_spin_lock, flag);
+
+		if (need_wait)
+			wait_for_completion_killable(&mfd->dma->comp);
+
+		/* schedule DMA to start */
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 		mfd->ibuf_flushed = TRUE;
 		mdp_dma2_update_lcd(mfd);
 
-		spin_lock_irqsave(&mdp_spin_lock, flag);
 		mdp_enable_irq(MDP_DMA2_TERM);
 		mfd->dma->busy = TRUE;
 		INIT_COMPLETION(mfd->dma->comp);
-
+		INIT_COMPLETION(vsync_cntrl.vsync_comp);
+		if (!vsync_cntrl.vsync_irq_enabled &&
+				vsync_cntrl.disabled_clocks) {
+			MDP_OUTP(MDP_BASE + 0x021c, 0x10); /* read pointer */
+			outp32(MDP_INTR_CLEAR, MDP_PRIM_RDPTR);
+			mdp_intr_mask |= MDP_PRIM_RDPTR;
+			outp32(MDP_INTR_ENABLE, mdp_intr_mask);
+			mdp_enable_irq(MDP_VSYNC_TERM);
+			vsync_cntrl.vsync_dma_enabled = 1;
+		}
 		spin_unlock_irqrestore(&mdp_spin_lock, flag);
 		/* schedule DMA to start */
 		mdp_dma_schedule(mfd, MDP_DMA2_TERM);
 		up(&mfd->sem);
 
-		/* wait until DMA finishes the current job */
-		wait_for_completion_killable(&mfd->dma->comp);
-		mdp_disable_irq(MDP_DMA2_TERM);
+		/* wait until Vsync finishes the current job */
+		if (first_vsync) {
+			if (!wait_for_completion_killable_timeout
+					(&vsync_cntrl.vsync_comp, HZ/10))
+				pr_err("Timedout DMA %s %d", __func__,
+								__LINE__);
+		} else {
+			first_vsync = 1;
+		}
+		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	/* signal if pan function is waiting for the update completion */
 		if (mfd->pan_waiting) {
@@ -524,21 +551,25 @@ void mdp_dma_vsync_ctrl(int enable)
 		INIT_COMPLETION(vsync_cntrl.vsync_wait);
 
 	vsync_cntrl.vsync_irq_enabled = enable;
-	if (!enable)
-		vsync_cntrl.disabled_clocks = 0;
 	disabled_clocks = vsync_cntrl.disabled_clocks;
 	spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
-	if (enable && disabled_clocks) {
+	if (enable && disabled_clocks)
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+
+	spin_lock_irqsave(&mdp_spin_lock, flag);
+	if (enable && vsync_cntrl.disabled_clocks &&
+			!vsync_cntrl.vsync_dma_enabled) {
 		MDP_OUTP(MDP_BASE + 0x021c, 0x10); /* read pointer */
-		spin_lock_irqsave(&mdp_spin_lock, flag);
 		outp32(MDP_INTR_CLEAR, MDP_PRIM_RDPTR);
 		mdp_intr_mask |= MDP_PRIM_RDPTR;
 		outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 		mdp_enable_irq(MDP_VSYNC_TERM);
-		spin_unlock_irqrestore(&mdp_spin_lock, flag);
+		vsync_cntrl.disabled_clocks = 0;
+	} else if (enable && vsync_cntrl.disabled_clocks) {
+		vsync_cntrl.disabled_clocks = 0;
 	}
+	spin_unlock_irqrestore(&mdp_spin_lock, flag);
 	if (vsync_cntrl.vsync_irq_enabled &&
 		atomic_read(&vsync_cntrl.suspend) == 0)
 		atomic_set(&vsync_cntrl.vsync_resume, 1);
@@ -564,9 +595,8 @@ void mdp_set_dma_pan_info(struct fb_info *info, struct mdp_dirty_region *dirty,
 	down(&mfd->sem);
 
 	iBuf = &mfd->ibuf;
-
-	if (mfd->display_iova)
-		iBuf->buf = (uint8 *)mfd->display_iova;
+	if (mfd->map_buffer)
+		iBuf->buf = (uint8 *)mfd->map_buffer->iova[0];
 	else
 		iBuf->buf = (uint8 *) info->fix.smem_start;
 

@@ -2367,6 +2367,10 @@ config FB_MSM_MDDI_HITACHI_HVGA_LCD
 	---help---
 	  Support for Hitachi HVGA MDDI LCD Panel (320x480)
 
+config FB_MDDI_DISABLE_REVERSE
+	bool "DISABLE REVERSE"
+	default n
+
 config FB_MX3
 	tristate "MX3 Framebuffer support"
 	depends on FB && MX3_IPU

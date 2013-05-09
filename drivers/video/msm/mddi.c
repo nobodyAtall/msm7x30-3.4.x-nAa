@@ -2,7 +2,7 @@
  * MSM MDDI Transport
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2007-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -55,12 +55,10 @@ static void mddi_early_suspend(struct early_suspend *h);
 static void mddi_early_resume(struct early_suspend *h);
 #endif
 
-static void pmdh_clk_disable(void);
-static void pmdh_clk_enable(void);
 static struct platform_device *pdev_list[MSM_FB_MAX_DEV_LIST];
 static int pdev_list_cnt;
-static struct clk *mddi_clk;
-static struct clk *mddi_pclk;
+static struct clk *mddi_clk = NULL;
+static struct clk *mddi_pclk = NULL;
 static struct mddi_platform_data *mddi_pdata;
 
 DEFINE_MUTEX(mddi_timer_lock);
@@ -133,7 +131,7 @@ int pmdh_clk_func(int value)
 	return ret;
 }
 
-static void pmdh_clk_disable()
+void pmdh_clk_disable()
 {
 	mutex_lock(&pmdh_clk_lock);
 	if (pmdh_clk_status == 0) {
@@ -164,7 +162,7 @@ static void pmdh_clk_disable()
 	mutex_unlock(&pmdh_clk_lock);
 }
 
-static void pmdh_clk_enable()
+void pmdh_clk_enable()
 {
 	mutex_lock(&pmdh_clk_lock);
 	if (pmdh_clk_status == 1) {
@@ -233,6 +231,7 @@ static int mddi_on(struct platform_device *pdev)
 #endif
 
 	mfd = platform_get_drvdata(pdev);
+	pmdh_clk_enable();
 	pm_runtime_get(&pdev->dev);
 	if (mddi_pdata && mddi_pdata->mddi_power_save)
 		mddi_pdata->mddi_power_save(1);

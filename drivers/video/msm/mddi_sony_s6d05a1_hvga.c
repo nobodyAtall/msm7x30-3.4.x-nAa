@@ -22,7 +22,7 @@
 #include <linux/fb.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/mddi_sony_s6d05a1_hvga.h>
 
 #if defined(CONFIG_MACH_SEMC_SATSUMA) || defined(CONFIG_MACH_SEMC_SMULTRON)

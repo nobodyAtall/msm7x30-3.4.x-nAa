@@ -11,7 +11,7 @@
  *
  */
 #include <linux/firmware.h>
-#include <linux/pm_qos.h>
+#include <linux/pm_qos_params.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
@@ -25,10 +25,11 @@
 #include "vidc.h"
 #include "vcd_res_tracker.h"
 
+#define PIL_FW_BASE_ADDR 0xafe00000
 #define PIL_FW_SIZE 0x200000
 
-static unsigned int vidc_clk_table[5] = {
-	48000000, 133330000, 200000000, 228570000, 266670000,
+static unsigned int vidc_clk_table[4] = {
+	48000000, 133330000, 200000000, 228570000,
 };
 static unsigned int restrk_mmu_subsystem[] =	{
 		MSM_SUBSYSTEM_VIDEO, MSM_SUBSYSTEM_VIDEO_FWARE};
@@ -69,7 +70,7 @@ static void *res_trk_pmem_map
 	if (res_trk_get_enable_ion() && addr->alloc_handle) {
 		kernel_vaddr = (unsigned long *) ion_map_kernel(
 					ddl_context->video_ion_client,
-					addr->alloc_handle);
+					addr->alloc_handle, UNCACHED);
 		if (IS_ERR_OR_NULL(kernel_vaddr)) {
 			DDL_MSG_ERROR("%s():DDL ION client map failed\n",
 						 __func__);
@@ -84,11 +85,10 @@ static void *res_trk_pmem_map
 				0,
 				&iova,
 				&buffer_size,
-				0, 0);
-		if (ret || !iova) {
-			DDL_MSG_ERROR(
-			"%s():DDL ION client iommu map failed, ret = %d iova = 0x%lx\n",
-			__func__, ret, iova);
+				UNCACHED, 0);
+		if (ret) {
+			DDL_MSG_ERROR("%s():DDL ION client iommu map failed\n",
+						 __func__);
 			goto ion_unmap_bail_out;
 		}
 		addr->mapped_buffer = NULL;
@@ -105,18 +105,18 @@ static void *res_trk_pmem_map
 				pr_err(" %s() alloced addres NULL", __func__);
 				goto bail_out;
 			}
-			flags = MSM_SUBSYSTEM_MAP_IOVA |
-				MSM_SUBSYSTEM_MAP_KADDR;
+			flags = MSM_SUBSYSTEM_MAP_IOVA|MSM_SUBSYSTEM_MAP_KADDR;
 			if (alignment == DDL_KILO_BYTE(128))
 					index = 1;
 			else if (alignment > SZ_4K)
 				flags |= MSM_SUBSYSTEM_ALIGN_IOVA_8K;
+
 			addr->mapped_buffer =
 			msm_subsystem_map_buffer(
 			(unsigned long)addr->alloced_phys_addr,
 			sz, flags, &restrk_mmu_subsystem[index],
-			sizeof(restrk_mmu_subsystem[index])/
-				sizeof(unsigned int));
+			sizeof(restrk_mmu_subsystem[index])
+			/sizeof(unsigned int));
 			if (IS_ERR(addr->mapped_buffer)) {
 				pr_err(" %s() buffer map failed", __func__);
 				goto bail_out;
@@ -126,15 +126,13 @@ static void *res_trk_pmem_map
 				pr_err("%s() map buffers failed\n", __func__);
 				goto bail_out;
 			}
-			addr->physical_base_addr =
-				 (u8 *)mapped_buffer->iova[0];
-			addr->virtual_base_addr =
-					mapped_buffer->vaddr;
+			addr->physical_base_addr = (u8 *)mapped_buffer->iova[0];
+			addr->virtual_base_addr = mapped_buffer->vaddr;
 		} else {
-			addr->physical_base_addr =
-				(u8 *) addr->alloced_phys_addr;
-			addr->virtual_base_addr =
-				(u8 *)addr->alloced_phys_addr;
+			addr->physical_base_addr = (u8 *)
+					 addr->alloced_phys_addr;
+			addr->virtual_base_addr = (u8 *)
+					addr->alloced_phys_addr;
 		}
 		addr->align_physical_addr = (u8 *) DDL_ALIGN((u32)
 		addr->physical_base_addr, alignment);
@@ -145,7 +143,7 @@ static void *res_trk_pmem_map
 	}
 	return addr->virtual_base_addr;
 bail_out:
-	if (IS_ERR(addr->mapped_buffer))
+	if (addr->mapped_buffer)
 		msm_subsystem_unmap_buffer(addr->mapped_buffer);
 	return NULL;
 ion_unmap_bail_out:
@@ -159,29 +157,21 @@ ion_bail_out:
 
 static void res_trk_pmem_free(struct ddl_buf_addr *addr)
 {
+	/*TODO: Enhance for pmem*/
 	struct ddl_context *ddl_context;
 	ddl_context = ddl_get_context();
 	if (ddl_context->video_ion_client) {
 		if (addr && addr->alloc_handle) {
-			ion_free(ddl_context->video_ion_client,
-			 addr->alloc_handle);
+			ion_free(ddl_context->video_ion_client, addr->alloc_handle);
 			addr->alloc_handle = NULL;
 		}
-	} else {
-		if (addr->mapped_buffer)
-			msm_subsystem_unmap_buffer(addr->mapped_buffer);
-		if (addr->alloced_phys_addr)
-			free_contiguous_memory_by_paddr(
-			(unsigned long)addr->alloced_phys_addr);
 	}
-	memset(addr, 0 , sizeof(struct ddl_buf_addr));
 }
 static int res_trk_pmem_alloc
 	(struct ddl_buf_addr *addr, size_t sz, u32 alignment)
 {
 	u32 alloc_size;
 	struct ddl_context *ddl_context;
-	unsigned long fw_addr;
 	int rc = 0;
 	DBG_PMEM("\n%s() IN: Requested alloc size(%u)", __func__, (u32)sz);
 	if (!addr) {
@@ -193,34 +183,30 @@ static int res_trk_pmem_alloc
 	res_trk_set_mem_type(addr->mem_type);
 	alloc_size = (sz + alignment);
 	if (res_trk_get_enable_ion()) {
-		if (!res_trk_is_cp_enabled() ||
-			 !res_trk_check_for_sec_session()) {
+		if (!res_trk_is_cp_enabled() || !res_trk_check_for_sec_session()) {
 			if (!ddl_context->video_ion_client)
 				ddl_context->video_ion_client =
 					res_trk_get_ion_client();
 			if (!ddl_context->video_ion_client) {
-				DDL_MSG_ERROR(
-				"%s() :DDL ION Client Invalid handle\n",
-						__func__);
+				DDL_MSG_ERROR("%s() :DDL ION Client Invalid handle\n",
+							 __func__);
 				rc = -ENOMEM;
 				goto bail_out;
 			}
 			alloc_size = (alloc_size+4095) & ~4095;
 			addr->alloc_handle = ion_alloc(
-					ddl_context->video_ion_client,
-					 alloc_size, SZ_4K,
-					res_trk_get_mem_type(),
-					res_trk_get_ion_flags());
+			ddl_context->video_ion_client, alloc_size, SZ_4K,
+				res_trk_get_mem_type());
 			if (IS_ERR_OR_NULL(addr->alloc_handle)) {
 				DDL_MSG_ERROR("%s() :DDL ION alloc failed\n",
-						__func__);
+							 __func__);
 				rc = -ENOMEM;
 				goto bail_out;
 			}
-		} else {
-			fw_addr = resource_context.vidc_platform_data->fw_addr;
+		}
+		else {
 			addr->alloc_handle = NULL;
-			addr->alloced_phys_addr = fw_addr;
+			addr->alloced_phys_addr = PIL_FW_BASE_ADDR;
 			addr->buffer_size = sz;
 		}
 	} else {
@@ -230,7 +216,6 @@ static int res_trk_pmem_alloc
 		if (!addr->alloced_phys_addr) {
 			DDL_MSG_ERROR("%s() : acm alloc failed (%d)\n",
 					__func__, alloc_size);
-			rc = -ENOMEM;
 			goto bail_out;
 		}
 		addr->buffer_size = sz;
@@ -429,9 +414,7 @@ static u32 res_trk_vidc_pwr_up(void)
 		VCDRES_MSG_ERROR("Error : pm_runtime_get failed\n");
 		goto bail_out;
 	}
-	if (!resource_context.footswitch)
-		resource_context.footswitch =
-			regulator_get(resource_context.device, "vdd");
+	resource_context.footswitch = regulator_get(NULL, "fs_ved");
 	if (IS_ERR(resource_context.footswitch)) {
 		VCDRES_MSG_ERROR("foot switch get failed\n");
 		resource_context.footswitch = NULL;
@@ -453,10 +436,6 @@ bail_out:
 static struct ion_client *res_trk_create_ion_client(void){
 	struct ion_client *video_client;
 	video_client = msm_ion_client_create(-1, "video_client");
-	if (IS_ERR_OR_NULL(video_client)) {
-		VCDRES_MSG_ERROR("%s: Unable to create ION client\n", __func__);
-		video_client = NULL;
-	}
 	return video_client;
 }
 
@@ -464,8 +443,7 @@ int res_trk_enable_footswitch(void)
 {
 	int rc = 0;
 	mutex_lock(&resource_context.lock);
-	if (!resource_context.footswitch)
-		resource_context.footswitch = regulator_get(NULL, "fs_ved");
+	resource_context.footswitch = regulator_get(NULL, "fs_ved");
 	if (IS_ERR(resource_context.footswitch)) {
 		VCDRES_MSG_ERROR("foot switch get failed\n");
 		resource_context.footswitch = NULL;
@@ -634,7 +612,7 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 		vidc_freq = vidc_clk_table[2];
 		*pn_set_perf_lvl = RESTRK_1080P_MAX_PERF_LEVEL;
 	} else {
-		vidc_freq = vidc_clk_table[4];
+		vidc_freq = vidc_clk_table[3];
 		*pn_set_perf_lvl = RESTRK_1080P_TURBO_PERF_LEVEL;
 	}
 
@@ -655,10 +633,6 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 		VCDRES_MSG_MED("%s(): Setting vidc freq to %u\n",
 			__func__, vidc_freq);
 		if (!res_trk_sel_clk_rate(vidc_freq)) {
-			if (vidc_freq == vidc_clk_table[4]) {
-				if (res_trk_sel_clk_rate(vidc_clk_table[3]))
-					goto ret;
-			}
 			VCDRES_MSG_ERROR("%s(): res_trk_sel_clk_rate FAILED\n",
 				__func__);
 			*pn_set_perf_lvl = 0;
@@ -666,7 +640,7 @@ u32 res_trk_set_perf_level(u32 req_perf_lvl, u32 *pn_set_perf_lvl,
 		}
 	}
 #endif
-ret:	VCDRES_MSG_MED("%s() set perl level : %d", __func__, *pn_set_perf_lvl);
+	VCDRES_MSG_MED("%s() set perl level : %d", __func__, *pn_set_perf_lvl);
 	return true;
 }
 
@@ -775,7 +749,7 @@ u32 res_trk_get_core_type(void){
 u32 res_trk_get_firmware_addr(struct ddl_buf_addr *firm_addr)
 {
 	int rc = 0;
-	size_t size = 0;
+	size_t size= 0;
 	if (!firm_addr || resource_context.firmware_addr.mapped_buffer) {
 		pr_err("%s() invalid params", __func__);
 		return -EINVAL;
@@ -803,7 +777,7 @@ u32 res_trk_get_firmware_addr(struct ddl_buf_addr *firm_addr)
 		goto fail_map;
 	}
 	memcpy(firm_addr, &resource_context.firmware_addr,
-		sizeof(struct ddl_buf_addr));
+			sizeof(struct ddl_buf_addr));
 	return 0;
 fail_map:
 	res_trk_pmem_free(&resource_context.firmware_addr);
@@ -847,30 +821,17 @@ int res_trk_get_mem_type(void)
 	}
 	if (resource_context.vidc_platform_data->enable_ion) {
 		if (res_trk_check_for_sec_session()) {
-			mem_type = ION_HEAP(mem_type);
-	} else
-		mem_type = (ION_HEAP(mem_type) |
-			ION_HEAP(ION_IOMMU_HEAP_ID));
+         mem_type = ION_HEAP(mem_type);
+         if(resource_context.res_mem_type != DDL_FW_MEM)
+            mem_type |= ION_SECURE;
+         else if (res_trk_is_cp_enabled())
+            mem_type |= ION_SECURE;
+      }
+		else
+			mem_type = (ION_HEAP(mem_type) |
+					ION_HEAP(ION_IOMMU_HEAP_ID));
 	}
-
 	return mem_type;
-}
-
-unsigned int res_trk_get_ion_flags(void)
-{
-	unsigned int flags = 0;
-	if (resource_context.res_mem_type == DDL_FW_MEM)
-		return flags;
-
-	if (resource_context.vidc_platform_data->enable_ion) {
-		if (res_trk_check_for_sec_session()) {
-			if (resource_context.res_mem_type != DDL_FW_MEM)
-				flags |= ION_SECURE;
-			else if (res_trk_is_cp_enabled())
-				flags |= ION_SECURE;
-		}
-	}
-	return flags;
 }
 
 u32 res_trk_is_cp_enabled(void)
@@ -982,54 +943,23 @@ void res_trk_secure_set(void)
 
 int res_trk_open_secure_session()
 {
-	int rc, memtype;
-	if (!res_trk_check_for_sec_session()) {
-		pr_err("Secure sessions are not active\n");
-		return -EINVAL;
-	}
-	mutex_lock(&resource_context.secure_lock);
-	if (!resource_context.sec_clk_heap) {
+	int rc;
+
+	if (res_trk_check_for_sec_session() == 1) {
+		mutex_lock(&resource_context.secure_lock);
 		pr_err("Securing...\n");
 		rc = res_trk_enable_iommu_clocks();
 		if (rc) {
 			pr_err("IOMMU clock enabled failed while open");
 			goto error_open;
 		}
-		memtype = ION_HEAP(resource_context.memtype);
-		rc = msm_ion_secure_heap(memtype);
-		if (rc) {
-			pr_err("ION heap secure failed heap id %d rc %d\n",
-				   resource_context.memtype, rc);
-			goto disable_iommu_clks;
-		}
-		memtype = ION_HEAP(resource_context.cmd_mem_type);
-		rc = msm_ion_secure_heap(memtype);
-		if (rc) {
-			pr_err("ION heap secure failed heap id %d rc %d\n",
-				   resource_context.cmd_mem_type, rc);
-			goto unsecure_memtype_heap;
-		}
-		if (resource_context.vidc_platform_data->secure_wb_heap) {
-			memtype = ION_HEAP(ION_CP_WB_HEAP_ID);
-			rc = msm_ion_secure_heap(memtype);
-			if (rc) {
-				pr_err("WB_HEAP_ID secure failed rc %d\n", rc);
-				goto unsecure_cmd_heap;
-			}
-		}
-		resource_context.sec_clk_heap = 1;
+		msm_ion_secure_heap(ION_HEAP(resource_context.memtype));
+		msm_ion_secure_heap(ION_HEAP(resource_context.cmd_mem_type));
 		res_trk_disable_iommu_clocks();
+		mutex_unlock(&resource_context.secure_lock);
 	}
-	mutex_unlock(&resource_context.secure_lock);
 	return 0;
-unsecure_cmd_heap:
-	msm_ion_unsecure_heap(ION_HEAP(resource_context.memtype));
-unsecure_memtype_heap:
-	msm_ion_unsecure_heap(ION_HEAP(resource_context.cmd_mem_type));
-disable_iommu_clks:
-	res_trk_disable_iommu_clocks();
 error_open:
-	resource_context.sec_clk_heap = 0;
 	mutex_unlock(&resource_context.secure_lock);
 	return rc;
 }
@@ -1037,23 +967,17 @@ error_open:
 int res_trk_close_secure_session()
 {
 	int rc;
-	if (res_trk_check_for_sec_session() == 1 &&
-		resource_context.sec_clk_heap) {
+	if (res_trk_check_for_sec_session() == 1) {
 		pr_err("Unsecuring....\n");
 		mutex_lock(&resource_context.secure_lock);
 		rc = res_trk_enable_iommu_clocks();
 		if (rc) {
-			pr_err("IOMMU clock enabled failed while close\n");
+			pr_err("IOMMU clock enabled failed while close");
 			goto error_close;
 		}
 		msm_ion_unsecure_heap(ION_HEAP(resource_context.cmd_mem_type));
 		msm_ion_unsecure_heap(ION_HEAP(resource_context.memtype));
-
-		if (resource_context.vidc_platform_data->secure_wb_heap)
-			msm_ion_unsecure_heap(ION_HEAP(ION_CP_WB_HEAP_ID));
-
 		res_trk_disable_iommu_clocks();
-		resource_context.sec_clk_heap = 0;
 		mutex_unlock(&resource_context.secure_lock);
 	}
 	return 0;

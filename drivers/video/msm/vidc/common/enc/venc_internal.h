@@ -18,7 +18,6 @@
 #include <linux/cdev.h>
 #include <media/msm/vidc_init.h>
 
-#define NUM_OF_DRIVER_NODES 2
 #define VID_ENC_MAX_NUM_OF_BUFF 100
 
 enum venc_buffer_dir{
@@ -33,8 +32,8 @@ struct vid_enc_msg {
 
 struct vid_enc_dev {
 
-	struct cdev cdev[NUM_OF_DRIVER_NODES];
-	struct device *device[NUM_OF_DRIVER_NODES];
+	struct cdev cdev;
+	struct device *device;
 	resource_size_t phys_base;
 	void __iomem *virt_base;
 	unsigned int irq;

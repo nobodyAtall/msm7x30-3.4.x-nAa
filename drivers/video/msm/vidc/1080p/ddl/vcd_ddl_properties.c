@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -201,7 +201,6 @@ static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
 			decoder->dynamic_prop_change |=
 				DDL_DEC_REQ_OUTPUT_FLUSH;
 			decoder->dpb_mask.client_mask = 0;
-			decoder->field_needed_for_prev_ip = 0;
 			vcd_status = VCD_S_SUCCESS;
 		}
 	break;
@@ -288,9 +287,6 @@ static u32 ddl_set_dec_property(struct ddl_client_context *ddl,
 				ddl_set_default_decoder_buffer_req(decoder,
 					true);
 			}
-			DDL_MSG_LOW("set  VCD_I_FRAME_SIZE width = %d"
-				" height = %d\n",
-				frame_size->width, frame_size->height);
 			vcd_status = VCD_S_SUCCESS;
 		}
 	}
@@ -617,15 +613,7 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 		struct vcd_property_multi_slice *multi_slice =
 			(struct vcd_property_multi_slice *)
 				property_value;
-		DDL_MSG_HIGH("VCD_I_MULTI_SLICE eMSliceSel %d  nMSliceSize %d"
-				"Tot#of MB %d encoder->frame_size.width = %d"
-				"encoder->frame_size.height = %d",
-				(int)multi_slice->m_slice_sel,
-				multi_slice->m_slice_size,
-				DDL_NO_OF_MB(encoder->frame_size.width,
-					encoder->frame_size.height),
-				encoder->frame_size.width,
-				encoder->frame_size.height);
+
 		switch (multi_slice->m_slice_sel) {
 		case VCD_MSLICE_OFF:
 			vcd_status = VCD_S_SUCCESS;
@@ -635,14 +623,11 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 				vcd_status = VCD_S_SUCCESS;
 		break;
 		case VCD_MSLICE_BY_MB_COUNT:
-		{
-			if ((multi_slice->m_slice_size >= 1) &&
+			if (multi_slice->m_slice_size >= 1 &&
 				(multi_slice->m_slice_size <=
 				DDL_NO_OF_MB(encoder->frame_size.width,
-					encoder->frame_size.height))) {
+				encoder->frame_size.height)))
 				vcd_status = VCD_S_SUCCESS;
-			}
-		}
 		break;
 		case VCD_MSLICE_BY_BYTE_COUNT:
 			if (multi_slice->m_slice_size > 0)
@@ -870,9 +855,6 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 			encoder->client_output_buf_req.sz =
 				DDL_ALIGN(buffer_req->sz,
 				DDL_KILO_BYTE(4));
-			DDL_MSG_LOW("%s encoder->client_output_buf_req.sz"
-				"  = %d\n", __func__,
-				encoder->client_output_buf_req.sz);
 			vcd_status = VCD_S_SUCCESS;
 		}
 	}
@@ -943,14 +925,8 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 	case VCD_I_METADATA_HEADER:
 		DDL_MSG_LOW("Meta Data Interface is Requested");
 		if (!res_trk_check_for_sec_session()) {
-			if (!encoder->slice_delivery_info.enable) {
-				vcd_status = ddl_set_metadata_params(ddl,
-						property_hdr, property_value);
-			} else {
-				DDL_MSG_ERROR("Ignoring meta data settting in "
-					"slice mode: %s\n", __func__);
-				vcd_status = VCD_S_SUCCESS;
-			}
+			vcd_status = ddl_set_metadata_params(ddl,
+				property_hdr, property_value);
 		} else {
 			DDL_MSG_ERROR("Meta Data Interface is not "
 				"supported in secure session");
@@ -975,102 +951,20 @@ static u32 ddl_set_enc_property(struct ddl_client_context *ddl,
 		}
 		break;
 	}
-	case VCD_I_SLICE_DELIVERY_MODE:
-	{
-		size_t output_buf_size;
-		u32 num_mb, num_slices;
-		struct vcd_property_hdr slice_property_hdr;
-		struct vcd_property_meta_data_enable slice_meta_data;
-		DDL_MSG_HIGH("Set property VCD_I_SLICE_DELIVERY_MODE\n");
-		if (sizeof(u32) == property_hdr->sz &&
-			encoder->codec.codec == VCD_CODEC_H264 &&
-			encoder->multi_slice.m_slice_sel
-				 == VCD_MSLICE_BY_MB_COUNT &&
-			DDLCLIENT_STATE_IS(ddl, DDL_CLIENT_OPEN)) {
-			encoder->slice_delivery_info.enable
-				= *(u32 *)property_value;
-			DDL_MSG_HIGH("set encoder->slice_delivery_mode = %u\n",
-				encoder->slice_delivery_info.enable);
-			output_buf_size =
-				encoder->client_output_buf_req.sz;
-			num_mb = DDL_NO_OF_MB(encoder->frame_size.width,
-					encoder->frame_size.height);
-			num_slices = num_mb/
-				encoder->multi_slice.m_slice_size;
-			num_slices = ((num_mb - num_slices *
-				encoder->multi_slice.m_slice_size) > 0)
-				? (num_slices + 1) : num_slices;
-			encoder->slice_delivery_info.num_slices =
-				num_slices;
-			if (num_slices <= DDL_MAX_NUM_BFRS_FOR_SLICE_BATCH) {
-				DDL_MSG_HIGH("%s: currently slice info "
-					"metadata is not supported when slice "
-					"delivery mode is enabled. hence "
-					"disabling slice info metadata.\n",
-					__func__);
-				slice_property_hdr.prop_id =
-					VCD_I_METADATA_ENABLE;
-				slice_property_hdr.sz =
-					sizeof(struct \
-					vcd_property_meta_data_enable);
-				ddl_get_metadata_params(ddl,
-						&slice_property_hdr,
-						&slice_meta_data);
-				slice_meta_data.meta_data_enable_flag
-					&= ~VCD_METADATA_ENC_SLICE;
-				ddl_set_metadata_params(ddl,
-						&slice_property_hdr,
-						&slice_meta_data);
-				encoder->client_output_buf_req.min_count =
-				((DDL_ENC_SLICE_BATCH_FACTOR * num_slices + 2)
-				> DDL_MAX_BUFFER_COUNT)
-				? DDL_MAX_BUFFER_COUNT :
-				(DDL_ENC_SLICE_BATCH_FACTOR * num_slices + 2);
-				output_buf_size =
-				encoder->client_output_buf_req.sz/num_slices;
-				encoder->client_output_buf_req.sz =
-				DDL_ALIGN(output_buf_size, DDL_KILO_BYTE(4));
-				encoder->output_buf_req =
-				encoder->client_output_buf_req;
-				DDL_MSG_HIGH("%s num_mb = %u num_slices = %u "
-				"output_buf_count = %u "
-				"output_buf_size = %u aligned size = %u\n",
-				__func__, num_mb, num_slices,
-				encoder->client_output_buf_req.min_count,
-				output_buf_size,
-				encoder->client_output_buf_req.sz);
-				vcd_status = VCD_S_SUCCESS;
-			}
-		}
-		break;
-	}
 	case VCD_REQ_PERF_LEVEL:
 		vcd_status = VCD_S_SUCCESS;
 		break;
-	case VCD_I_ENABLE_DELIMITER_FLAG:
+	case VCD_I_H263_PLUSPTYPE:
 	{
-		struct vcd_property_avc_delimiter_enable *delimiter_enable =
-			(struct vcd_property_avc_delimiter_enable *)
-				property_value;
-		if (sizeof(struct vcd_property_avc_delimiter_enable) ==
-			property_hdr->sz &&
-			encoder->codec.codec == VCD_CODEC_H264) {
-			encoder->avc_delimiter_enable =
-			delimiter_enable->avc_delimiter_enable_flag;
-			vcd_status = VCD_S_SUCCESS;
-		}
-		break;
-	}
-	case VCD_I_ENABLE_VUI_TIMING_INFO:
-	{
-		struct vcd_property_vui_timing_info_enable *vui_timing_enable =
-			(struct vcd_property_vui_timing_info_enable *)
-				property_value;
-		if (sizeof(struct vcd_property_vui_timing_info_enable) ==
-			property_hdr->sz &&
-			encoder->codec.codec == VCD_CODEC_H264) {
-			encoder->vui_timinginfo_enable =
-			vui_timing_enable->vui_timing_info;
+		struct vcd_property_plusptype *plusptype =
+			(struct vcd_property_plusptype *)property_value;
+
+		if ((sizeof(struct vcd_property_plusptype) ==
+			property_hdr->sz) && encoder->codec.codec ==
+			VCD_CODEC_H263) {
+			encoder->plusptype_enable = plusptype->plusptype_enable;
+			DDL_MSG_LOW("\nencoder->plusptype_enable = %u",
+						encoder->plusptype_enable);
 			vcd_status = VCD_S_SUCCESS;
 		}
 		break;
@@ -1480,10 +1374,7 @@ static u32 ddl_get_enc_property(struct ddl_client_context *ddl,
 			property_hdr->sz) {
 				*(struct vcd_buffer_requirement *)
 			property_value = encoder->client_output_buf_req;
-			DDL_MSG_LOW("%s encoder->client_output_buf_req = %d\n",
-				 __func__,
-				encoder->client_output_buf_req.sz);
-			vcd_status = VCD_S_SUCCESS;
+				vcd_status = VCD_S_SUCCESS;
 		}
 	break;
 	case VCD_I_BUFFER_FORMAT:
@@ -1550,32 +1441,6 @@ static u32 ddl_get_enc_property(struct ddl_client_context *ddl,
 			vcd_status = VCD_S_SUCCESS;
 		}
 	break;
-	case VCD_I_SLICE_DELIVERY_MODE:
-		if (sizeof(struct vcd_property_slice_delivery_info) ==
-			property_hdr->sz) {
-			*(struct vcd_property_slice_delivery_info *)
-				property_value = encoder->slice_delivery_info;
-			vcd_status = VCD_S_SUCCESS;
-		}
-		break;
-	case VCD_I_ENABLE_DELIMITER_FLAG:
-		if (sizeof(struct vcd_property_avc_delimiter_enable) ==
-			property_hdr->sz) {
-			((struct vcd_property_avc_delimiter_enable *)
-				property_value)->avc_delimiter_enable_flag =
-					encoder->avc_delimiter_enable;
-			vcd_status = VCD_S_SUCCESS;
-		}
-		break;
-	case VCD_I_ENABLE_VUI_TIMING_INFO:
-		if (sizeof(struct vcd_property_vui_timing_info_enable) ==
-			property_hdr->sz) {
-			((struct vcd_property_vui_timing_info_enable *)
-				property_value)->vui_timing_info =
-					encoder->vui_timinginfo_enable;
-			vcd_status = VCD_S_SUCCESS;
-		}
-		break;
 	default:
 		vcd_status = VCD_ERR_ILLEGAL_OP;
 		break;
@@ -1646,7 +1511,6 @@ static u32 ddl_set_enc_dynamic_property(struct ddl_client_context *ddl,
 			vcd_status = VCD_S_SUCCESS;
 		}
 	}
-	break;
 	case VCD_I_INTRA_REFRESH:
 	{
 		struct vcd_property_intra_refresh_mb_number
@@ -1734,11 +1598,6 @@ static void ddl_set_default_enc_property(struct ddl_client_context *ddl)
 		encoder->closed_gop = true;
 	ddl_set_default_metadata_flag(ddl);
 	ddl_set_default_encoder_buffer_req(encoder);
-	encoder->slice_delivery_info.enable = 0;
-	encoder->slice_delivery_info.num_slices = 0;
-	encoder->slice_delivery_info.num_slices_enc = 0;
-	encoder->avc_delimiter_enable = 0;
-	encoder->vui_timinginfo_enable = 0;
 }
 
 static void ddl_set_default_enc_profile(struct ddl_encoder_data *encoder)
@@ -1885,7 +1744,8 @@ void ddl_set_default_encoder_buffer_req(struct ddl_encoder_data *encoder)
 	encoder->client_input_buf_req = encoder->input_buf_req;
 	memset(&encoder->output_buf_req , 0 ,
 		sizeof(struct vcd_buffer_requirement));
-	encoder->output_buf_req.min_count = encoder->i_period.b_frames + 2;
+	encoder->output_buf_req.min_count    =
+		encoder->i_period.b_frames + 2;
 	encoder->output_buf_req.actual_count =
 		encoder->output_buf_req.min_count + 3;
 	encoder->output_buf_req.max_count    = DDL_MAX_BUFFER_COUNT;
@@ -1896,8 +1756,6 @@ void ddl_set_default_encoder_buffer_req(struct ddl_encoder_data *encoder)
 		DDL_ALIGN(y_cb_cr_size, DDL_KILO_BYTE(4));
 	ddl_set_default_encoder_metadata_buffer_size(encoder);
 	encoder->client_output_buf_req = encoder->output_buf_req;
-	DDL_MSG_LOW("%s encoder->client_output_buf_req.sz = %d\n",
-		__func__, encoder->client_output_buf_req.sz);
 }
 
 u32 ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
@@ -1927,20 +1785,7 @@ u32 ddl_set_default_decoder_buffer_req(struct ddl_decoder_data *decoder,
 		output_buf_req = &decoder->actual_output_buf_req;
 		input_buf_req = &decoder->actual_input_buf_req;
 		min_dpb = decoder->min_dpb_num;
-		if ((decoder->buf_format.buffer_format ==
-			VCD_BUFFER_FORMAT_TILE_4x2) &&
-			(frame_size->height < MDP_MIN_TILE_HEIGHT)) {
-			frame_size->height = MDP_MIN_TILE_HEIGHT;
-			ddl_calculate_stride(frame_size,
-				!decoder->progressive_only);
-			y_cb_cr_size = ddl_get_yuv_buffer_size(
-				frame_size,
-				&decoder->buf_format,
-				(!decoder->progressive_only),
-				decoder->hdr.decoding, NULL);
-			decoder->y_cb_cr_size = y_cb_cr_size;
-		} else
-			y_cb_cr_size = decoder->y_cb_cr_size;
+		y_cb_cr_size = decoder->y_cb_cr_size;
 	}
 	memset(output_buf_req, 0,
 		sizeof(struct vcd_buffer_requirement));
@@ -2163,5 +2008,6 @@ void ddl_set_initial_default_values(struct ddl_client_context *ddl)
 		encoder->frame_rate.fps_denominator = 1;
 		ddl_set_default_enc_property(ddl);
 		encoder->sps_pps.sps_pps_for_idr_enable_flag = false;
+		encoder->plusptype_enable = 0;
 	}
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -38,7 +38,6 @@ static int dtv_remove(struct platform_device *pdev);
 
 static int dtv_off(struct platform_device *pdev);
 static int dtv_on(struct platform_device *pdev);
-static int dtv_off_sub(void);
 
 static struct platform_device *pdev_list[MSM_FB_MAX_DEV_LIST];
 static int pdev_list_cnt;
@@ -46,9 +45,6 @@ static int pdev_list_cnt;
 static struct clk *tv_src_clk;
 static struct clk *hdmi_clk;
 static struct clk *mdp_tv_clk;
-static struct platform_device *dtv_pdev;
-static struct workqueue_struct *dtv_work_queue;
-static struct work_struct dtv_off_work;
 
 
 static int mdp4_dtv_runtime_suspend(struct device *dev)
@@ -90,48 +86,8 @@ static struct clk *ebi1_clk;
 static int dtv_off(struct platform_device *pdev)
 {
 	int ret = 0;
-	struct msm_fb_data_type *mfd = NULL;
 
-	if (!pdev) {
-		pr_err("%s: FAILED: invalid arg\n", __func__);
-		return -EINVAL;
-	}
-
-	mfd = platform_get_drvdata(pdev);
-	if (!mfd) {
-		pr_err("%s: FAILED: invalid mfd\n", __func__);
-		return -EINVAL;
-	}
-
-	dtv_pdev = pdev;
-	/*
-	 * If it's a suspend operation then handle the device
-	 * power down synchronously.
-	 * Otherwise, queue work item to handle power down sequence.
-	 * This is needed since we need to wait for the audio engine
-	 * to shutdown first before we turn off the DTV device.
-	 */
-	if (!mfd->suspend.op_suspend) {
-		pr_debug("%s: Queuing work to turn off HDMI core\n", __func__);
-		queue_work(dtv_work_queue, &dtv_off_work);
-	} else {
-		pr_debug("%s: turning off HDMI core\n", __func__);
-		ret = dtv_off_sub();
-	}
-
-	return ret;
-}
-
-static int dtv_off_sub(void)
-{
-	int ret = 0;
-
-	if (!dtv_pdev) {
-		pr_err("%s: FAILED: invalid arg\n", __func__);
-		return -EINVAL;
-	}
-
-	ret = panel_next_off(dtv_pdev);
+	ret = panel_next_off(pdev);
 
 	pr_info("%s\n", __func__);
 
@@ -156,19 +112,11 @@ static int dtv_off_sub(void)
 	return ret;
 }
 
-static void dtv_off_work_func(struct work_struct *work)
-{
-	dtv_off_sub();
-}
-
 static int dtv_on(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_data_type *mfd;
 	unsigned long panel_pixclock_freq , pm_qos_rate;
-
-	/* If a power down is already underway, wait for it to finish */
-	flush_work_sync(&dtv_off_work);
 
 	mfd = platform_get_drvdata(pdev);
 	panel_pixclock_freq = mfd->fbi->var.pixclock;
@@ -267,8 +215,6 @@ static int dtv_probe(struct platform_device *pdev)
 		return 0;
 	}
 
-	dtv_work_queue = create_singlethread_workqueue("dtv_work");
-	INIT_WORK(&dtv_off_work, dtv_off_work_func);
 	mfd = platform_get_drvdata(pdev);
 
 	if (!mfd)
@@ -356,8 +302,6 @@ dtv_probe_err:
 
 static int dtv_remove(struct platform_device *pdev)
 {
-	if (dtv_work_queue)
-		destroy_workqueue(dtv_work_queue);
 #ifdef CONFIG_MSM_BUS_SCALING
 	if (dtv_pdata && dtv_pdata->bus_scale_table &&
 		dtv_bus_scale_handle > 0)
