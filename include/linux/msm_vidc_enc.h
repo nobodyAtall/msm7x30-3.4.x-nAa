@@ -454,12 +454,7 @@ struct venc_ioctl_msg{
 #define VEN_IOCTL_GET_EXTRADATA \
 	_IOR(VEN_IOCTLBASE_ENC, 49, struct venc_ioctl_msg)
 
-/*IOCTL params:SET: InputData - NULL, OutputData - NULL.*/
-#define VEN_IOCTL_SET_SLICE_DELIVERY_MODE \
-	_IO(VEN_IOCTLBASE_ENC, 50)
-
-/*IOCTL params:SET: InputData - unsigned int, OutputData - NULL*/
-#define VEN_IOCTL_SET_SPS_PPS_FOR_IDR \
+#define VEN_IOCTL_SET_H263_PLUSPTYPE \
 	_IOW(VEN_IOCTLBASE_ENC, 51, struct venc_ioctl_msg)
 
 struct venc_switch{
@@ -523,6 +518,11 @@ struct venc_qprange{
 	unsigned long	maxqp;
 	unsigned long	minqp;
 };
+
+struct venc_plusptype {
+	unsigned long	plusptype_enable;
+};
+
 struct venc_intraperiod{
 	unsigned long	num_pframes;
 	unsigned long	num_bframes;

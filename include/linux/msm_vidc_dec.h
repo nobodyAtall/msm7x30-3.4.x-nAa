@@ -76,9 +76,6 @@
 #define VDEC_EXTRADATA_VUI 0x020
 #define VDEC_EXTRADATA_VC1 0x040
 
-#define VDEC_EXTRADATA_EXT_DATA          0x0800
-#define VDEC_EXTRADATA_USER_DATA         0x1000
-
 #define VDEC_CMDBASE	0x800
 #define VDEC_CMD_SET_INTF_VERSION	(VDEC_CMDBASE)
 
@@ -520,12 +517,6 @@ struct vdec_framesize {
 	uint32_t   bottom;
 };
 
-struct vdec_aspectratioinfo {
-	uint32_t aspect_ratio;
-	uint32_t par_width;
-	uint32_t par_height;
-};
-
 struct vdec_output_frameinfo {
 	void __user *bufferaddr;
 	size_t offset;
@@ -537,7 +528,6 @@ struct vdec_output_frameinfo {
 	void *input_frame_clientdata;
 	struct vdec_framesize framesize;
 	enum vdec_interlaced_format interlaced_format;
-	struct vdec_aspectratioinfo aspect_ratio_info;
 };
 
 union vdec_msgdata {
