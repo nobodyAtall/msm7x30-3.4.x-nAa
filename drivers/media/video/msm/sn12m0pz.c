@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,9 +9,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
 
-#include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
@@ -21,7 +25,6 @@
 #include <media/msm_camera.h>
 #include <mach/gpio.h>
 #include <mach/camera.h>
-#include <linux/slab.h>
 #include "sn12m0pz.h"
 
 
@@ -489,9 +492,8 @@ static int32_t sn12m0pz_stmipid02_config(void)
 		return rc; /* CSI Mode on Data Lane 1.1 (DATA1P1, DATA1N1) */
 
 	/* Tristated Output, continuous clock, */
-	/*polarity of clock is inverted and sync signals not inverted*/
 	if (sn12m0pz_i2c_write_byte_bridge(0x28>>1, 0x0015, 0x08) < 0)
-		return rc;
+		return rc; /*polarity of clock and sync signals not inverted*/
 	if (sn12m0pz_i2c_write_byte_bridge(0x28>>1, 0x0036, 0x20) < 0)
 		return rc; /* Enable compensation macro, main camera */
 
@@ -1323,7 +1325,7 @@ static int32_t sn12m0pz_video_config(int mode)
 	int rt;
 
 
-	if (mode == SENSOR_HFR_120FPS_MODE)
+	if (mode == SENSOR_VIDEO_120FPS_MODE)
 		sn12m0pz_ctrl->prev_res = QVGA_SIZE;
 
 	/* change sensor resolution if needed */
@@ -1402,7 +1404,7 @@ static int32_t sn12m0pz_set_sensor_mode(int  mode,
 
 	switch (mode) {
 	case SENSOR_PREVIEW_MODE:
-	case SENSOR_HFR_120FPS_MODE:
+	case SENSOR_VIDEO_120FPS_MODE:
 		rc = sn12m0pz_video_config(mode);
 		break;
 
@@ -1580,7 +1582,7 @@ init_done:
 	CDBG("init_done");
 	return rc;
 }
-static int __devinit sn12m0pz_init_client(struct i2c_client *client)
+static int __init sn12m0pz_init_client(struct i2c_client *client)
 {
 	/* Initialize the MSM_CAMI2C Chip */
 	init_waitqueue_head(&sn12m0pz_wait_queue);
@@ -1592,7 +1594,7 @@ static const struct i2c_device_id sn12m0pz_i2c_id[] = {
 	{ }
 };
 
-static int __devinit sn12m0pz_i2c_probe(struct i2c_client *client,
+static int sn12m0pz_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	int rc = 0;
@@ -1816,7 +1818,6 @@ static int sn12m0pz_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = sn12m0pz_sensor_open_init;
 	s->s_release = sn12m0pz_sensor_release;
 	s->s_config  = sn12m0pz_sensor_config;
-	s->s_mount_angle  = 0;
 	sn12m0pz_probe_init_done(info);
 
 	return rc;

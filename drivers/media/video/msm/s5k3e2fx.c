@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,10 +9,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
 
-#include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
@@ -1355,7 +1358,6 @@ static int s5k3e2fx_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = s5k3e2fx_sensor_open_init;
 	s->s_release = s5k3e2fx_sensor_release;
 	s->s_config  = s5k3e2fx_sensor_config;
-	s->s_mount_angle  = 0;
 	s5k3e2fx_probe_init_done(info);
 
 	return rc;

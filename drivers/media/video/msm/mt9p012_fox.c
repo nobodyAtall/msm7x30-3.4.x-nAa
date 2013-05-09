@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, 2011 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,10 +9,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
 
-#include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
@@ -139,9 +142,6 @@ DEFINE_MUTEX(mt9p012_mut);
 static int mt9p012_i2c_rxdata(unsigned short saddr, unsigned char *rxdata,
 			      int length)
 {
-	int retry_cnt = 0;
-	int rc;
-
 	struct i2c_msg msgs[] = {
 		{
 		 .addr = saddr,
@@ -157,15 +157,8 @@ static int mt9p012_i2c_rxdata(unsigned short saddr, unsigned char *rxdata,
 		 },
 	};
 
-	do {
-		rc = i2c_transfer(mt9p012_client->adapter, msgs, 2);
-		if (rc > 0)
-			break;
-		retry_cnt++;
-	} while (retry_cnt < 3);
-
-	if (rc < 0) {
-		pr_err("mt9p012_i2c_rxdata failed!:%d %d\n", rc, retry_cnt);
+	if (i2c_transfer(mt9p012_client->adapter, msgs, 2) < 0) {
+		CDBG("mt9p012_i2c_rxdata failed!\n");
 		return -EIO;
 	}
 
@@ -201,9 +194,6 @@ static int32_t mt9p012_i2c_read_w(unsigned short saddr, unsigned short raddr,
 static int32_t mt9p012_i2c_txdata(unsigned short saddr, unsigned char *txdata,
 				  int length)
 {
-	int retry_cnt = 0;
-	int rc;
-
 	struct i2c_msg msg[] = {
 		{
 		 .addr = saddr,
@@ -213,15 +203,8 @@ static int32_t mt9p012_i2c_txdata(unsigned short saddr, unsigned char *txdata,
 		 },
 	};
 
-	do {
-		rc = i2c_transfer(mt9p012_client->adapter, msg, 1);
-		if (rc > 0)
-			break;
-		retry_cnt++;
-	} while (retry_cnt < 3);
-
-	if (rc < 0) {
-		pr_err("mt9p012_i2c_txdata failed: %d %d\n", rc, retry_cnt);
+	if (i2c_transfer(mt9p012_client->adapter, msg, 1) < 0) {
+		CDBG("mt9p012_i2c_txdata failed\n");
 		return -EIO;
 	}
 
@@ -1238,10 +1221,8 @@ int mt9p012_sensor_release(void)
 	gpio_direction_output(mt9p012_ctrl->sensordata->sensor_reset, 0);
 	gpio_free(mt9p012_ctrl->sensordata->sensor_reset);
 
-	if (mt9p012_ctrl->sensordata->vcm_enable) {
-		gpio_direction_output(mt9p012_ctrl->sensordata->vcm_pwd, 0);
-		gpio_free(mt9p012_ctrl->sensordata->vcm_pwd);
-	}
+	gpio_direction_output(mt9p012_ctrl->sensordata->vcm_pwd, 0);
+	gpio_free(mt9p012_ctrl->sensordata->vcm_pwd);
 
 	kfree(mt9p012_ctrl);
 	mt9p012_ctrl = NULL;
@@ -1317,7 +1298,6 @@ static int mt9p012_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = mt9p012_sensor_open_init;
 	s->s_release = mt9p012_sensor_release;
 	s->s_config = mt9p012_sensor_config;
-	s->s_mount_angle  = 0;
 	mt9p012_probe_init_done(info);
 
 probe_done:

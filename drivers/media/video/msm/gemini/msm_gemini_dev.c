@@ -24,11 +24,12 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
 
-#include "msm.h"
+//#include "msm.h"
 #include "msm_gemini_sync.h"
 #include "msm_gemini_common.h"
 
 #define MSM_GEMINI_NAME "gemini"
+#define MSM_GEMINI_DRV_NAME "msm_gemini"
 
 static int msm_gemini_open(struct inode *inode, struct file *filp)
 {

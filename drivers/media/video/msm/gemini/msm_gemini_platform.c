@@ -23,6 +23,7 @@
 #include "msm_gemini_sync.h"
 #include "msm_gemini_common.h"
 #include "msm_gemini_hw.h"
+#include <linux/regulator/consumer.h>
 
 /* AXI rate in KHz */
 #define MSM_SYSTEM_BUS_RATE	160000
@@ -52,7 +53,7 @@ uint32_t msm_gemini_platform_v2p(int fd, uint32_t len, struct file **file_p,
 		return 0;
 
 	rc = ion_map_iommu(gemini_client, *ionhandle, CAMERA_DOMAIN, GEN_POOL,
-			SZ_4K, 0, &paddr, (unsigned long *)&size, ~ION_FLAG_CACHED, 0);
+			SZ_4K, 0, &paddr, (unsigned long *)&size, 0, 0);
 #elif CONFIG_ANDROID_PMEM
 	unsigned long kvstart;
 	rc = get_pmem_file(fd, &paddr, &kvstart, &size, file_p);
@@ -94,6 +95,76 @@ static struct msm_cam_clk_info gemini_7x_clk_info[] = {
 static struct msm_cam_clk_info gemini_imem_clk_info[] = {
 	{"mem_clk", -1},
 };
+
+int msm_cam_clk_enable(struct device *dev, struct msm_cam_clk_info *clk_info,
+		struct clk **clk_ptr, int num_clk, int enable)
+{
+	int i;
+	int rc = 0;
+	if (enable) {
+		for (i = 0; i < num_clk; i++) {
+			clk_ptr[i] = clk_get(dev, clk_info[i].clk_name);
+			if (IS_ERR(clk_ptr[i])) {
+				pr_err("%s get failed\n", clk_info[i].clk_name);
+				rc = PTR_ERR(clk_ptr[i]);
+				goto cam_clk_get_err;
+			}
+			if (clk_info[i].clk_rate >= 0) {
+				rc = clk_set_rate(clk_ptr[i],
+							clk_info[i].clk_rate);
+				if (rc < 0) {
+					pr_err("%s set failed\n",
+						   clk_info[i].clk_name);
+					goto cam_clk_set_err;
+				}
+			}
+			rc = clk_prepare(clk_ptr[i]);
+			if (rc < 0) {
+				pr_err("%s prepare failed\n",
+					   clk_info[i].clk_name);
+				goto cam_clk_prepare_err;
+			}
+
+			rc = clk_enable(clk_ptr[i]);
+			if (rc < 0) {
+				pr_err("%s enable failed\n",
+					   clk_info[i].clk_name);
+				goto cam_clk_enable_err;
+			}
+			if (clk_info[i].delay > 20) {
+				msleep(clk_info[i].delay);
+			} else if (clk_info[i].delay) {
+				usleep_range(clk_info[i].delay * 1000,
+					(clk_info[i].delay * 1000) + 1000);
+			}
+		}
+	} else {
+		for (i = num_clk - 1; i >= 0; i--) {
+			if (clk_ptr[i] != NULL) {
+				clk_disable(clk_ptr[i]);
+				clk_unprepare(clk_ptr[i]);
+				clk_put(clk_ptr[i]);
+			}
+		}
+	}
+	return rc;
+
+
+cam_clk_enable_err:
+	clk_unprepare(clk_ptr[i]);
+cam_clk_prepare_err:
+cam_clk_set_err:
+	clk_put(clk_ptr[i]);
+cam_clk_get_err:
+	for (i--; i >= 0; i--) {
+		if (clk_ptr[i] != NULL) {
+			clk_disable(clk_ptr[i]);
+			clk_unprepare(clk_ptr[i]);
+			clk_put(clk_ptr[i]);
+		}
+	}
+	return rc;
+}
 
 int msm_gemini_platform_init(struct platform_device *pdev,
 	struct resource **mem,

@@ -82,6 +82,16 @@ void msm_gemini_core_init(void)
 	spin_lock_init(&reset_lock);
 }
 
+#if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
+struct msm_gemini_core_buf *msm_gemini_core_get_we_nonactive_buffer()
+{
+	struct msm_gemini_hw_buf *buf_p;
+	GMN_DBG("%s:%d]\n", __func__, __LINE__);
+	buf_p = msm_gemini_hw_pingpong_nonactive_buffer(&we_pingpong_buf);
+	return buf_p;
+}
+#endif
+
 int msm_gemini_core_fe_start(void)
 {
 	msm_gemini_hw_fe_start();
@@ -142,7 +152,7 @@ void *msm_gemini_core_framedone_irq(int gemini_irq_status, void *context)
 	buf_p = msm_gemini_hw_pingpong_active_buffer(&we_pingpong_buf);
 	if (buf_p) {
 		buf_p->framedone_len = msm_gemini_hw_encode_output_size();
-		GMN_DBG("%s:%d] framedone_len %d\n", __func__, __LINE__,
+		pr_err("%s:%d] framedone_len %d\n", __func__, __LINE__,
 			buf_p->framedone_len);
 	}
 

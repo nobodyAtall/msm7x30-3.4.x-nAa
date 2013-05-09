@@ -42,6 +42,10 @@ int msm_gemini_hw_pingpong_update(struct msm_gemini_hw_pingpong *pingpong_hw,
 void *msm_gemini_hw_pingpong_irq(struct msm_gemini_hw_pingpong *pingpong_hw);
 void *msm_gemini_hw_pingpong_active_buffer(struct msm_gemini_hw_pingpong
 	*pingpong_hw);
+#if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
+void *msm_gemini_hw_pingpong_nonactive_buffer(struct msm_gemini_hw_pingpong
+	*pingpong_hw);
+#endif
 
 void msm_gemini_hw_irq_clear(uint32_t, uint32_t);
 int msm_gemini_hw_irq_get_status(void);
@@ -96,6 +100,7 @@ int msm_gemini_hw_wait(struct msm_gemini_hw_cmd *hw_cmd_p, int m_us);
 void msm_gemini_hw_delay(struct msm_gemini_hw_cmd *hw_cmd_p, int m_us);
 int msm_gemini_hw_exec_cmds(struct msm_gemini_hw_cmd *hw_cmd_p, int m_cmds);
 void msm_gemini_hw_region_dump(int size);
+void msm_gemini_io_dump(int size);
 
 #define MSM_GEMINI_PIPELINE_CLK_128MHZ 128 /* 8MP  128MHz */
 #define MSM_GEMINI_PIPELINE_CLK_140MHZ 140 /* 9MP  140MHz */

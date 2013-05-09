@@ -1,23 +1,27 @@
-/* Copyright (c) 2010-2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
- *
+
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
  */
 
-#include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
-#include <linux/slab.h>
 #include <media/msm_camera.h>
+#include <mach/gpio.h>
 #include <mach/camera.h>
 #include "ov7692.h"
 
@@ -171,7 +175,6 @@ struct reg_addr_val_pair_struct ov7692_init_settings_array[] = {
     {0xa2, 0x0e},
 };
 
-static bool OV7692_CSI_CONFIG;
 /* 816x612, 24MHz MCLK 96MHz PCLK */
 uint32_t OV7692_FULL_SIZE_WIDTH        = 640;
 uint32_t OV7692_FULL_SIZE_HEIGHT       = 480;
@@ -293,12 +296,11 @@ static int32_t ov7692_sensor_setting(int update_type, int rt)
 	struct msm_camera_csi_params ov7692_csi_params;
 	switch (update_type) {
 	case REG_INIT:
-		OV7692_CSI_CONFIG = 0;
 		ov7692_i2c_write_b_sensor(0x0e, 0x08);
 		return rc;
 		break;
 	case UPDATE_PERIODIC:
-		if (!OV7692_CSI_CONFIG) {
+		if (rt == RES_PREVIEW || rt == RES_CAPTURE) {
 			ov7692_csi_params.lane_cnt = 1;
 			ov7692_csi_params.data_format = CSI_8BIT;
 			ov7692_csi_params.lane_assign = 0xe4;
@@ -316,7 +318,6 @@ static int32_t ov7692_sensor_setting(int update_type, int rt)
 				if (rc < 0)
 					return rc;
 			}
-			OV7692_CSI_CONFIG = 1;
 			msleep(20);
 			return rc;
 		}
@@ -342,6 +343,31 @@ static int32_t ov7692_video_config(int mode)
 	return rc;
 }
 
+static int32_t ov7692_snapshot_config(int mode)
+{
+	int32_t rc = 0;
+	int rt;
+	rt = RES_CAPTURE;
+
+	if (ov7692_sensor_setting(UPDATE_PERIODIC, rt) < 0)
+		return rc;
+	ov7692_ctrl->curr_res = ov7692_ctrl->pict_res;
+	ov7692_ctrl->sensormode = mode;
+	return rc;
+}
+static int32_t ov7692_raw_snapshot_config(int mode)
+{
+	int32_t rc = 0;
+	int rt;
+	rt = RES_CAPTURE;
+
+	if (ov7692_sensor_setting(UPDATE_PERIODIC, rt) < 0)
+		return rc;
+	ov7692_ctrl->curr_res = ov7692_ctrl->prev_res;
+	ov7692_ctrl->sensormode = mode;
+
+	return rc;
+}
 static int32_t ov7692_set_sensor_mode(int mode,
 	int res)
 {
@@ -351,7 +377,10 @@ static int32_t ov7692_set_sensor_mode(int mode,
 		rc = ov7692_video_config(mode);
 		break;
 	case SENSOR_SNAPSHOT_MODE:
+		rc = ov7692_snapshot_config(mode);
+		break;
 	case SENSOR_RAW_SNAPSHOT_MODE:
+		rc = ov7692_raw_snapshot_config(mode);
 		break;
 	default:
 		rc = -EINVAL;
@@ -363,22 +392,35 @@ static int32_t ov7692_power_down(void)
 {
 	return 0;
 }
+static int ov7692_probe_init_done(const struct msm_camera_sensor_info *data)
+{
+	gpio_direction_output(data->sensor_reset, 0);
+	gpio_free(data->sensor_reset);
+	return 0;
+}
 
 static int ov7692_probe_init_sensor(const struct msm_camera_sensor_info *data)
 {
 	uint8_t model_id_msb, model_id_lsb = 0;
 	uint16_t model_id;
 	int32_t rc = 0;
-	/*The reset pin is not physically connected to the sensor.
-	The standby pin will do the reset hence there is no need
-	to request the gpio reset*/
 
-	/* Read sensor Model ID: */
-	rc = ov7692_i2c_read(REG_OV7692_MODEL_ID_MSB, &model_id_msb, 1);
-	if (rc < 0)
+	rc = gpio_request(data->sensor_reset, "ov7692");
+	if (!rc) {
+		CDBG("sensor_reset = %d\n", rc);
+		gpio_direction_output(data->sensor_reset, 0);
+		msleep(50);
+		gpio_direction_output(data->sensor_reset, 1);
+		msleep(50);
+	} else {
+		CDBG("gpio reset fail");
+		goto init_probe_done;
+	}
+
+	/* 3. Read sensor Model ID: */
+	if (ov7692_i2c_read(REG_OV7692_MODEL_ID_MSB, &model_id_msb, 1) < 0)
 		goto init_probe_fail;
-	rc = ov7692_i2c_read(REG_OV7692_MODEL_ID_LSB, &model_id_lsb, 1);
-	if (rc < 0)
+	if (ov7692_i2c_read(REG_OV7692_MODEL_ID_LSB, &model_id_lsb, 1) < 0)
 		goto init_probe_fail;
 	model_id = (model_id_msb << 8) | ((model_id_lsb & 0x00FF)) ;
 	CDBG("ov7692 model_id = 0x%x, 0x%x, 0x%x\n",
@@ -388,11 +430,14 @@ static int ov7692_probe_init_sensor(const struct msm_camera_sensor_info *data)
 		rc = -ENODEV;
 		goto init_probe_fail;
 	}
-	goto init_probe_done;
+	msleep(10);
+  goto init_probe_done;
 init_probe_fail:
-	pr_warning(" ov7692_probe_init_sensor fails\n");
+	printk(KERN_INFO " ov7692_probe_init_sensor fails_kalyani\n");
+	gpio_direction_output(data->sensor_reset, 0);
+	gpio_free(data->sensor_reset);
 init_probe_done:
-	CDBG(" ov7692_probe_init_sensor finishes\n");
+	printk(KERN_INFO " ov7692_probe_init_sensor finishes\n");
 	return rc;
 }
 
@@ -435,9 +480,9 @@ int ov7692_sensor_open_init(const struct msm_camera_sensor_info *data)
 		goto init_fail;
 	else
 		goto init_done;
-
 init_fail:
 	CDBG(" ov7692_sensor_open_init fail\n");
+	ov7692_probe_init_done(data);
 	kfree(ov7692_ctrl);
 init_done:
 	CDBG("ov7692_sensor_open_init done\n");
@@ -460,7 +505,7 @@ static int ov7692_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	int rc = 0;
-	CDBG("ov7692_i2c_probe called!\n");
+	CDBG("ov7692_probe called!\n");
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		CDBG("i2c_check_functionality failed\n");
@@ -478,11 +523,13 @@ static int ov7692_i2c_probe(struct i2c_client *client,
 	ov7692_init_client(client);
 	ov7692_client = client;
 
-	CDBG("ov7692_i2c_probe success! rc = %d\n", rc);
+	msleep(50);
+
+	CDBG("ov7692_probe successed! rc = %d\n", rc);
 	return 0;
 
 probe_failure:
-	CDBG("ov7692_i2c_probe failed! rc = %d\n", rc);
+	CDBG("ov7692_probe failed! rc = %d\n", rc);
 	return rc;
 }
 
@@ -523,8 +570,6 @@ int ov7692_sensor_config(void __user *argp)
 	case CFG_PWR_DOWN:
 		rc = ov7692_power_down();
 		break;
-	case CFG_SET_EFFECT:
-		break;
 	default:
 		rc = -EFAULT;
 		break;
@@ -539,6 +584,8 @@ static int ov7692_sensor_release(void)
 	int rc = -EBADF;
 	mutex_lock(&ov7692_mut);
 	ov7692_power_down();
+	gpio_direction_output(ov7692_ctrl->sensordata->sensor_reset, 0);
+	gpio_free(ov7692_ctrl->sensordata->sensor_reset);
 	kfree(ov7692_ctrl);
 	ov7692_ctrl = NULL;
 	CDBG("ov7692_release completed\n");
@@ -563,8 +610,8 @@ static int ov7692_sensor_probe(const struct msm_camera_sensor_info *info,
 	s->s_init = ov7692_sensor_open_init;
 	s->s_release = ov7692_sensor_release;
 	s->s_config  = ov7692_sensor_config;
-	s->s_camera_type = FRONT_CAMERA_2D;
-	s->s_mount_angle = 0;
+	ov7692_probe_init_done(info);
+
 	return rc;
 
 probe_fail:
@@ -596,3 +643,4 @@ module_init(ov7692_init);
 
 MODULE_DESCRIPTION("OMNI VGA YUV sensor driver");
 MODULE_LICENSE("GPL v2");
+

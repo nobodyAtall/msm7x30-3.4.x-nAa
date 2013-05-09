@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,10 +9,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ *
  */
 
-#include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/i2c.h>
@@ -49,7 +52,7 @@ struct mt9d112_ctrl {
 static struct mt9d112_ctrl *mt9d112_ctrl;
 
 static DECLARE_WAIT_QUEUE_HEAD(mt9d112_wait_queue);
-DEFINE_SEMAPHORE(mt9d112_sem);
+DECLARE_MUTEX(mt9d112_sem);
 static int16_t mt9d112_effect = CAMERA_EFFECT_OFF;
 
 /*=============================================================
@@ -68,11 +71,11 @@ static int mt9d112_reset(const struct msm_camera_sensor_info *dev)
 
 	if (!rc) {
 		rc = gpio_direction_output(dev->sensor_reset, 0);
-		msleep(20);
-		gpio_set_value_cansleep(dev->sensor_reset, 1);
-		msleep(20);
+		mdelay(20);
+		rc = gpio_direction_output(dev->sensor_reset, 1);
 	}
 
+	gpio_free(dev->sensor_reset);
 	return rc;
 }
 
@@ -593,8 +596,7 @@ static int mt9d112_sensor_init_probe(const struct msm_camera_sensor_info *data)
 		goto init_probe_fail;
 	}
 
-	msm_camio_clk_rate_set(24000000);
-	msleep(20);
+	mdelay(5);
 
 	/* Micron suggested Power up block Start:
 	* Put MCU into Reset - Stop MCU */
@@ -738,9 +740,7 @@ int mt9d112_sensor_release(void)
 	int rc = 0;
 
 	/* down(&mt9d112_sem); */
-	gpio_set_value_cansleep(mt9d112_ctrl->sensordata->sensor_reset, 0);
-	msleep(20);
-	gpio_free(mt9d112_ctrl->sensordata->sensor_reset);
+
 	kfree(mt9d112_ctrl);
 	/* up(&mt9d112_sem); */
 
@@ -807,18 +807,12 @@ static int mt9d112_sensor_probe(const struct msm_camera_sensor_info *info,
 	mdelay(5);
 
 	rc = mt9d112_sensor_init_probe(info);
-	if (rc < 0) {
-		gpio_free(info->sensor_reset);
+	if (rc < 0)
 		goto probe_done;
-	}
+
 	s->s_init = mt9d112_sensor_init;
 	s->s_release = mt9d112_sensor_release;
 	s->s_config  = mt9d112_sensor_config;
-	s->s_camera_type = FRONT_CAMERA_2D;
-	s->s_mount_angle  = 0;
-	gpio_set_value_cansleep(info->sensor_reset, 0);
-	msleep(20);
-	gpio_free(info->sensor_reset);
 
 probe_done:
 	CDBG("%s %s:%d\n", __FILE__, __func__, __LINE__);
