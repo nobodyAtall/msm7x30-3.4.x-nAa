@@ -59,6 +59,7 @@ enum ion_heap_type {
 					   cached, ion will do cache
 					   maintenance when the buffer is
 					   mapped for dma */
+#define ION_IOMMU_UNMAP_DELAYED 1
 
 #ifdef __KERNEL__
 #include <linux/err.h>
