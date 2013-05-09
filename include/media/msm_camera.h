@@ -665,6 +665,12 @@ struct msm_cam_clk_info {
 	uint32_t delay;
 };
 
+struct msm_cam_clk_info {
+	const char *clk_name;
+	long clk_rate;
+	uint32_t delay;
+};
+
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
