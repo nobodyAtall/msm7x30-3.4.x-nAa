@@ -31,6 +31,7 @@
 #include <linux/kthread.h>
 #include <linux/irq.h>
 #include <linux/timer.h>
+#include <linux/module.h>
 
 #ifdef CONFIG_EARLYSUSPEND
 #include <linux/earlysuspend.h>
