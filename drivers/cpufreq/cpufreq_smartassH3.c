@@ -33,10 +33,12 @@
 #include <linux/tick.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
+#include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <asm/cputime.h>
 #include <linux/earlysuspend.h>
 
+#define cputime64_sub(__a, __b) ((__a) - (__b))
 
 /******************** Tunable parameters: ********************/
 
