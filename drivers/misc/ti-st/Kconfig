@@ -22,5 +22,4 @@ config ST_HCI
 	  user-space Bluetooth stacks.
 	  It will provide a character device for user space Bluetooth stack to
 	  send/receive data over shared transport.
-
 endmenu
