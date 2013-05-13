@@ -2242,7 +2242,7 @@ CONFIG_RADIO_ADAPTERS=y
 #
 # Texas Instruments WL128x FM driver (ST based)
 #
-# CONFIG_RADIO_WL128X is not set
+CONFIG_RADIO_WL128X=y
 # CONFIG_RADIO_TAVARUA is not set
 # CONFIG_RADIO_IRIS is not set
 
