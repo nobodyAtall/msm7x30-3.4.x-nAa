@@ -2335,6 +2335,16 @@ config SIMPLE_REMOTE_INVERT_PLUG_DETECTION_STATE
 	  was inserted, but it is high state on some products, so that
 	  we need invert this state on these products.
 
+config MOGAMI_BLUEDROID
+	tristate "Mogami BlueDroid module"
+	select BT_WILINK
+	select TI_ST
+	select ST_HCI
+	select UHID
+	default m
+	help
+	  Mogami BlueDroid support using TI ST stack.
+
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
 	depends on ARCH_MSM8X60 || ARCH_MSM8960 || ARCH_MSM9615
