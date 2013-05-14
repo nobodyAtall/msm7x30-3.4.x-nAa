@@ -1,4 +1,5 @@
-/* Copyright (c) 2010, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+ * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,6 +9,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
  */
 
 #include <linux/module.h>
@@ -96,9 +102,9 @@ struct msm_gemini_hw_cmd hw_cmd_irq_get_status[] = {
 int msm_gemini_hw_irq_get_status(void)
 {
 	uint32_t n_irq_status = 0;
-	rmb();
+
 	n_irq_status = msm_gemini_hw_read(&hw_cmd_irq_get_status[0]);
-	rmb();
+
 	return n_irq_status;
 }
 
@@ -310,7 +316,6 @@ void msm_gemini_hw_we_buffer_update(struct msm_gemini_hw_buf *p_input,
 
 	struct msm_gemini_hw_cmd *hw_cmd_p;
 
-	GMN_DBG("%s:%d] pingpong index %d", __func__, __LINE__, pingpong_index);
 	if (pingpong_index == 0) {
 		hw_cmd_p = &hw_cmd_we_ping_update[0];
 
@@ -354,24 +359,19 @@ struct msm_gemini_hw_cmd hw_cmd_reset[] = {
 		HWIO_JPEG_RESET_CMD_RMSK, {JPEG_RESET_DEFAULT} },
 };
 
-void msm_gemini_hw_init(void *base, int size)
-{
-	gemini_region_base = base;
-	gemini_region_size = size;
-}
-
 void msm_gemini_hw_reset(void *base, int size)
 {
 	struct msm_gemini_hw_cmd *hw_cmd_p;
 
+	gemini_region_base = base;
+	gemini_region_size = size;
+
 	hw_cmd_p = &hw_cmd_reset[0];
 
-	wmb();
 	msm_gemini_hw_write(hw_cmd_p++);
 	msm_gemini_hw_write(hw_cmd_p++);
 	msm_gemini_hw_write(hw_cmd_p++);
 	msm_gemini_hw_write(hw_cmd_p);
-	wmb();
 
 	return;
 }
@@ -537,31 +537,3 @@ void msm_gemini_hw_region_dump(int size)
 	}
 }
 
-void msm_gemini_io_dump(int size)
-{
-	char line_str[128], *p_str;
-	void __iomem *addr = gemini_region_base;
-	int i;
-	u32 *p = (u32 *) addr;
-	u32 data;
-	pr_err("%s: %p %d reg_size %d\n", __func__, addr, size,
-							gemini_region_size);
-	line_str[0] = '\0';
-	p_str = line_str;
-	for (i = 0; i < size/4; i++) {
-		if (i % 4 == 0) {
-			snprintf(p_str, 12, "%08x: ", (u32) p);
-			p_str += 10;
-		}
-		data = readl_relaxed(p++);
-		snprintf(p_str, 12, "%08x ", data);
-		p_str += 9;
-		if ((i + 1) % 4 == 0) {
-			pr_err("%s\n", line_str);
-			line_str[0] = '\0';
-			p_str = line_str;
-		}
-	}
-	if (line_str[0] != '\0')
-		pr_err("%s\n", line_str);
-}
