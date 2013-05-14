@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
+/* Copyright (c) 2009-2013, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -248,6 +248,7 @@ void mdp4_hw_init(void)
 
 	/* MDP cmd block enable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	mdp_clk_ctrl(1);
 
 	mdp_bus_scale_update_request(5);
 
@@ -304,6 +305,8 @@ void mdp4_hw_init(void)
 
 	/* max read pending cmd config */
 	outpdw(MDP_BASE + 0x004c, 0x02222);	/* 3 pending requests */
+	outpdw(MDP_BASE + 0x0400, 0x7FF);
+	outpdw(MDP_BASE + 0x0404, 0x30050);
 
 #ifndef CONFIG_FB_MSM_OVERLAY
 	/* both REFRESH_MODE and DIRECT_OUT are ignored at BLT mode */
@@ -323,6 +326,7 @@ void mdp4_hw_init(void)
 
 	/* MDP cmd block disable */
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+	mdp_clk_ctrl(0);
 }
 
 

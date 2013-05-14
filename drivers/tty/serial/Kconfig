@@ -1018,6 +1018,11 @@ config SERIAL_MSM_HSL_CONSOLE
 	select SERIAL_CORE_CONSOLE
 	default n
 
+config SERIAL_MSM_HS_NO_DMA_WAKELOCK
+        bool "Disable msm_serial_hs_dma wakelock for MSM UART High Speed: Serial Driver"
+        depends on SERIAL_MSM_HS=y
+        default n
+
 config SERIAL_BCM_BT_LPM
 	tristate "Broadcom Bluetooth Low Power Mode"
 	depends on ARM && ARCH_MSM

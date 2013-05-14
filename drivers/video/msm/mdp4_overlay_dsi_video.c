@@ -42,6 +42,7 @@
 static int first_pixel_start_x;
 static int first_pixel_start_y;
 static int dsi_video_enabled;
+static int vsync_irq_cnt;
 
 #define MAX_CONTROLLER	1
 
@@ -394,7 +395,7 @@ ssize_t mdp4_dsi_video_show_event(struct device *dev,
 		msecs_to_jiffies(VSYNC_PERIOD * 4));
 	if (ret <= 0) {
 		vctrl->wait_vsync_cnt = 0;
-		return -EBUSY;
+		vctrl->vsync_time = ktime_get();
 	}
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
@@ -499,6 +500,8 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 
 	vctrl->mfd = mfd;
 	vctrl->dev = mfd->fbi->dev;
+	vctrl->vsync_irq_enabled = 0;
+	vsync_irq_cnt = 0;
 
 	/* mdp clock on */
 	mdp_clk_ctrl(1);
@@ -566,6 +569,8 @@ int mdp4_dsi_video_on(struct platform_device *pdev)
 
 	pipe->dst_h = fbi->var.yres;
 	pipe->dst_w = fbi->var.xres;
+
+	mdp4_overlay_solidfill_init(pipe);
 
 	mdp4_overlay_mdp_pipe_req(pipe, mfd);
 

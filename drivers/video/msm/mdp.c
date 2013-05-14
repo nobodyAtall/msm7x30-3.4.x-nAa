@@ -2,7 +2,7 @@
  *
  * MSM MDP Interface (used by framebuffer core)
  *
- * Copyright (c) 2007-2012, Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2007-2013, The Linux Foundation. All rights reserved.
  * Copyright (C) 2007 Google Incorporated
  *
  * This software is licensed under the terms of the GNU General Public
@@ -517,7 +517,9 @@ static int mdp_lut_update_nonlcdc(struct fb_info *info, struct fb_cmap *cmap)
 	int ret;
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	mdp_clk_ctrl(1);
 	ret = mdp_lut_hw_update(cmap);
+	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	if (ret)
@@ -539,9 +541,11 @@ static int mdp_lut_update_lcdc(struct fb_info *info, struct fb_cmap *cmap)
 	uint32_t out;
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	mdp_clk_ctrl(1);
 	ret = mdp_lut_hw_update(cmap);
 
 	if (ret) {
+		mdp_clk_ctrl(0);
 		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 		return ret;
 	}
@@ -549,6 +553,7 @@ static int mdp_lut_update_lcdc(struct fb_info *info, struct fb_cmap *cmap)
 	/*mask off non LUT select bits*/
 	out = inpdw(MDP_BASE + 0x90070) & ~((0x1 << 10) | 0x7);
 	MDP_OUTP(MDP_BASE + 0x90070, (mdp_lut_i << 10) | 0x7 | out);
+	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 	mdp_lut_i = (mdp_lut_i + 1)%2;
 
@@ -933,6 +938,7 @@ int mdp_histogram_start(struct mdp_histogram_start_req *req)
 	mgmt->frame_cnt = req->frame_cnt;
 	mgmt->bit_mask = req->bit_mask;
 	mgmt->num_bins = req->num_bins;
+	mgmt->hist = NULL;
 
 	ret = mdp_histogram_enable(mgmt);
 
@@ -1025,6 +1031,7 @@ static int _mdp_histogram_read_dma_data(struct mdp_hist_mgmt *mgmt)
 	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	mdp_clk_ctrl(1);
 	for (i = 0; i < mgmt->num_bins; i++) {
 		mgmt->c0[i] = inpdw(mdp_hist_base + r_data_offset + (4*i));
 		mgmt->c1[i] = inpdw(mdp_hist_base + g_data_offset + (4*i));
@@ -1040,6 +1047,7 @@ static int _mdp_histogram_read_dma_data(struct mdp_hist_mgmt *mgmt)
 		} else
 			ret = -ENOMEM;
 	}
+	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	if (!ret)
@@ -1075,6 +1083,7 @@ static int _mdp_histogram_read_vg_data(struct mdp_hist_mgmt *mgmt)
 	}
 
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
+	mdp_clk_ctrl(1);
 	for (i = 0; i < mgmt->num_bins; i++)
 		mgmt->c0[i] = inpdw(mdp_hist_base + MDP_HIST_DATA_LUMA_OFF +
 									(4*i));
@@ -1086,6 +1095,7 @@ static int _mdp_histogram_read_vg_data(struct mdp_hist_mgmt *mgmt)
 		} else
 			ret = -ENOMEM;
 	}
+	mdp_clk_ctrl(0);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 
 	if (!ret)
@@ -1831,13 +1841,14 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 			dma = &dma2_data;
 			spin_lock_irqsave(&mdp_spin_lock, flag);
 			vsync_isr = vsync_cntrl.vsync_irq_enabled;
+			disabled_clocks = vsync_cntrl.disabled_clocks;
 			/* let's disable LCDC interrupt */
 			if (dma->waiting) {
 				dma->waiting = FALSE;
 				complete(&dma->comp);
 			}
 
-			if (!vsync_isr) {
+			if (!vsync_isr && !vsync_cntrl.disabled_clocks) {
 				mdp_intr_mask &= ~LCDC_FRAME_START;
 				outp32(MDP_INTR_ENABLE, mdp_intr_mask);
 				mdp_disable_irq_nosync(MDP_VSYNC_TERM);
@@ -1847,7 +1858,7 @@ irqreturn_t mdp_isr(int irq, void *ptr)
 			}
 			spin_unlock_irqrestore(&mdp_spin_lock, flag);
 
-			if (!vsync_isr)
+			if (!vsync_isr && !disabled_clocks)
 				mdp_pipe_ctrl(MDP_CMD_BLOCK,
 					MDP_BLOCK_POWER_OFF, TRUE);
 
@@ -2403,7 +2414,7 @@ static int mdp_probe(struct platform_device *pdev)
 		if (!(mdp_pdata->cont_splash_enabled))
 			mdp4_hw_init();
 #else
-		mdp_hw_init();
+		mdp_hw_init(mdp_pdata->cont_splash_enabled);
 #endif
 
 #ifdef CONFIG_FB_MSM_OVERLAY

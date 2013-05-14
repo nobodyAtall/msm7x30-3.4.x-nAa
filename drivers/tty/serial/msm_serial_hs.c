@@ -162,7 +162,9 @@ struct msm_hs_port {
 	enum msm_hs_clk_req_off_state_e clk_req_off_state;
 
 	struct msm_hs_wakeup wakeup;
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	struct wake_lock dma_wake_lock;  /* held while any DMA active */
+#endif
 
 	struct dentry *loopback_dir;
 	struct work_struct clock_off_w; /* work for actual clock off */
@@ -419,7 +421,9 @@ static int __devexit msm_hs_remove(struct platform_device *pdev)
 			 DMA_TO_DEVICE);
 
 	wake_lock_destroy(&msm_uport->rx.wake_lock);
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	wake_lock_destroy(&msm_uport->dma_wake_lock);
+#endif
 	destroy_workqueue(msm_uport->hsuart_wq);
 	mutex_destroy(&msm_uport->clk_mutex);
 
@@ -1441,7 +1445,9 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 		msm_uport->wakeup.ignore = 1;
 		enable_irq(msm_uport->wakeup.irq);
 	}
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	wake_unlock(&msm_uport->dma_wake_lock);
+#endif
 
 	spin_unlock_irqrestore(&uport->lock, flags);
 	mutex_unlock(&msm_uport->clk_mutex);
@@ -1599,7 +1605,9 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 
 	switch (msm_uport->clk_state) {
 	case MSM_HS_CLK_OFF:
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 		wake_lock(&msm_uport->dma_wake_lock);
+#endif
 		disable_irq_nosync(msm_uport->wakeup.irq);
 		spin_unlock_irqrestore(&uport->lock, flags);
 		ret = clk_prepare_enable(msm_uport->clk);
@@ -1713,12 +1721,17 @@ static int msm_hs_startup(struct uart_port *uport)
 	tx->dma_base = dma_map_single(uport->dev, tx_buf->buf, UART_XMIT_SIZE,
 				      DMA_TO_DEVICE);
 
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	wake_lock(&msm_uport->dma_wake_lock);
+#endif
+
 	/* turn on uart clk */
 	ret = msm_hs_init_clk(uport);
 	if (unlikely(ret)) {
 		pr_err("Turning ON uartclk error\n");
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 		wake_unlock(&msm_uport->dma_wake_lock);
+#endif
 		return ret;
 	}
 
@@ -1835,7 +1848,9 @@ deinit_uart_clk:
 	clk_disable_unprepare(msm_uport->clk);
 	if (msm_uport->pclk)
 		clk_disable_unprepare(msm_uport->pclk);
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	wake_unlock(&msm_uport->dma_wake_lock);
+#endif
 
 	return ret;
 }
@@ -1869,8 +1884,10 @@ static int uartdm_init_port(struct uart_port *uport)
 	init_waitqueue_head(&rx->wait);
 	init_waitqueue_head(&tx->wait);
 	wake_lock_init(&rx->wake_lock, WAKE_LOCK_SUSPEND, "msm_serial_hs_rx");
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	wake_lock_init(&msm_uport->dma_wake_lock, WAKE_LOCK_SUSPEND,
 		       "msm_serial_hs_dma");
+#endif
 
 	tasklet_init(&rx->tlet, msm_serial_hs_rx_tlet,
 			(unsigned long) &rx->tlet);
@@ -1950,7 +1967,9 @@ free_pool:
 
 exit_tasket_init:
 	wake_lock_destroy(&msm_uport->rx.wake_lock);
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 	wake_lock_destroy(&msm_uport->dma_wake_lock);
+#endif
 	tasklet_kill(&msm_uport->tx.tlet);
 	tasklet_kill(&msm_uport->rx.tlet);
 	dma_unmap_single(uport->dev, msm_uport->tx.mapped_cmd_ptr_ptr,
@@ -2194,7 +2213,9 @@ static void msm_hs_shutdown(struct uart_port *uport)
 		clk_disable_unprepare(msm_uport->clk);
 		if (msm_uport->pclk)
 			clk_disable_unprepare(msm_uport->pclk);
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 		wake_unlock(&msm_uport->dma_wake_lock);
+#endif
 	}
 
 	msm_uport->clk_state = MSM_HS_CLK_PORT_OFF;

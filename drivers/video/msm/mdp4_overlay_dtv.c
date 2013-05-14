@@ -338,7 +338,7 @@ ssize_t mdp4_dtv_show_event(struct device *dev,
 		msecs_to_jiffies(VSYNC_PERIOD * 4));
 	if (ret <= 0) {
 		vctrl->wait_vsync_cnt = 0;
-		return -EBUSY;
+		vctrl->vsync_time = ktime_get();
 	}
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
@@ -549,6 +549,7 @@ int mdp4_dtv_on(struct platform_device *pdev)
 		return -EINVAL;
 
 	vctrl->dev = mfd->fbi->dev;
+	vctrl->vsync_irq_enabled = 0;
 
 	mdp_footswitch_ctrl(TRUE);
 	/* Mdp clock enable */

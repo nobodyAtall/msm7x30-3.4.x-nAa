@@ -317,10 +317,16 @@ struct mdp4_overlay_pipe {
 	uint32 is_fg;		/* control alpha & color key */
 	uint32 srcp0_addr;	/* interleave, luma */
 	uint32 srcp0_ystride;
+	struct file *srcp0_file;
+	int put0_need;
 	uint32 srcp1_addr;	/* pseudoplanar, chroma plane */
 	uint32 srcp1_ystride;
+	struct file *srcp1_file;
+	int put1_need;
 	uint32 srcp2_addr;	/* planar color 2*/
 	uint32 srcp2_ystride;
+	struct file *srcp2_file;
+	int put2_need;
 	uint32 srcp3_addr;	/* alpha/color 3 */
 	uint32 srcp3_ystride;
 	uint32 fetch_plane;
@@ -628,6 +634,7 @@ void mdp4_lcdc_wait4vsync(int cndx, long long *vtime);
 void mdp4_overlay_lcdc_vsync_push(struct msm_fb_data_type *mfd,
 				struct mdp4_overlay_pipe *pipe);
 void mdp4_mddi_overlay_dmas_restore(void);
+void mdp4_overlay_solidfill_init(struct mdp4_overlay_pipe *pipe);
 
 #ifndef CONFIG_FB_MSM_MIPI_DSI
 void mdp4_mddi_dma_busy_wait(struct msm_fb_data_type *mfd);

@@ -656,7 +656,7 @@ ssize_t mdp4_dsi_cmd_show_event(struct device *dev,
 		msecs_to_jiffies(VSYNC_PERIOD * 4));
 	if (ret <= 0) {
 		vctrl->wait_vsync_cnt = 0;
-		return -EBUSY;
+		vctrl->vsync_time = ktime_get();
 	}
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
@@ -858,6 +858,8 @@ static void mdp4_overlay_update_dsi_cmd(struct msm_fb_data_type *mfd)
 	/* disable dsi trigger */
 	MDP_OUTP(MDP_BASE + 0x000a4, 0x00);
 
+	mdp4_overlay_solidfill_init(pipe);
+
 	mdp4_overlay_setup_pipe_addr(mfd, pipe);
 
 	mdp4_overlay_rgb_setup(pipe);
@@ -983,6 +985,7 @@ int mdp4_dsi_cmd_on(struct platform_device *pdev)
 	vctrl = &vsync_ctrl_db[cndx];
 	vctrl->mfd = mfd;
 	vctrl->dev = mfd->fbi->dev;
+	vctrl->vsync_enabled = 0;
 
 	mdp_clk_ctrl(1);
 	mdp4_overlay_update_dsi_cmd(mfd);

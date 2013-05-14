@@ -187,9 +187,6 @@ int mdp4_lcdc_pipe_commit(void)
 	}
 	mutex_unlock(&vctrl->update_lock);
 
-	/* free previous committed iommu back to pool */
-	mdp4_overlay_iommu_unmap_freelist(mixer);
-
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
 	if (vctrl->ov_koff != vctrl->ov_done) {
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
@@ -377,7 +374,7 @@ ssize_t mdp4_lcdc_show_event(struct device *dev,
 		msecs_to_jiffies(VSYNC_PERIOD * 4));
 	if (ret <= 0) {
 		vctrl->wait_vsync_cnt = 0;
-		return -EBUSY;
+		vctrl->vsync_time = ktime_get();
 	}
 
 	spin_lock_irqsave(&vctrl->spin_lock, flags);
@@ -482,6 +479,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 
 	vctrl->mfd = mfd;
 	vctrl->dev = mfd->fbi->dev;
+	vctrl->vsync_irq_enabled = 0;
 
 	/* mdp clock on */
 	mdp_clk_ctrl(1);
@@ -538,6 +536,8 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 	pipe->srcp0_ystride = fbi->fix.line_length;
 	pipe->bpp = bpp;
 
+	mdp4_overlay_solidfill_init(pipe);
+
 	mdp4_overlay_mdp_pipe_req(pipe, mfd);
 
 	atomic_set(&vctrl->suspend, 0);
@@ -549,6 +549,7 @@ int mdp4_lcdc_on(struct platform_device *pdev)
 
 	mdp4_overlay_reg_flush(pipe, 1);
 	mdp4_mixer_stage_up(pipe, 0);
+	mdp4_mixer_stage_commit(pipe->mixer_num);
 
 
 	/*
@@ -828,6 +829,9 @@ void mdp4_overlay0_done_lcdc(int cndx)
 		spin_unlock(&vctrl->spin_lock);
 		return;
 	}
+
+	if (mdp_rev <= MDP_REV_41)
+		mdp4_mixer_blend_cfg(MDP4_MIXER0);
 
 	mdp4_lcdc_blt_dmap_update(pipe);
 	pipe->dmap_cnt++;
