@@ -1,8 +1,0 @@
-#!/bin/bash
-modules=`find . -name *.ko`
-adb shell mkdir -p /data/local/tmp/3.9/
-for i in $modules
-do
-	echo $i
-	adb push $i /data/local/tmp/3.9/
-done
