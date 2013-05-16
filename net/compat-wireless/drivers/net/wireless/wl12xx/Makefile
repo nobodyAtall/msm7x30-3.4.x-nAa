@@ -1,12 +1,6 @@
 wl12xx-objs		= main.o cmd.o io.o event.o tx.o rx.o ps.o acx.o \
 			  boot.o init.o debugfs.o scan.o
 
-define filechk_version.h
-	(echo 'static const char *wl12xx_timestamp = __TIMESTAMP__;'; \
-	echo 'static const char *wl12xx_git_head = \
-			"$(shell git describe --dirty)";')
-endef
-
 $(obj)/version.h: .git/HEAD .git/index .git/refs/tags
 	@$(call filechk,version.h)
 
