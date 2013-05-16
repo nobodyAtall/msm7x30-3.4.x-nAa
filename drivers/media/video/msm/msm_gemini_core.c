@@ -1,4 +1,5 @@
-/* Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
+ * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,10 +9,14 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
  */
 
 #include <linux/module.h>
-#include <linux/sched.h>
 #include "msm_gemini_hw.h"
 #include "msm_gemini_core.h"
 #include "msm_gemini_platform.h"
@@ -20,37 +25,14 @@
 static struct msm_gemini_hw_pingpong fe_pingpong_buf;
 static struct msm_gemini_hw_pingpong we_pingpong_buf;
 static int we_pingpong_index;
-static int reset_done_ack;
-static spinlock_t reset_lock;
-static wait_queue_head_t reset_wait;
 
 int msm_gemini_core_reset(uint8_t op_mode, void *base, int size)
 {
-	unsigned long flags;
-	int rc = 0;
-	int tm = 500; /*500ms*/
 	memset(&fe_pingpong_buf, 0, sizeof(fe_pingpong_buf));
 	fe_pingpong_buf.is_fe = 1;
 	we_pingpong_index = 0;
 	memset(&we_pingpong_buf, 0, sizeof(we_pingpong_buf));
-	spin_lock_irqsave(&reset_lock, flags);
-	reset_done_ack = 0;
 	msm_gemini_hw_reset(base, size);
-	spin_unlock_irqrestore(&reset_lock, flags);
-	rc = wait_event_interruptible_timeout(
-			reset_wait,
-			reset_done_ack,
-			msecs_to_jiffies(tm));
-
-	if (!reset_done_ack) {
-		GMN_DBG("%s: reset ACK failed %d", __func__, rc);
-		return -EBUSY;
-	}
-
-	GMN_DBG("%s: reset_done_ack rc %d", __func__, rc);
-	spin_lock_irqsave(&reset_lock, flags);
-	reset_done_ack = 0;
-	spin_unlock_irqrestore(&reset_lock, flags);
 
 	if (op_mode == MSM_GEMINI_MODE_REALTIME_ENCODE) {
 		/* Nothing needed for fe buffer cfg, config we only */
@@ -70,16 +52,9 @@ void msm_gemini_core_release(int release_buf)
 	int i = 0;
 	for (i = 0; i < 2; i++) {
 		if (we_pingpong_buf.buf_status[i] && release_buf)
-			msm_gemini_platform_p2v(we_pingpong_buf.buf[i].file,
-					&we_pingpong_buf.buf[i].handle);
+			msm_gemini_platform_p2v(we_pingpong_buf.buf[i].file);
 		we_pingpong_buf.buf_status[i] = 0;
 	}
-}
-
-void msm_gemini_core_init(void)
-{
-	init_waitqueue_head(&reset_wait);
-	spin_lock_init(&reset_lock);
 }
 
 #if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
@@ -152,7 +127,7 @@ void *msm_gemini_core_framedone_irq(int gemini_irq_status, void *context)
 	buf_p = msm_gemini_hw_pingpong_active_buffer(&we_pingpong_buf);
 	if (buf_p) {
 		buf_p->framedone_len = msm_gemini_hw_encode_output_size();
-		pr_err("%s:%d] framedone_len %d\n", __func__, __LINE__,
+		GMN_DBG("%s:%d] framedone_len %d\n", __func__, __LINE__,
 			buf_p->framedone_len);
 	}
 
@@ -177,25 +152,18 @@ static int (*msm_gemini_irq_handler) (int, void *, void *);
 irqreturn_t msm_gemini_core_irq(int irq_num, void *context)
 {
 	void *data = NULL;
-	unsigned long flags;
+
 	int gemini_irq_status;
 
 	GMN_DBG("%s:%d] irq_num = %d\n", __func__, __LINE__, irq_num);
 
-	spin_lock_irqsave(&reset_lock, flags);
-	reset_done_ack = 1;
-	spin_unlock_irqrestore(&reset_lock, flags);
 	gemini_irq_status = msm_gemini_hw_irq_get_status();
 
 	GMN_DBG("%s:%d] gemini_irq_status = %0x\n", __func__, __LINE__,
 		gemini_irq_status);
 
 	/*For reset and framedone IRQs, clear all bits*/
-	if (gemini_irq_status & 0x400) {
-		wake_up(&reset_wait);
-		msm_gemini_hw_irq_clear(HWIO_JPEG_IRQ_CLEAR_RMSK,
-			JPEG_IRQ_CLEAR_ALL);
-	} else if (gemini_irq_status & 0x1) {
+	if ((gemini_irq_status & 0x1) || (gemini_irq_status & 0x400)) {
 		msm_gemini_hw_irq_clear(HWIO_JPEG_IRQ_CLEAR_RMSK,
 			JPEG_IRQ_CLEAR_ALL);
 	} else {

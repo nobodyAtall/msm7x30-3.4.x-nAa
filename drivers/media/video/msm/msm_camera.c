@@ -192,7 +192,7 @@ static void msm_enqueue_vpe(struct msm_device_queue *queue,
 		qcmd = list_first_entry(&__q->list,		\
 			struct msm_queue_cmd, member);		\
 		if (qcmd) {					\
-			if ((&qcmd->member) && (&qcmd->member.next))	\
+			if (&qcmd->member)	\
 				list_del_init(&qcmd->member);		\
 			free_qcmd(qcmd);				\
 		}							\
@@ -798,7 +798,7 @@ static int msm_control(struct msm_control_device *ctrl_pmsm,
 		qcmd_resp = __msm_control_nb(sync, &qcmd);
 		goto end;
 	}
-
+	msm_queue_drain(&ctrl_pmsm->ctrl_q, list_control);
 	qcmd_resp = __msm_control(sync,
 				  &ctrl_pmsm->ctrl_q,
 #if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
@@ -2623,7 +2623,19 @@ static void msm_vfe_sync(struct msm_vfe_resp *vdata,
 
 vfe_for_config:
 	CDBG("%s: msm_enqueue event_q\n", __func__);
-	msm_enqueue(&sync->event_q, &qcmd->list_config);
+	if (sync->frame_q.len <= 100 && sync->event_q.len <= 100) {
+		msm_enqueue(&sync->event_q, &qcmd->list_config);
+	} else if (sync->event_q.len > 100) {
+		pr_err("%s, Error Event Queue limit exceeded f_q = %d, e_q = %d\n",
+			__func__, sync->frame_q.len, sync->event_q.len);
+		qcmd->error_code = 0xffffffff;
+		qcmd->command = NULL;
+		msm_enqueue(&sync->frame_q, &qcmd->list_frame);
+	} else {
+		pr_err("%s, Error Queue limit exceeded f_q = %d, e_q = %d\n",
+			__func__, sync->frame_q.len, sync->event_q.len);
+		free_qcmd(qcmd);
+	}
 }
 
 static void msm_vpe_sync(struct msm_vpe_resp *vdata,
@@ -2780,6 +2792,14 @@ static int msm_open_common(struct inode *inode, struct file *filep,
 	return rc;
 }
 
+static int msm_open_frame(struct inode *inode, struct file *filep)
+{
+	struct msm_cam_device *pmsm =
+		container_of(inode->i_cdev, struct msm_cam_device, cdev);
+	msm_queue_drain(&pmsm->sync->frame_q, list_frame);
+	return msm_open_common(inode, filep, 1);
+}
+
 static int msm_open(struct inode *inode, struct file *filep)
 {
 	return msm_open_common(inode, filep, 1);
@@ -2873,7 +2893,7 @@ static const struct file_operations msm_fops_control = {
 
 static const struct file_operations msm_fops_frame = {
 	.owner = THIS_MODULE,
-	.open = msm_open,
+	.open = msm_open_frame,
 	.unlocked_ioctl = msm_ioctl_frame,
 	.release = msm_release_frame,
 	.poll = msm_poll_frame,
