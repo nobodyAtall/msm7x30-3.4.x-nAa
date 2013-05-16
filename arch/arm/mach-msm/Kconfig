@@ -2311,14 +2311,6 @@ config SEMC_RPC_SERVER_HANDSET
 	 This cannot cooperate with MSM_RPCSERVER_HANDSET. If this is set,
 	 an error will be generated.
 
-config SEMC_MMC_SDIO_NO_IRQ
-	bool "Do not expect an sdio irq function to be registered"
-	depends on ARCH_MSM7X30 && MMC_MSM
-	default n
-	help
-		This enables a hack for avoiding the sdio_irq_thread from being called
-		when processing sdio requests. Needed for WL12xx wifi driver to be usable
-
 config SIMPLE_REMOTE_PLATFORM
 	bool "Simple Remote platform specific driver"
 	default n
