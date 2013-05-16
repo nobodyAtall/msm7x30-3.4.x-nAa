@@ -24,8 +24,6 @@
 #ifndef _LINUX_WL12XX_H
 #define _LINUX_WL12XX_H
 
-#include <linux/err.h>
-
 /* Reference clock values */
 enum {
 	WL12XX_REFCLOCK_19	= 0, /* 19.2 MHz */
@@ -56,17 +54,19 @@ struct wl12xx_platform_data {
 	int board_ref_clock;
 	int board_tcxo_clock;
 	unsigned long platform_quirks;
+	int bt_enable_gpio;
+	int wlan_enable_gpio;
 	bool pwr_in_suspend;
+
+	struct wl1271_if_operations *ops;
 };
 
 /* Platform does not support level trigger interrupts */
 #define WL12XX_PLATFORM_QUIRK_EDGE_IRQ	BIT(0)
 
-#ifdef CONFIG_WILINK_PLATFORM_DATA
+#ifdef CONFIG_WL12XX_PLATFORM_DATA
 
 int wl12xx_set_platform_data(const struct wl12xx_platform_data *data);
-
-struct wl12xx_platform_data *wl12xx_get_platform_data(void);
 
 #else
 
@@ -76,12 +76,8 @@ int wl12xx_set_platform_data(const struct wl12xx_platform_data *data)
 	return -ENOSYS;
 }
 
-static inline
-struct wl12xx_platform_data *wl12xx_get_platform_data(void)
-{
-	return ERR_PTR(-ENODATA);
-}
-
 #endif
+
+struct wl12xx_platform_data *wl12xx_get_platform_data(void);
 
 #endif
