@@ -27,6 +27,13 @@ config FB_MSM_LOGO
 	---help---
 	  Show /initlogo.rle during boot.
 
+config FB_MSM_LOGO_ANIMATE
+	tristate "MSM Frame Animated Buffer Logo"
+	select FB_MSM_LOGO
+	default y
+	---help---
+	  Show animated kernel logo during boot.
+
 config FB_MSM_LCDC_HW
 	bool
 	default n
