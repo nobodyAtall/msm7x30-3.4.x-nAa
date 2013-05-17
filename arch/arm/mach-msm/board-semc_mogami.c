@@ -76,9 +76,6 @@
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
 #include <linux/spi/cy8ctma300_touch.h>
 #endif
-#ifdef CONFIG_INPUT_BMA150
-#include <linux/bma150.h>
-#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 #include <linux/bma150_ng.h>
 #endif
@@ -127,9 +124,6 @@
 #define NOVATEK_GPIO_RESET              (157)
 
 #define AKM8975_GPIO			(92)
-#ifdef CONFIG_INPUT_BMA150
-#define BMA150_GPIO			(51)
-#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 #define BMA150_GPIO			(51)
 #endif
@@ -939,14 +933,6 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 		.type = MDDI_NOVATEK_I2C_NAME,
 		.platform_data = &novatek_i2c_pdata,
 	},
-#ifdef CONFIG_INPUT_BMA150
-	{
-		I2C_BOARD_INFO("bma150", 0x70 >> 1),
-		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
-		.platform_data = &bma150_platform_data,
-		.type = "bma150"
-	},
-#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 	{
 		I2C_BOARD_INFO("bma150", 0x70 >> 1),
@@ -3843,23 +3829,6 @@ static struct lm356x_platform_data lm3561_platform_data = {
 };
 #endif
 
-#ifdef CONFIG_INPUT_BMA150
-static int bma150_gpio_setup(struct device *dev)
-{
-	return gpio_request(BMA150_GPIO, "bma150_irq");
-}
-
-static void bma150_gpio_teardown(struct device *dev)
-{
-	gpio_free(BMA150_GPIO);
-}
-
-static struct bma150_platform_data bma150_platform_data = {
-	.setup    = bma150_gpio_setup,
-	.teardown = bma150_gpio_teardown,
-};
-#endif
-
 #ifdef CONFIG_INPUT_BMA250
 static int bma250_gpio_setup(struct device *dev)
 {
@@ -3995,14 +3964,6 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.type = BQ24185_NAME,
 		.irq = PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, BQ24185_GPIO_IRQ - 1),
 	},
-#ifdef CONFIG_INPUT_BMA150
-	{ /* TODO: Remove? Added due to wrong bus connection on Anzu SP1. */
-		I2C_BOARD_INFO("bma150", 0x70 >> 1),
-		.irq = MSM_GPIO_TO_INT(BMA150_GPIO),
-		.platform_data = &bma150_platform_data,
-		.type = "bma150"
-	},
-#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 	{
 		I2C_BOARD_INFO("bma150", 0x70 >> 1),
@@ -6902,6 +6863,31 @@ static struct platform_device flip_switch_device = {
 	}
 };
 
+#ifdef CONFIG_INPUT_KEYRESET
+#include <linux/keyreset.h>
+/* keyreset platform device */
+static int mogami_reset_keys_up[] = {
+	KEY_VOLUMEDOWN,
+	0
+};
+
+static struct keyreset_platform_data mogami_reset_keys_pdata = {
+	.keys_up = mogami_reset_keys_up,
+	.keys_down = {
+		KEY_POWER,
+		KEY_HOME,
+		0
+	},
+};
+
+struct platform_device mogami_reset_keys_device = {
+	.name = KEYRESET_NAME,
+	.dev    = {
+		.platform_data = &mogami_reset_keys_pdata,
+	},
+};
+#endif
+
 static void __init msm7x30_init(void)
 {
 	int rc;
@@ -6979,6 +6965,9 @@ static void __init msm7x30_init(void)
 	sensors_ldo_init();
 #endif
 	hdmi_init_regs();
+#ifdef CONFIG_INPUT_KEYRESET
+	platform_device_register(&mogami_reset_keys_device);
+#endif
 	msm_fb_add_devices();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));

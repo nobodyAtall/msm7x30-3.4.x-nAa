@@ -2335,6 +2335,12 @@ config SIMPLE_REMOTE_INVERT_PLUG_DETECTION_STATE
 	  was inserted, but it is high state on some products, so that
 	  we need invert this state on these products.
 
+config MMC_MSM_SDC4_LOW_DRIVE_STRENGTH
+	bool "Enable low drive strength configuration"
+	default n
+	help
+	  Enable to configure the low drive strength for SDC4.
+
 config MOGAMI_BLUEDROID
 	tristate "Mogami BlueDroid module"
 	select BT_WILINK
