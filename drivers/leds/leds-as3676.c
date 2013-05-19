@@ -1,1844 +1,2671 @@
 /*
- * Copyright (c) 2009,2010 Sony Ericsson Mobile Comm
+ * as3676.c - Led dimmer
  *
- * Author: Courtney Cavin <courtney.cavin@sonyericsson.com>
+ * Version:
+ * 2012-04-11: v1.7 : - added also default startup of DCDC with caps on feedback
+ * 2012-02-21: v1.6 : - small bug fix for DCDC handling
+ * 2012-02-03: v1.5 : - avoid current spikes when turning on DCDC
+ *                    - forgot to remove attributes on remove
+ * 2012-01-12: v1.4 : - fixes for linux v3.x and minor code review issues
+ *                    - fixing incorrect configuration of GPIO1/light pin
+ * 2011-12-23: v1.3 : - group check is sometimes too strict, disable it
+ * 2011-12-15: v1.2 : - fixed pattern starting/stopping
+ *                    - added startup brightness
+ *                    - fixed leds turning off
+ * 2011-09-07: v1.1 : - adding some review comments
+ *                    - fixing deadlock in suspend function existing since v1.0
+ * 2010-12-15: v1.0 : - adding power management
+ *                    - fixed ALS (potential oops, falling slopes not working)
+ *                    - added locking
+ * 2010-10-13: v0.9 : second milestone: all practical features,
+ *                                      suspend/resume is pending
+ * 2010-09-30: v0.8 : first milestone: all existing features from as3677
  *
- * This file is subject to the terms and conditions of version 2 of
- * the GNU General Public License.  See the file COPYING in the main
- * directory of this archive for more details.
+ * Copyright (C) 2011 Ulrich Herrmann <ulrich.herrmann@austriamicrosystems.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 of the License.
+ *
  */
 
+#include <linux/module.h>
 #include <linux/i2c.h>
 #include <linux/leds.h>
-#include <linux/module.h>
+#include <linux/input.h>
+#include <linux/mutex.h>
 #include <linux/workqueue.h>
-#include <linux/leds-as3676.h>
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
-#endif
+#include <linux/interrupt.h>
+#include <linux/gpio.h>
 #include <linux/delay.h>
+#include <linux/version.h>
 #include <linux/slab.h>
-#define AS3676_NAME "as3676"
+#include <linux/leds-as3676.h>
 
+/* Current group check function is too strict in some cases.
+   Setting this define to 0 disables them */
+#define AS3676_ENABLE_GROUP_CHECK 0
 
-enum as3676_cmode {
-	AS3676_CMODE_IMMEDIATE,
-	AS3676_CMODE_SCHEDULED,
+#define AS3676_NUM_LEDS  13
+
+#define AS3676_REG_Control                  0x00
+#define AS3676_REG_curr12_control           0x01
+#define AS3676_REG_curr_rgb_control         0x02
+#define AS3676_REG_curr3_control            0x03
+#define AS3676_REG_curr4_control            0x04
+#define AS3676_REG_GPIO_output_1            0x05
+#define AS3676_REG_GPIO_signal_1            0x06
+#define AS3676_REG_LDO_Voltage              0x07
+#define AS3676_REG_Curr1_current            0x09
+#define AS3676_REG_Curr2_current            0x0A
+#define AS3676_REG_Rgb1_current             0x0B
+#define AS3676_REG_Rgb2_current             0x0C
+#define AS3676_REG_Rgb3_current             0x0D
+#define AS3676_REG_Curr3x_strobe            0x0E
+#define AS3676_REG_Curr3x_preview           0x0F
+#define AS3676_REG_Curr3x_other             0x10
+#define AS3676_REG_Curr3x_strobe_control    0x11
+#define AS3676_REG_Curr3x_control           0x12
+#define AS3676_REG_Curr41_current           0x13
+#define AS3676_REG_Curr42_current           0x14
+#define AS3676_REG_Curr43_current           0x15
+#define AS3676_REG_Pwm_control              0x16
+#define AS3676_REG_Pwm_code                 0x17
+#define AS3676_REG_Pattern_control          0x18
+#define AS3676_REG_Pattern_data0            0x19
+#define AS3676_REG_Pattern_data1            0x1A
+#define AS3676_REG_Pattern_data2            0x1B
+#define AS3676_REG_Pattern_data3            0x1C
+#define AS3676_REG_GPIO_control             0x1E
+#define AS3676_REG_GPIO_driving_cap         0x20
+#define AS3676_REG_DCDC_control1            0x21
+#define AS3676_REG_DCDC_control2            0x22
+#define AS3676_REG_CP_control               0x23
+#define AS3676_REG_CP_mode_Switch1          0x24
+#define AS3676_REG_CP_mode_Switch2          0x25
+#define AS3676_REG_ADC_control              0x26
+#define AS3676_REG_ADC_MSB_result           0x27
+#define AS3676_REG_ADC_LSB_result           0x28
+#define AS3676_REG_Overtemp_control         0x29
+#define AS3676_REG_Curr_low_voltage_status1 0x2A
+#define AS3676_REG_Curr_low_voltage_status2 0x2B
+#define AS3676_REG_Gpio_current             0x2C
+#define AS3676_REG_Curr6_current            0x2F
+#define AS3676_REG_Adder_Current_1          0x30
+#define AS3676_REG_Adder_Current_2          0x31
+#define AS3676_REG_Adder_Current_3          0x32
+#define AS3676_REG_Adder_Enable_1           0x33
+#define AS3676_REG_Adder_Enable_2           0x34
+#define AS3676_REG_Subtract_Enable          0x35
+#define AS3676_REG_ASIC_ID1                 0x3E
+#define AS3676_REG_ASIC_ID2                 0x3F
+#define AS3676_REG_Curr30_current           0x40
+#define AS3676_REG_Curr31_current           0x41
+#define AS3676_REG_Curr32_current           0x42
+#define AS3676_REG_Curr33_current           0x43
+#define AS3676_REG_Audio_Control            0x46
+#define AS3676_REG_Audio_Input              0x47
+#define AS3676_REG_Audio_Output             0x48
+#define AS3676_REG_GPIO_output_2            0x50
+#define AS3676_REG_GPIO_signal_2            0x51
+#define AS3676_REG_Adder_Current_4          0x52
+#define AS3676_REG_CURR3x_audio_source      0x53
+#define AS3676_REG_Pattern_End              0x54
+#define AS3676_REG_Audio_Control_2          0x55
+#define AS3676_REG_DLS_mode_control1        0x56
+#define AS3676_REG_DLS_mode_control2        0x57
+#define AS3676_REG_ALS_control              0x90
+#define AS3676_REG_ALS_filter               0x91
+#define AS3676_REG_ALS_offset               0x92
+#define AS3676_REG_ALS_result               0x93
+#define AS3676_REG_ALS_curr12_group         0x94
+#define AS3676_REG_ALS_rgb_group            0x95
+#define AS3676_REG_ALS_curr3x_group         0x96
+#define AS3676_REG_ALS_curr4x_group         0x97
+#define AS3676_REG_ALS_group_1_Y0           0x98
+#define AS3676_REG_ALS_group_1_Y3           0x99
+#define AS3676_REG_ALS_group_1_X1           0x9A
+#define AS3676_REG_ALS_group_1_K1           0x9B
+#define AS3676_REG_ALS_group_1_X2           0x9C
+#define AS3676_REG_ALS_group_1_K2           0x9D
+#define AS3676_REG_ALS_group_2_Y0           0x9E
+#define AS3676_REG_ALS_group_2_Y3           0x9F
+#define AS3676_REG_ALS_group_2_X1           0xA0
+#define AS3676_REG_ALS_group_2_K1           0xA1
+#define AS3676_REG_ALS_group_2_X2           0xA2
+#define AS3676_REG_ALS_group_2_K2           0xA3
+#define AS3676_REG_ALS_group_3_Y0           0xA4
+#define AS3676_REG_ALS_group_3_Y3           0xA5
+#define AS3676_REG_ALS_group_3_X1           0xA6
+#define AS3676_REG_ALS_group_3_K1           0xA7
+#define AS3676_REG_ALS_group_3_X2           0xA8
+#define AS3676_REG_ALS_group_3_K2           0xA9
+
+#define ldev_to_led(c)       container_of(c, struct as3676_led, ldev)
+
+#define AS3676_WRITE_REG(a, b) as3676_write_reg(data, (a), (b))
+#define AS3676_READ_REG(a) as3676_read_reg(data, (a))
+#define AS3676_MODIFY_REG(a, b, c) as3676_modify_reg(data, (a), (b), (c))
+#define AS3676_WRITE_PATTERN(a) do { \
+	u32 __d = a; \
+	AS3676_WRITE_REG(AS3676_REG_Pattern_data0, __d & 0xff); __d >>= 8; \
+	AS3676_WRITE_REG(AS3676_REG_Pattern_data1, __d & 0xff); __d >>= 8; \
+	AS3676_WRITE_REG(AS3676_REG_Pattern_data2, __d & 0xff); __d >>= 8; \
+	AS3676_WRITE_REG(AS3676_REG_Pattern_data3, __d & 0xff); \
+	} while (0)
+
+#define AS3676_LOCK()   mutex_lock(&(data)->update_lock)
+#define AS3676_UNLOCK() mutex_unlock(&(data)->update_lock)
+
+#define LDO_VOLT_DEFALUT_MV 2500
+#define TO_LDO_VOLT_REG(mv) (u8)((mv - 1800) / 50)
+
+struct as3676_reg {
+	const char *name;
+	u8 value;
 };
 
-enum as3676_register {
-	AS3676_REG_CTRL,
-	AS3676_LDO_VOLTAGE,
-	AS3676_MODE_SWITCH,
-	AS3676_MODE_SWITCH_2,
-
-	AS3676_REG_PWM_CTRL,
-	AS3676_REG_PWM_CODE,
-
-	AS3676_REG_GPIO_CURR,
-
-	AS3676_ADC_CTRL,
-
-	AS3676_DCDC_CTRL_1,
-	AS3676_DCDC_CTRL_2,
-
-	AS3676_DLS_CTRL_1,
-	AS3676_DLS_CTRL_2,
-
-	AS3676_SINK_1_2_CTRL,
-	AS3676_SINK_06_CTRL,
-	AS3676_SINK_3X_CTRL,
-	AS3676_SINK_4X_CTRL,
-
-#ifdef CONFIG_LEDS_AS3676_HW_BLINK
-	/* AS3676_REG_PATTERN_XXX must go after AS3676_SINK_4X_CTRL */
-	AS3676_REG_PATTERN_DATA_0,
-	AS3676_REG_PATTERN_DATA_1,
-	AS3676_REG_PATTERN_DATA_2,
-	AS3676_REG_PATTERN_DATA_3,
-	AS3676_REG_PATTERN_CTRL,
-#endif
-
-	AS3676_SINK_01_CURR,
-	AS3676_SINK_02_CURR,
-
-	AS3676_SINK_06_CURR,
-
-	AS3676_SINK_30_CURR,
-	AS3676_SINK_31_CURR,
-	AS3676_SINK_32_CURR,
-	AS3676_SINK_33_CURR,
-
-	AS3676_SINK_41_CURR,
-	AS3676_SINK_42_CURR,
-	AS3676_SINK_43_CURR,
-
-	AS3676_SINK_RGB1_CURR,
-	AS3676_SINK_RGB2_CURR,
-	AS3676_SINK_RGB3_CURR,
-
-	AS3676_OVERTEMP_CTRL,
-
-	AS3676_AMB_CTRL,
-	AS3676_AMB_FILTER,
-	AS3676_AMB_OFFSET,
-	AS3676_SINK_1_2_AMB,
-	AS3676_SINK_06_AMB,
-	AS3676_SINK_3X_AMB,
-	AS3676_SINK_4X_AMB,
-	AS3676_AMB_RGB_GRP,
-	AS3676_GROUP_1_Y0,
-	AS3676_GROUP_1_Y3,
-	AS3676_GROUP_1_X1,
-	AS3676_GROUP_1_X2,
-	AS3676_GROUP_1_K1,
-	AS3676_GROUP_1_K2,
-	AS3676_GROUP_2_Y0,
-	AS3676_GROUP_2_Y3,
-	AS3676_GROUP_2_X1,
-	AS3676_GROUP_2_X2,
-	AS3676_GROUP_2_K1,
-	AS3676_GROUP_2_K2,
-	AS3676_GROUP_3_Y0,
-	AS3676_GROUP_3_Y3,
-	AS3676_GROUP_3_X1,
-	AS3676_GROUP_3_X2,
-	AS3676_GROUP_3_K1,
-	AS3676_GROUP_3_K2,
-	AS3676_AUDIO_CTRL_1,
-	AS3676_AUDIO_CTRL_2,
-	AS3676_SINK_3X_AUD_SRC,
-	AS3676_AUDIO_INPUT,
-	AS3676_AUDIO_OUTPUT,
-
-	AS3676_REG_MAX,
-
-	AS3676_SINK_RGB_CTRL = AS3676_SINK_06_CTRL,
-	AS3676_SINK_RGB_AMB = AS3676_SINK_06_AMB,
-};
-
-enum as3676_ctrl_value {
-	AS3676_CTRL_OFF,
-	AS3676_CTRL_ON,
-	AS3676_CTRL_PWM, /* controlled via PWM */
-	AS3676_CTRL_PATTERN, /* controlled via pattern */
-	AS3676_CTRL_EXT_CURR = 0x03,
-
-	AS3676_CTRL_MASK = 0x03
-};
-
-enum as3676_sink_flags {
-	AS3676_FLAG_DCDC_CTRL  = (1 << 0), /* led controls step up ctrlr */
-	AS3676_FLAG_EXT_CURR   = (1 << 1), /* powered via external current */
-};
-
-int as3676_sink_map[] = {
-	[AS3676_SINK_01] = AS3676_SINK_01_CURR,
-	[AS3676_SINK_02] = AS3676_SINK_02_CURR,
-	[AS3676_SINK_06] = AS3676_SINK_06_CURR,
-	[AS3676_SINK_30] = AS3676_SINK_30_CURR,
-	[AS3676_SINK_31] = AS3676_SINK_31_CURR,
-	[AS3676_SINK_32] = AS3676_SINK_32_CURR,
-	[AS3676_SINK_33] = AS3676_SINK_33_CURR,
-	[AS3676_SINK_41] = AS3676_SINK_41_CURR,
-	[AS3676_SINK_42] = AS3676_SINK_42_CURR,
-	[AS3676_SINK_43] = AS3676_SINK_43_CURR,
-	[AS3676_SINK_RGB1] = AS3676_SINK_RGB1_CURR,
-	[AS3676_SINK_RGB2] = AS3676_SINK_RGB2_CURR,
-	[AS3676_SINK_RGB3] = AS3676_SINK_RGB3_CURR,
-
-};
-
-static const struct as3676_sink {
-	enum as3676_register ctrl;
-	enum as3676_register amb;
-	enum as3676_register dls;
-	int lower_bit;
-	int flags;
-	int dls_bit;
-} as3676_sink[] = {
-	[AS3676_SINK_01_CURR] = {
-		.ctrl = AS3676_SINK_1_2_CTRL,
-		.amb = AS3676_SINK_1_2_AMB,
-		.lower_bit = 0,
-		.dls = AS3676_DLS_CTRL_2,
-		.dls_bit = 0,
-		.flags = AS3676_FLAG_DCDC_CTRL,
-	},
-	[AS3676_SINK_02_CURR] = {
-		.ctrl = AS3676_SINK_1_2_CTRL,
-		.amb = AS3676_SINK_1_2_AMB,
-		.lower_bit = 2,
-		.dls = AS3676_DLS_CTRL_2,
-		.dls_bit = 1,
-	},
-	[AS3676_SINK_06_CURR] = {
-		.ctrl = AS3676_SINK_06_CTRL,
-		.amb = AS3676_SINK_06_AMB,
-		.lower_bit = 6,
-		.flags = AS3676_FLAG_DCDC_CTRL,
-		.dls = AS3676_DLS_CTRL_2,
-		.dls_bit = 7,
-	},
-	[AS3676_SINK_30_CURR] = {
-		.ctrl = AS3676_SINK_3X_CTRL,
-		.amb = AS3676_SINK_3X_AMB,
-		.lower_bit = 0,
-		.flags = AS3676_FLAG_EXT_CURR,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 0,
-	},
-	[AS3676_SINK_31_CURR] = {
-		.ctrl = AS3676_SINK_3X_CTRL,
-		.amb = AS3676_SINK_3X_AMB,
-		.lower_bit = 2,
-		.flags = AS3676_FLAG_EXT_CURR,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 1,
-	},
-	[AS3676_SINK_32_CURR] = {
-		.ctrl = AS3676_SINK_3X_CTRL,
-		.amb = AS3676_SINK_3X_AMB,
-		.lower_bit = 4,
-		.flags = AS3676_FLAG_EXT_CURR,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 2,
-	},
-	[AS3676_SINK_33_CURR] = {
-		.ctrl = AS3676_SINK_3X_CTRL,
-		.amb = AS3676_SINK_3X_AMB,
-		.lower_bit = 6,
-		.flags = AS3676_FLAG_EXT_CURR,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 3,
-	},
-	[AS3676_SINK_41_CURR] = {
-		.ctrl = AS3676_SINK_4X_CTRL,
-		.amb = AS3676_SINK_4X_AMB,
-		.lower_bit = 0,
-		.dls = AS3676_DLS_CTRL_2,
-		.dls_bit = 2,
-	},
-	[AS3676_SINK_42_CURR] = {
-		.ctrl = AS3676_SINK_4X_CTRL,
-		.amb = AS3676_SINK_4X_AMB,
-		.lower_bit = 2,
-		.dls = AS3676_DLS_CTRL_2,
-		.dls_bit = 3,
-	},
-	[AS3676_SINK_43_CURR] = {
-		.ctrl = AS3676_SINK_4X_CTRL,
-		.amb = AS3676_SINK_4X_AMB,
-		.lower_bit = 4,
-		.dls = AS3676_DLS_CTRL_2,
-		.dls_bit = 4,
-	},
-	[AS3676_SINK_RGB1_CURR] = {
-		.ctrl = AS3676_SINK_RGB_CTRL,
-		.amb = AS3676_SINK_RGB_AMB,
-		.lower_bit = 0,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 4,
-	},
-	[AS3676_SINK_RGB2_CURR] = {
-		.ctrl = AS3676_SINK_RGB_CTRL,
-		.amb = AS3676_SINK_RGB_AMB,
-		.lower_bit = 2,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 5,
-	},
-	[AS3676_SINK_RGB3_CURR] = {
-		.ctrl = AS3676_SINK_RGB_CTRL,
-		.amb = AS3676_SINK_RGB_AMB,
-		.lower_bit = 4,
-		.dls = AS3676_DLS_CTRL_1,
-		.dls_bit = 6,
-	},
-};
-
-static const u8 as3676_i2c_registers[] = {
-	[AS3676_SINK_01_CURR]   = 0x09,
-	[AS3676_SINK_02_CURR]   = 0x0a,
-	[AS3676_SINK_06_CURR]   = 0x2f,
-	[AS3676_SINK_30_CURR]   = 0x40,
-	[AS3676_SINK_31_CURR]   = 0x41,
-	[AS3676_SINK_32_CURR]   = 0x42,
-	[AS3676_SINK_33_CURR]   = 0x43,
-	[AS3676_SINK_41_CURR]   = 0x13,
-	[AS3676_SINK_42_CURR]   = 0x14,
-	[AS3676_SINK_43_CURR]   = 0x15,
-	[AS3676_SINK_RGB1_CURR] = 0x0b,
-	[AS3676_SINK_RGB2_CURR] = 0x0c,
-	[AS3676_SINK_RGB3_CURR] = 0x0d,
-	[AS3676_SINK_3X_CTRL]   = 0x03,
-	[AS3676_SINK_4X_CTRL]   = 0x04,
-	[AS3676_SINK_1_2_CTRL]  = 0x01,
-	[AS3676_SINK_RGB_CTRL]  = 0x02,
-	[AS3676_REG_PWM_CTRL]   = 0x16,
-	[AS3676_REG_PWM_CODE]   = 0x17,
-	[AS3676_REG_CTRL]       = 0x00,
-	[AS3676_LDO_VOLTAGE]    = 0x07,
-	[AS3676_MODE_SWITCH]    = 0x24,
-	[AS3676_MODE_SWITCH_2]  = 0x25,
-	[AS3676_ADC_CTRL]       = 0x26,
-	[AS3676_REG_GPIO_CURR]  = 0x2c,
-	[AS3676_OVERTEMP_CTRL]  = 0x29,
-#ifdef CONFIG_LEDS_AS3676_HW_BLINK
-	[AS3676_REG_PATTERN_DATA_0] = 0x19,
-	[AS3676_REG_PATTERN_DATA_1] = 0x1a,
-	[AS3676_REG_PATTERN_DATA_2] = 0x1b,
-	[AS3676_REG_PATTERN_DATA_3] = 0x1c,
-	[AS3676_REG_PATTERN_CTRL] = 0x18,
-#endif
-	[AS3676_AUDIO_CTRL_1]   = 0x46,
-	[AS3676_AUDIO_INPUT]     = 0x47,
-	[AS3676_AUDIO_OUTPUT]   = 0x48,
-	[AS3676_SINK_3X_AUD_SRC]  = 0x53,
-	[AS3676_AUDIO_CTRL_2]   = 0x55,
-	[AS3676_DLS_CTRL_1]     = 0x56,
-	[AS3676_DLS_CTRL_2]     = 0x57,
-	[AS3676_DCDC_CTRL_1]    = 0x21,
-	[AS3676_DCDC_CTRL_2]    = 0x22,
-	[AS3676_AMB_CTRL]       = 0x90,
-	[AS3676_AMB_FILTER]     = 0x91,
-	[AS3676_AMB_OFFSET]     = 0x92,
-	[AS3676_SINK_1_2_AMB]   = 0x94,
-	[AS3676_SINK_06_AMB]    = 0x95,
-	[AS3676_SINK_3X_AMB]    = 0x96,
-	[AS3676_SINK_4X_AMB]    = 0x97,
-	[AS3676_GROUP_1_Y0]     = 0x98,
-	[AS3676_GROUP_1_Y3]     = 0x99,
-	[AS3676_GROUP_1_X1]     = 0x9a,
-	[AS3676_GROUP_1_X2]     = 0x9c,
-	[AS3676_GROUP_1_K1]     = 0x9b,
-	[AS3676_GROUP_1_K2]     = 0x9d,
-	[AS3676_GROUP_2_Y0]     = 0x9e,
-	[AS3676_GROUP_2_Y3]     = 0x9f,
-	[AS3676_GROUP_2_X1]     = 0xa0,
-	[AS3676_GROUP_2_X2]     = 0xa2,
-	[AS3676_GROUP_2_K1]     = 0xa1,
-	[AS3676_GROUP_2_K2]     = 0xa3,
-	[AS3676_GROUP_3_Y0]     = 0xa4,
-	[AS3676_GROUP_3_Y3]     = 0xa5,
-	[AS3676_GROUP_3_X1]     = 0xa6,
-	[AS3676_GROUP_3_X2]     = 0xa8,
-	[AS3676_GROUP_3_K1]     = 0xa7,
-	[AS3676_GROUP_3_K2]     = 0xa9,
-};
-
-static u8 as3676_restore_regs[] = {
-	AS3676_REG_GPIO_CURR,
-	AS3676_DCDC_CTRL_1,
-	AS3676_DCDC_CTRL_2,
-	AS3676_LDO_VOLTAGE,
-	AS3676_MODE_SWITCH,
-	AS3676_REG_PWM_CODE,
-	AS3676_REG_PWM_CTRL,
-	AS3676_AMB_FILTER,
-	AS3676_AMB_OFFSET,
-	AS3676_SINK_1_2_AMB,
-	AS3676_SINK_06_AMB,
-	AS3676_SINK_3X_AMB,
-	AS3676_SINK_4X_AMB,
-	AS3676_AMB_RGB_GRP,
-	AS3676_GROUP_1_Y0,
-	AS3676_GROUP_1_Y3,
-	AS3676_GROUP_1_X1,
-	AS3676_GROUP_1_X2,
-	AS3676_GROUP_1_K1,
-	AS3676_GROUP_1_K2,
-	AS3676_GROUP_2_Y0,
-	AS3676_GROUP_2_Y3,
-	AS3676_GROUP_2_X1,
-	AS3676_GROUP_2_X2,
-	AS3676_GROUP_2_K1,
-	AS3676_GROUP_2_K2,
-	AS3676_GROUP_3_Y0,
-	AS3676_GROUP_3_Y3,
-	AS3676_GROUP_3_X1,
-	AS3676_GROUP_3_X2,
-	AS3676_GROUP_3_K1,
-	AS3676_GROUP_3_K2,
-};
-
-#define AS3676_MAX_CURRENT  38250
-
-#define AS3676_SLOW_PATTERN_BIT_DURATION_MS  250
-#define AS3676_FAST_PATTERN_BIT_DURATION_MS  31
-
-#define AS3676_REG_CTRL_WAIT_US  5000
-#define AS3676_ALS_ENABLE_WAIT_MS 2
-
-/* You can not possibly (probably?) have more interfaces than sinks.... Well,
- * you *could* but it would be really really stupid */
-#define AS3676_INTERFACE_MAX AS3676_SINK_MAX
-
-#define AS3676_ADC_READ_RETRY_NUM  10
-
-static const struct as3676_als_config as3676_default_config = {
-	.gain = AS3676_GAIN_1,
-	.filter_up = AS3676_FILTER_1HZ,
-	.filter_down = AS3676_FILTER_4HZ,
-	.source = AS3676_ALS_SOURCE_GPIO2,
-	.curve = {
-		[AS3676_AMB_OFF] = {
-			.y0 = 0,
-			.y3 = 0,
-			.k1 = 0,
-			.k2 = 0,
-			.x1 = 0,
-			.x2 = 0,
-		},
-		[AS3676_AMB_GROUP_1] = {
-			.y0 = 48,
-			.y3 = 255,
-			.k1 = 48,
-			.k2 = 48,
-			.x1 = 5,
-			.x2 = 127,
-		},
-		[AS3676_AMB_GROUP_2] = {
-			.y0 = 48,
-			.y3 = 255,
-			.k1 = 48,
-			.k2 = 48,
-			.x1 = 5,
-			.x2 = 127,
-		},
-		[AS3676_AMB_GROUP_3] = {
-			.y0 = 48,
-			.y3 = 255,
-			.k1 = 48,
-			.k2 = 48,
-			.x1 = 5,
-			.x2 = 127,
-		},
-	},
-};
-
-struct as3676_interface {
-	int index;
-	u64 regs;
-	int flags;
-	int max_current;
-	int hw_max_current;
-	struct led_classdev cdev;
-	struct kobject kobj;
-};
-
-enum als_suspend_state {
-	AS3676_NO_SUSPEND = 0,
-	AS3676_SUSPENDED,
-};
-
-struct as3676_record {
-	struct i2c_client *client;
-	struct as3676_interface interfaces[AS3676_INTERFACE_MAX];
-	int n_interfaces;
-	struct work_struct work;
-	struct delayed_work als_resume_work;
-	struct delayed_work als_enabled_work;
-	u8 registers[AS3676_REG_MAX];
-	u64 dcdcbit;
-	u64 regbit;
-	int als_connected;
-	int als_wait;
-	enum als_suspend_state als_suspend;
-	int dls_connected;
-	int als_enabled;
-	int audio_enabled;
-	enum as3676_cmode cmode;
-	struct as3676_als_config als;
-	struct as3676_audio_config audio;
-	struct mutex lock;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	struct early_suspend early_suspend;
-#endif
-};
-
-#define as3676_lock(rd) mutex_lock(&(rd)->lock)
-#define as3676_unlock(rd) mutex_unlock(&(rd)->lock)
-
-static void as3676_als_set_enable_internal(struct as3676_record *rd, u8 enable);
-static void as3676_als_set_enable(struct as3676_record *rd,
-		struct as3676_interface *intf, u8 enable);
-static void as3676_als_set_params(struct as3676_record *rd,
-				struct as3676_als_config *param);
-static void as3676_als_set_adc_ctrl(struct as3676_record *rd);
-static void as3676_set_interface_brightness(struct as3676_interface *intf,
-				enum led_brightness value);
-
-static inline u8 reg_get(struct as3676_record *rd, enum as3676_register reg)
-{
-	u8 ret;
-
-	ret = rd->registers[reg];
-
-	return ret;
-}
-
-static inline int reg_isset(struct as3676_record *rd, enum as3676_register reg)
-{
-	return !!(rd->regbit & ((u64)1 << reg));
-}
-
-static inline void reg_set(struct as3676_record *rd,
-		enum as3676_register reg, u8 val)
-{
-	if (rd->cmode == AS3676_CMODE_IMMEDIATE) {
-		struct as3676_data {
-			u8 addr;
-			u8 value;
-		} __attribute__((packed));
-		struct as3676_data data;
-
-		data.addr = as3676_i2c_registers[reg];
-		data.value = val;
-		i2c_master_send(rd->client, (u8 *)&data, sizeof(data));
-		rd->registers[reg] = val;
-	} else {
-		rd->regbit |= ((u64)1 << reg);
-		rd->registers[reg] = val;
-	}
-}
-
-static void as3676_worker(struct work_struct *work)
-{
-	struct as3676_data {
-		u8 addr;
-		u8 value;
-	} __attribute__((packed));
-	int i;
-	struct as3676_record *rd;
-	struct as3676_data data;
-
-	rd = container_of(work, struct as3676_record, work);
-
-	as3676_lock(rd);
-
-	if (rd->regbit == 0) {
-		as3676_unlock(rd);
-		return;
-	}
-
-	for (i = 0; i < AS3676_REG_MAX; ++i) {
-		if (reg_isset(rd, i)) {
-			data.addr = as3676_i2c_registers[i];
-			data.value = rd->registers[i];
-			i2c_master_send(rd->client, (u8 *)&data, sizeof(data));
-		}
-	}
-
-	rd->regbit = 0;
-
-	as3676_unlock(rd);
-}
-
-static void as3676_als_resume_worker(struct work_struct *work)
-{
-	struct as3676_record *rd;
-	u8 val;
-
-	rd = container_of(work, struct as3676_record, als_resume_work.work);
-
-	as3676_lock(rd);
-	val = reg_get(rd, AS3676_REG_CTRL);
-
-	if (val) {
-		enum as3676_cmode cmode = rd->cmode;
-
-		rd->cmode = AS3676_CMODE_IMMEDIATE;
-		as3676_als_set_enable_internal(rd, rd->als_enabled);
-		if (!rd->audio_enabled)
-			reg_set(rd, AS3676_ADC_CTRL, rd->als.source);
-		rd->cmode = cmode;
-	}
-	as3676_unlock(rd);
-}
-
-static void as3676_als_enabled_worker(struct work_struct *work)
-{
-	struct as3676_record *rd;
-	int i;
-
-	rd = container_of(work, struct as3676_record, als_enabled_work.work);
-
-	as3676_lock(rd);
-	rd->als_suspend = AS3676_NO_SUSPEND;
-
-	for (i = 0; i < rd->n_interfaces; ++i) {
-		struct as3676_interface *intf = &rd->interfaces[i];
-		enum led_brightness value;
-		value = intf->cdev.brightness;
-		as3676_set_interface_brightness(intf, value);
-	}
-	as3676_unlock(rd);
-}
-
-static void as3676_set_amb(struct as3676_record *rd, enum as3676_register reg,
-	int group)
-{
-	enum as3676_register amb_reg;
-	int off_bits;
-	int amb_val;
-
-	amb_reg = as3676_sink[reg].amb;
-	off_bits = as3676_sink[reg].lower_bit;
-
-
-	amb_val = reg_get(rd, amb_reg) & ~(AS3676_AMB_MASK << off_bits);
-	amb_val |= group << off_bits;
-
-	reg_set(rd, amb_reg, amb_val);
-}
-
-static void as3676_set_interface_amb(struct as3676_record *rd,
-		struct as3676_interface *intf, int group)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(as3676_sink); ++i) {
-		if (intf->regs & ((u64)1 << i))
-			as3676_set_amb(rd, i, group);
-	}
-}
-
-static void as3676_set_als_config(struct as3676_record *rd,
-		const struct as3676_als_config *config,
-		struct as3676_interface *intf)
-{
-	enum as3676_amb_value group;
-
-	switch (intf->flags & AS3676_FLAG_ALS_MASK) {
-	case AS3676_FLAG_ALS_GROUP1:
-		group = AS3676_AMB_GROUP_1;
-		break;
-	case AS3676_FLAG_ALS_GROUP2:
-		group = AS3676_AMB_GROUP_2;
-		break;
-	case AS3676_FLAG_ALS_GROUP3:
-		group = AS3676_AMB_GROUP_3;
-		break;
-	default:
-		group = AS3676_AMB_OFF;
-		break;
-	}
-
-	if (!rd->audio_enabled)
-		reg_set(rd, AS3676_ADC_CTRL, config->source);
-
-	switch (group) {
-	case AS3676_AMB_GROUP_1:
-		reg_set(rd, AS3676_GROUP_1_Y0, config->curve[group].y0);
-		reg_set(rd, AS3676_GROUP_1_Y3, config->curve[group].y3);
-		reg_set(rd, AS3676_GROUP_1_X1, config->curve[group].x1);
-		reg_set(rd, AS3676_GROUP_1_K1, config->curve[group].k1);
-		reg_set(rd, AS3676_GROUP_1_X2, config->curve[group].x2);
-		reg_set(rd, AS3676_GROUP_1_K2, config->curve[group].k2);
-		break;
-	case AS3676_AMB_GROUP_2:
-		reg_set(rd, AS3676_GROUP_2_Y0, config->curve[group].y0);
-		reg_set(rd, AS3676_GROUP_2_Y3, config->curve[group].y3);
-		reg_set(rd, AS3676_GROUP_2_X1, config->curve[group].x1);
-		reg_set(rd, AS3676_GROUP_2_K1, config->curve[group].k1);
-		reg_set(rd, AS3676_GROUP_2_X2, config->curve[group].x2);
-		reg_set(rd, AS3676_GROUP_2_K2, config->curve[group].k2);
-		break;
-	case AS3676_AMB_GROUP_3:
-		reg_set(rd, AS3676_GROUP_3_Y0, config->curve[group].y0);
-		reg_set(rd, AS3676_GROUP_3_Y3, config->curve[group].y3);
-		reg_set(rd, AS3676_GROUP_3_X1, config->curve[group].x1);
-		reg_set(rd, AS3676_GROUP_3_K1, config->curve[group].k1);
-		reg_set(rd, AS3676_GROUP_3_X2, config->curve[group].x2);
-		reg_set(rd, AS3676_GROUP_3_K2, config->curve[group].k2);
-		break;
-	default:
-		break;
-	}
-
-	as3676_set_interface_amb(rd, intf, group);
-
-	schedule_work(&rd->work);
-}
-
-static void as3676_get_als_config(struct as3676_record *rd,
-		struct as3676_als_curve *curve, enum as3676_amb_value group)
-{
-	switch (group) {
-	case AS3676_AMB_GROUP_1:
-		curve->y0 = reg_get(rd, AS3676_GROUP_1_Y0);
-		curve->y3 = reg_get(rd, AS3676_GROUP_1_Y3);
-		curve->x1 = reg_get(rd, AS3676_GROUP_1_X1);
-		curve->k1 = reg_get(rd, AS3676_GROUP_1_K1);
-		curve->x2 = reg_get(rd, AS3676_GROUP_1_X2);
-		curve->k2 = reg_get(rd, AS3676_GROUP_1_K2);
-		break;
-	case AS3676_AMB_GROUP_2:
-		curve->y0 = reg_get(rd, AS3676_GROUP_2_Y0);
-		curve->y3 = reg_get(rd, AS3676_GROUP_2_Y3);
-		curve->x1 = reg_get(rd, AS3676_GROUP_2_X1);
-		curve->k1 = reg_get(rd, AS3676_GROUP_2_K1);
-		curve->x2 = reg_get(rd, AS3676_GROUP_2_X2);
-		curve->k2 = reg_get(rd, AS3676_GROUP_2_K2);
-		break;
-	case AS3676_AMB_GROUP_3:
-		curve->y0 = reg_get(rd, AS3676_GROUP_3_Y0);
-		curve->y3 = reg_get(rd, AS3676_GROUP_3_Y3);
-		curve->x1 = reg_get(rd, AS3676_GROUP_3_X1);
-		curve->k1 = reg_get(rd, AS3676_GROUP_3_K1);
-		curve->x2 = reg_get(rd, AS3676_GROUP_3_X2);
-		curve->k2 = reg_get(rd, AS3676_GROUP_3_K2);
-		break;
-	default:
-		break;
-	}
-}
-
-static void as3676_audio_set_config(struct as3676_record *rd, u8 enable)
-{
-	int als_status = 0;
-
-	rd->audio_enabled = enable;
-
-	if (enable) {
-		als_status = rd->als_enabled;
-		as3676_als_set_enable_internal(rd, 0);
-		as3676_als_set_adc_ctrl(rd);
-		rd->als_enabled = als_status;
-		reg_set(rd, AS3676_SINK_3X_AUD_SRC, rd->audio.current_3x);
-		reg_set(rd, AS3676_AUDIO_CTRL_1, rd->audio.audio_control);
-		reg_set(rd, AS3676_AUDIO_INPUT, rd->audio.audio_input);
-		reg_set(rd, AS3676_AUDIO_OUTPUT, rd->audio.audio_output);
-		reg_set(rd, AS3676_ADC_CTRL, AS3676_ALS_SOURCE_AUDIO);
-	} else {
-		as3676_als_set_enable_internal(rd, rd->als_enabled);
-		reg_set(rd, AS3676_SINK_3X_AUD_SRC, 0x00);
-		reg_set(rd, AS3676_AUDIO_CTRL_1, 0x00);
-		reg_set(rd, AS3676_AUDIO_INPUT, 0x00);
-		reg_set(rd, AS3676_AUDIO_OUTPUT, 0x00);
-		if (rd->als_enabled)
-			reg_set(rd, AS3676_ADC_CTRL, rd->als.source);
-		else
-			as3676_als_set_adc_ctrl(rd);
-	}
-}
-
-static void as3676_set_brightness(struct as3676_record *rd,
-		enum as3676_register reg, enum led_brightness value, int flags)
-{
-	enum as3676_register ctrl_reg;
-	int off_bits;
-	u8 ctrl_val;
-	u8 ctrl_cur;
-
-	if (value > LED_FULL)
-		value = LED_FULL;
-	if (value < LED_OFF)
-		value = LED_OFF;
-
-	if (rd->dls_connected && flags & AS3676_FLAG_DLS) {
-		ctrl_reg = as3676_sink[reg].dls;
-		off_bits = as3676_sink[reg].dls_bit;
-		ctrl_val = reg_get(rd, ctrl_reg);
-		ctrl_val |= (1 << off_bits);
-		reg_set(rd, ctrl_reg, ctrl_val);
-	}
-
-	ctrl_reg = as3676_sink[reg].ctrl;
-	off_bits = as3676_sink[reg].lower_bit;
-
-	ctrl_val = reg_get(rd, ctrl_reg);
-	ctrl_cur = (ctrl_val >> off_bits) & AS3676_CTRL_MASK;
-	ctrl_val &= ~(AS3676_CTRL_MASK << off_bits);
-	if (value == LED_OFF)
-		ctrl_val |= (AS3676_CTRL_OFF << off_bits);
-	else if ((flags & AS3676_FLAG_PWM_INIT) ||
-			(flags & AS3676_FLAG_PWM_CTRL))
-		ctrl_val |= (AS3676_CTRL_PWM << off_bits);
-	else if (as3676_sink[reg].flags & AS3676_FLAG_EXT_CURR)
-		ctrl_val |= (AS3676_CTRL_EXT_CURR << off_bits);
-	else if (ctrl_cur == AS3676_CTRL_PATTERN) /* don't skip pattern */
-		ctrl_val |= (AS3676_CTRL_PATTERN << off_bits);
-	else
-		ctrl_val |= (AS3676_CTRL_ON << off_bits);
-	reg_set(rd, ctrl_reg, ctrl_val);
-
-	if ((as3676_sink[reg].flags & AS3676_FLAG_EXT_CURR) &&
-		(flags & AS3676_FLAG_AUDIO)) {
-		if (value == LED_OFF)
-			as3676_audio_set_config(rd, 0);
-		else
-			as3676_audio_set_config(rd, 1);
-	}
-
-	if (as3676_sink[reg].flags & AS3676_FLAG_DCDC_CTRL) {
-		u8 ctrl_val = reg_get(rd, AS3676_REG_CTRL);
-		u64 dcdcbit = rd->dcdcbit;
-		if (value == LED_OFF)
-			dcdcbit &= ~((u64)1 << reg);
-		else
-			dcdcbit |= ((u64)1 << reg);
-		if (dcdcbit != rd->dcdcbit) {
-			if (!dcdcbit) { /* Disable Step-up */
-				reg_set(rd, AS3676_REG_CTRL, ctrl_val & ~0x08);
-			} else if (!rd->dcdcbit) { /* Enable Step-up */
-				reg_set(rd, AS3676_REG_CTRL, ctrl_val | 0x08);
-				usleep(AS3676_REG_CTRL_WAIT_US);
-			}
-			rd->dcdcbit = dcdcbit;
-		}
-	}
-
-	reg_set(rd, reg, value);
-}
-
-static void as3676_set_interface_brightness(struct as3676_interface *intf,
-		enum led_brightness value)
-{
-	int i;
-	enum as3676_cmode cmode;
-	struct as3676_record *rd;
-	struct as3676_platform_data *pdata;
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-	pdata = rd->client->dev.platform_data;
-
-	cmode = rd->cmode;
-	rd->cmode = AS3676_CMODE_IMMEDIATE;
-
-	intf->cdev.brightness = value;
-
-	if (rd->audio_enabled || (rd->als_suspend == AS3676_NO_SUSPEND) ||
-		!(pdata->leds[intf->index].flags & AS3676_FLAG_WAIT_RESUME)) {
-		if (intf->max_current)
-			value = (value * intf->max_current)
-							/ AS3676_MAX_CURRENT;
-
-		for (i = 0; i < ARRAY_SIZE(as3676_sink); ++i) {
-			if (intf->regs & ((u64)1 << i))
-				as3676_set_brightness(rd, i,
-							value, intf->flags);
-		}
-	}
-	rd->cmode = cmode;
-}
-
-static void as3676_brightness(struct led_classdev *led_cdev,
-		enum led_brightness value)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-
-	intf = container_of(led_cdev, struct as3676_interface, cdev);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-	dev_dbg(led_cdev->dev, "brightness i=%d, on=%d\n", intf->index, value);
-	as3676_lock(rd);
-	as3676_set_interface_brightness(intf, value);
-	as3676_unlock(rd);
-}
-
-
-#ifdef CONFIG_LEDS_AS3676_HW_BLINK
-static void as3676_set_blink(struct as3676_record *rd,
-		enum as3676_register reg, unsigned long *on, unsigned long *off,
-		int value)
-{
-	enum as3676_register ctrl_reg;
-	int off_bits;
-	u8 ctrl_val;
-	int i;
-	unsigned long total_time = *on + *off;
-
-	/*
-	 * Blinking period for as3676 consists of:
-	 *  [delay value(led off)] [32bit pattern (0-led off, 1-led on)]
-	 *   delay value is in range 0..7 seconds (x8 for slow clock)
-	 *   each bit in pattern has duration 31ms (250ms for slow clock)
-	 *
-	 *  as3676_patterns table contains most suitable predefined settings for
-	 *  all periods which can be configured
-	 */
-	static struct as3676_pattern {
-		int period;
-		int slow;
-		int delay;
-		int bits_per_cycle;
-	} as3676_patterns[] = {
-		{ 62,	0,	0,	2},
-		{ 125,	0,	0,	4},
-		{ 250,	0,	0,	8},
-		{ 500,	0,	0,	16},
-		{ 1000,	0,	0,	32},
-		{ 2000,	1,	0,	8},
-		{ 3000,	0,	2,	32},
-		{ 4000,	1,	0,	16},
-		{ 5000,	0,	4,	32},
-		{ 6000,	0,	5,	32},
-		{ 7000,	0,	6,	32},
-		{ 8000,	1,	0,	32},
-		{ 16000, 1,	1,	32},
-		{ 24000, 1,	2,	32},
-		{ 32000, 1,	3,	32},
-		{ 40000, 1,	4,	32},
-		{ 48000, 1,	5,	32},
-		{ 56000, 1,	6,	32},
-		{ 64000, 1,	7,	32},
-	};
-
-	if (as3676_sink[reg].flags & AS3676_FLAG_DCDC_CTRL) {
-		dev_err(&rd->client->dev,
-				"Request for blinking on DCDC ctrl led\n");
-		return;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(as3676_patterns); ++i) {
-		struct as3676_pattern *patt_def = &as3676_patterns[i];
-		u32 pattern = 0;
-		u8 curr_val, on_bits, bit, bit_duration_ms;
-
-		/* find most suitable pattern for this period */
-		if (patt_def->period < total_time)
-			if (i != ARRAY_SIZE(as3676_patterns) - 1)
-				continue;
-
-		if (i > 0 && abs(total_time - as3676_patterns[i - 1].period) <
-				abs(total_time-patt_def->period)) {
-			/* smaller period more suitable */
-			patt_def = &as3676_patterns[i - 1];
-		}
-
-		bit_duration_ms = (patt_def->slow ?
-				AS3676_SLOW_PATTERN_BIT_DURATION_MS :
-				AS3676_FAST_PATTERN_BIT_DURATION_MS);
-
-		/* calculate number of bits for led_on state */
-		on_bits = *on / bit_duration_ms;
-
-		/* if on_time too small adjust to minimal value */
-		if (on_bits == 0)
-			on_bits = 1;
-
-		/* return adjusted values */
-		*on = on_bits * bit_duration_ms;
-		*off = patt_def->period - *on;
-
-		/* generate pattern */
-		for (bit = 0; bit < 32; bit++) {
-			if (bit % patt_def->bits_per_cycle < on_bits)
-				pattern |= (1 << bit);
-		}
-
-		reg_set(rd, AS3676_REG_PATTERN_DATA_0, pattern & 0xff);
-		reg_set(rd, AS3676_REG_PATTERN_DATA_1, (pattern >>  8) & 0xff);
-		reg_set(rd, AS3676_REG_PATTERN_DATA_2, (pattern >> 16) & 0xff);
-		reg_set(rd, AS3676_REG_PATTERN_DATA_3, (pattern >> 24) & 0xff);
-		reg_set(rd, AS3676_REG_PATTERN_CTRL,
-				(patt_def->delay & 0x3) << 1);
-
-		curr_val = reg_get(rd, AS3676_REG_GPIO_CURR);
-		curr_val &= (1 << 7);
-		reg_set(rd, AS3676_REG_GPIO_CURR, curr_val |
-				((patt_def->delay & 0x4) << 2) |
-				(patt_def->slow << 6));
-		break;
-	}
-
-	reg_set(rd, reg, value);
-
-	ctrl_reg = as3676_sink[reg].ctrl;
-	off_bits = as3676_sink[reg].lower_bit;
-
-	ctrl_val = reg_get(rd, ctrl_reg) & ~(AS3676_CTRL_MASK << off_bits);
-	reg_set(rd, ctrl_reg, ctrl_val | (AS3676_CTRL_PATTERN << off_bits));
-}
-
-static void as3676_set_interface_blink(struct as3676_interface *intf,
-		unsigned long *on, unsigned long *off)
-{
-	struct as3676_record *rd;
-	int value;
-	int i;
-
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	value = intf->cdev.brightness;
-
-	/* Since blinking at 0 brightness is stupid. */
-	if (value == LED_OFF)
-		value = LED_FULL;
-
-	if (intf->max_current)
-		value = (value * intf->max_current) / AS3676_MAX_CURRENT;
-
-	if (*on == 0 && *off == 0)
-		*on = 500, *off = 500;
-
-	for (i = 0; i < ARRAY_SIZE(as3676_sink); ++i) {
-		if (intf->regs & ((u64)1 << i))
-			as3676_set_blink(rd, i, on, off, value);
-	}
-
-	schedule_work(&rd->work);
-}
-
-static int as3676_blink(struct led_classdev *led_cdev,
-		unsigned long *on, unsigned long *off)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-
-	intf = container_of(led_cdev, struct as3676_interface, cdev);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-	dev_dbg(led_cdev->dev, "blink i=%d, on=%ld, off=%ld\n",
-			intf->index, *on, *off);
-	as3676_lock(rd);
-	as3676_set_interface_blink(intf, on, off);
-	as3676_unlock(rd);
-	return 0;
-}
-#endif
-
-static ssize_t as3676_als_value_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-	ssize_t ret;
-	u8 val;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	as3676_lock(rd);
-	ret = i2c_smbus_read_i2c_block_data(rd->client, 0x93, 1, &val);
-	if (ret < 0) {
-		as3676_unlock(rd);
-		return ret;
-	}
-	as3676_unlock(rd);
-
-	sprintf(buf, "%u\n", val);
-	ret = strlen(buf) + 1;
-
-	return ret;
-}
-
-static void as3676_als_set_adc_ctrl(struct as3676_record *rd)
-{
-	u8 val;
-	int status;
-	/* Sometimes AS3676 has increased 200uA current consumption in standby
-	 * and need to handle it by sw. */
-	reg_set(rd, AS3676_ADC_CTRL, 0x80);
-	status = i2c_smbus_read_i2c_block_data(rd->client, AS3676_ADC_CTRL,
-					       1, &val);
-	if (status < 0)
-		dev_err(&rd->client->dev, "%s:I2C read error:%d\n",
-			 __func__, status);
-}
-
-static void as3676_als_set_enable(struct as3676_record *rd,
-		struct as3676_interface *intf, u8 enable)
-{
-	as3676_als_set_enable_internal(rd, enable);
-
-	rd->als_enabled = enable;
-
-	/* We have to make sure to turn on/off the ALS curve here,
-	 * or the brightness will still be limited by the last ALS
-	 * reading (if you go from on to off).
-	 */
-
-	if (enable) {
-		enum as3676_amb_value group;
-
-		switch (intf->flags & AS3676_FLAG_ALS_MASK) {
-		case AS3676_FLAG_ALS_GROUP1:
-			group = AS3676_AMB_GROUP_1;
-			break;
-		case AS3676_FLAG_ALS_GROUP2:
-			group = AS3676_AMB_GROUP_2;
-			break;
-		case AS3676_FLAG_ALS_GROUP3:
-			group = AS3676_AMB_GROUP_3;
-			break;
-		default:
-			group = AS3676_AMB_OFF;
-			break;
-		}
-		as3676_set_interface_amb(rd, intf, group);
-	} else {
-		/* Turn off the curve */
-		as3676_set_interface_amb(rd, intf, AS3676_AMB_OFF);
-	}
-
-	/* Make it happen! */
-	schedule_work(&rd->work);
-}
-
-static void as3676_als_set_enable_internal(struct as3676_record *rd, u8 enable)
-{
-	if (enable && !rd->audio_enabled)
-		reg_set(rd, AS3676_AMB_CTRL, (rd->als.gain << 1) | 0x01);
-	else
-		reg_set(rd, AS3676_AMB_CTRL, 0x00);
-
-	if (!rd->audio_enabled && rd->als_suspend == AS3676_SUSPENDED) {
-		/*
-		 *  as3676 keeps old ALS value during sleep in amb_result
-		 *  register and it affects the brightness soon after wakeup.
-		 *  Need 2ms wait to update value.
-		 */
-		schedule_delayed_work(&rd->als_enabled_work,
-				msecs_to_jiffies(AS3676_ALS_ENABLE_WAIT_MS));
-	}
-}
-
-static ssize_t as3676_als_enable_store(struct kobject *kobj,
-		struct kobj_attribute *attr, const char *buf, size_t count)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-	unsigned long enable;
-	int ret;
-	u8 val;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	ret = strict_strtoul(buf, 0, &enable);
-	if (ret < 0 || (enable != 1 && enable != 0))
-		return -EINVAL;
-
-	as3676_lock(rd);
-	val = reg_get(rd, AS3676_AMB_CTRL) & 0x01;
-
-	if (enable != val) {
-		as3676_als_set_enable(rd, intf, enable);
-
-		if (enable) {
-			as3676_als_set_params(rd, &rd->als);
-			if (!rd->audio_enabled)
-				reg_set(rd, AS3676_ADC_CTRL, rd->als.source);
-		} else {
-			struct as3676_als_config param;
-
-			memset(&param, 0x00, sizeof(struct as3676_als_config));
-			as3676_als_set_params(rd, &param);
-			as3676_als_set_adc_ctrl(rd);
-		}
-	}
-
-	as3676_unlock(rd);
-	return strlen(buf);
-}
-
-
-static ssize_t as3676_als_enable_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-	u8 val;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	as3676_lock(rd);
-	val = reg_get(rd, AS3676_AMB_CTRL);
-	as3676_unlock(rd);
-
-	return sprintf(buf, "%u\n", (val & 0x01) ? 1 : 0);
-}
-
-static ssize_t as3676_als_curve_store(struct kobject *kobj,
-		struct kobj_attribute *attr, const char *buf, size_t count)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-	int ret;
-	struct as3676_als_curve curve;
-	enum as3676_amb_value als_group;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	ret = sscanf(buf, "%u,%u,%u,%u,%u,%u,%u", &als_group,
-			&curve.y0, &curve.y3, &curve.k1,
-			&curve.k2, &curve.x1, &curve.x2);
-	if (ret != 7)
-		return -EINVAL;
-
-	if (als_group & ~AS3676_AMB_MASK)
-		return -EINVAL;
-	/* if any of the values are > 255 or < 0, error out */
-	if ((curve.y0 | curve.y3) & ~0xff)
-		return -EINVAL;
-	if ((curve.k1 | curve.k2) & ~0xff)
-		return -EINVAL;
-	if ((curve.x1 | curve.x2) & ~0xff)
-		return -EINVAL;
-
-	as3676_lock(rd);
-	intf->flags &= ~AS3676_FLAG_ALS_MASK;
-	switch (als_group) {
-	case AS3676_AMB_GROUP_1:
-		intf->flags |= AS3676_FLAG_ALS_GROUP1;
-		break;
-	case AS3676_AMB_GROUP_2:
-		intf->flags |= AS3676_FLAG_ALS_GROUP2;
-		break;
-	case AS3676_AMB_GROUP_3:
-		intf->flags |= AS3676_FLAG_ALS_GROUP3;
-		break;
-	default:
-		break;
-	}
-
-	memcpy(&rd->als.curve[als_group], &curve,
-				sizeof(struct as3676_als_curve));
-
-	as3676_set_als_config(rd, &rd->als, intf);
-	as3676_unlock(rd);
-
-	return count;
-}
-
-static ssize_t as3676_als_curve_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-	struct as3676_als_curve curve;
-	char *curve_str = buf;
-	int length = 0;
-	int i;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	as3676_lock(rd);
-	length = sprintf(curve_str, "curve,y0,y3,k1,k2,x1,x2\n");
-	curve_str += length;
-
-	for (i = 1; i < AS3676_AMB_MAX; i++) {
-		memset(&curve, 0x00, sizeof(struct as3676_als_curve));
-		as3676_get_als_config(rd, &curve, i);
-
-		length = snprintf(curve_str, PAGE_SIZE - (curve_str - buf),
-			"group_%u,%u,%u,%u,%u,%u,%u\n",
-			i, curve.y0, curve.y3, curve.k1,
-			curve.k2, curve.x1, curve.x2);
-		curve_str += length;
-	}
-	as3676_unlock(rd);
-
-	return strlen(buf);
-}
-
-static void as3676_als_set_params(struct as3676_record *rd,
-				struct as3676_als_config *param)
-{
-	u8 ctrl = reg_get(rd, AS3676_AMB_CTRL);
-
-	/* amb_gain 0x90 */
-	ctrl &= ~0x06;
-	reg_set(rd, AS3676_AMB_CTRL, ((param->gain << 1) | ctrl));
-	/* als_filter 0x91 */
-	reg_set(rd, AS3676_AMB_FILTER,
-		(param->filter_up | (param->filter_down << 4)));
-	/* als offs 0x92 */
-	reg_set(rd, AS3676_AMB_OFFSET, param->offset);
-
-	schedule_work(&rd->work);
-}
-
-static ssize_t as3676_als_params_store(struct kobject *kobj,
-		struct kobj_attribute *attr, const char *buf, size_t size)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-	struct as3676_als_config param;
-	int count;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	count = sscanf(buf, "%u,%u,%u,%u", &param.gain, &param.filter_up,
-					&param.filter_down, &param.offset);
-	if (count != 4)
-		return -EINVAL;
-
-	if ((param.gain >= AS3676_GAIN_MAX) ||
-		(param.filter_up >= AS3676_FILTER_MAX) ||
-		(param.filter_down >= AS3676_FILTER_MAX) ||
-		(param.offset >= 0xFF))
-		return -EINVAL;
-
-	as3676_lock(rd);
-	rd->als.gain = param.gain;
-	rd->als.filter_up = param.filter_up;
-	rd->als.filter_down = param.filter_down;
-	rd->als.offset = param.offset;
-
-	as3676_als_set_params(rd, &rd->als);
-	as3676_unlock(rd);
-
-	return strlen(buf);
-}
-
-static ssize_t as3676_als_params_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	struct as3676_interface *intf;
-	struct as3676_record *rd;
-
-	intf = container_of(kobj, struct as3676_interface, kobj);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	return sprintf(buf, "gain,filter_up,filter_down,offset\n"
-		"%u,%u,%u,%u\n", rd->als.gain, rd->als.filter_up,
-		rd->als.filter_down, rd->als.offset);
-}
-
-static struct kobj_attribute as3676_als_attr_value =
-	__ATTR(value, 0444, as3676_als_value_show, NULL);
-static struct kobj_attribute as3676_als_attr_enable =
-	__ATTR(enable, 0644, as3676_als_enable_show, as3676_als_enable_store);
-static struct kobj_attribute as3676_als_attr_curve =
-	__ATTR(curve, 0644, as3676_als_curve_show, as3676_als_curve_store);
-static struct kobj_attribute as3676_als_attr_params =
-	__ATTR(params, 0644, as3676_als_params_show, as3676_als_params_store);
-
-static ssize_t as3676_max_current_show(struct device *dev,
-                                 struct device_attribute *attr, char *buf)
-{
-	struct as3676_record *rd;
-	struct as3676_interface *intf;
-	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-
-	intf = container_of(led_cdev, struct as3676_interface, cdev);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", intf->max_current);
-}
-
-static ssize_t as3676_max_current_store(struct device *dev,
-                 struct device_attribute *attr, const char *buf, size_t size)
-{
-	int ret;
-	unsigned long curr_val;
-	struct as3676_record *rd;
-	struct as3676_interface *intf;
-        struct led_classdev *led_cdev = dev_get_drvdata(dev);
-	struct as3676_platform_data *pdata;
-
-	intf = container_of(led_cdev, struct as3676_interface, cdev);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	ret = strict_strtoul(buf, 10, &curr_val);
-
-	if (ret != 0 || curr_val == 0)
-		return -EINVAL;
-
-	as3676_lock(rd);
-	pdata = rd->client->dev.platform_data;
-
-	if (curr_val > pdata->leds[intf->index].hw_max_current)
-		curr_val = pdata->leds[intf->index].hw_max_current;
-
-	intf->max_current = (int)curr_val;
-	as3676_unlock(rd);
-
-	return size;
-}
-
-static void as3676_als_set_mode(struct as3676_record *rd,
-			enum as3676_register reg, u8 mode)
-{
-	enum as3676_register ctrl_reg;
-	int off_bits;
-	u8 ctrl_val;
-
-	ctrl_reg = as3676_sink[reg].ctrl;
-	off_bits = as3676_sink[reg].lower_bit;
-	ctrl_val = reg_get(rd, ctrl_reg) & ~(AS3676_CTRL_MASK << off_bits);
-
-	reg_set(rd, ctrl_reg, ctrl_val | (mode << off_bits));
-}
-
-static ssize_t as3676_mode_store(struct device *dev,
-                 struct device_attribute *attr, const char *buf, size_t size)
-{
-	int ret, i;
-	unsigned long mode;
-	struct as3676_record *rd;
-	struct as3676_interface *intf;
-	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-
-	intf = container_of(led_cdev, struct as3676_interface, cdev);
-	rd = container_of(intf, struct as3676_record, interfaces[intf->index]);
-
-	ret = strict_strtoul(buf, 10, &mode);
-
-	if ((ret != 0) || (mode > AS3676_CTRL_PWM))
-		return -EINVAL;
-
-	as3676_lock(rd);
-	intf->flags &= ~AS3676_FLAG_PWM_CTRL;
-	if (mode == AS3676_CTRL_PWM)
-		intf->flags |= AS3676_FLAG_PWM_CTRL;
-
-	for (i = 0; i < ARRAY_SIZE(as3676_sink); ++i) {
-		if (intf->regs & ((u64)1 << i))
-			as3676_als_set_mode(rd, i, (u8)mode);
-	}
-	as3676_unlock(rd);
-
-	return size;
-}
-
-static ssize_t as3676_adc_als_value_show(struct device *dev,
-			struct device_attribute *attr, char *buf)
-{
-	struct as3676_record *rd = dev_get_drvdata(dev);
-	struct as3676_interface *intf;
-	struct led_classdev *led_cdev = dev_get_drvdata(&rd->client->dev);
-	u32 adc_result;
-	u8 val;
-	int i;
-
-	intf = container_of(led_cdev, struct as3676_interface, cdev);
-
-	as3676_lock(rd);
-	val = reg_get(rd, AS3676_ADC_CTRL);
-	as3676_unlock(rd);
-	if ((val & 0x3F) != AS3676_ALS_SOURCE_GPIO2) {
-		dev_err(&rd->client->dev, "als source failed\n");
-		return -EFAULT;
-	}
-
-	for (i = 0; i < AS3676_ADC_READ_RETRY_NUM; i++) {
-		adc_result = i2c_smbus_read_byte_data(rd->client, 0x27);
-		if (!(adc_result & 0x80))
-			break;
-		/* Wait for the end of the next ADC conversion cycle */
-		udelay(10);
-	}
-	if (i >= AS3676_ADC_READ_RETRY_NUM) {
-		dev_err(&rd->client->dev, "adc_result failed\n");
-		return -EFAULT;
-	}
-
-	adc_result = (adc_result & 0x7F) << 3;
-	adc_result |= i2c_smbus_read_byte_data(rd->client, 0x28) & 0x07;
-
-	return snprintf(buf, PAGE_SIZE, "%u\n", adc_result);
-}
-
-static DEVICE_ATTR(max_current, 0600, as3676_max_current_show,
-					as3676_max_current_store);
-static DEVICE_ATTR(mode, 0200, NULL, as3676_mode_store);
-static DEVICE_ATTR(adc_als_value, 0444, as3676_adc_als_value_show, NULL);
-
-static void dummy_kobj_release(struct kobject *kobj)
-{ }
-
-static struct kobj_type dummy_kobj_ktype = {
-	.release	= dummy_kobj_release,
-	.sysfs_ops	= &kobj_sysfs_ops,
-};
-
-static struct attribute *as3676_als_attrs[] = {
-	&as3676_als_attr_value.attr,
-	&as3676_als_attr_enable.attr,
-	&as3676_als_attr_curve.attr,
-	&as3676_als_attr_params.attr,
-	NULL
-};
-
-static struct attribute_group as3676_als_attr_group = {
-	.attrs = as3676_als_attrs,
-};
-
-static int as3676_create_als_tree(struct as3676_record *rd,
-		struct as3676_interface *intf)
-{
-	int rc;
-
-	rc = kobject_init_and_add(&intf->kobj, &dummy_kobj_ktype,
-			&intf->cdev.dev->kobj, "als");
-	if (rc)
-		return rc;
-
-	rc = sysfs_create_group(&intf->kobj, &as3676_als_attr_group);
-	if (rc)
-		kobject_put(&intf->kobj);
-
-	return rc;
-}
-
-static void as3676_restore(struct as3676_record *rd)
-{
-	unsigned i;
+struct as3676_led {
 	u8 reg;
+	u8 mode_reg; /* fixed offset 0x93 to amb_mode */
+	u8 mode_shift; /* same offsets for amb_mode */
+	u8 has_extended_mode;
+	u8 adder_reg;
+	u8 adder_on_reg;
+	u8 adder_on_shift;
+	u8 dls_mode_reg; /* fixed offset -0x32 to cp_mode reg */
+	u8 dls_mode_shift; /* same for cp_mode_shift */
+	u8 aud_reg;
+	u8 aud_shift;
+	u8 mode; /* needed for DCDC checking: usually reflects mode_reg setting,
+		  but is set earlier */
+	struct device_attribute *aud_file;
+	int dim_brightness;
+	int dim_value;
+	struct i2c_client *client;
+	const char *name;
+	struct led_classdev ldev;
+	struct as3676_platform_led *pled;
+	bool use_pattern;
+	u8 marker;
+	bool use_dls;
+};
 
-	for (i = 0; i < ARRAY_SIZE(as3676_restore_regs); i++) {
-		reg = as3676_restore_regs[i];
-		reg_set(rd, reg, rd->registers[reg]);
-	}
-}
+enum ldo_users {
+	LDO_FOR_ALS   = 1 << 0,
+	LDO_FOR_DLS   = 1 << 1,
+	LDO_FOR_AUDIO = 1 << 2,
+};
 
-#if defined(CONFIG_PM) && !defined(CONFIG_HAS_EARLYSUSPEND)
-static int as3676_pm_suspend(struct device *dev)
+struct as3676_data {
+	struct i2c_client *client;
+	struct as3676_led leds[AS3676_NUM_LEDS];
+	struct mutex update_lock;
+	struct delayed_work dim_work;
+	struct as3676_reg regs[255];
+	bool dimming_in_progress;
+	int pattern_running;
+	u32 pattern_data;
+	int num_leds;
+	int ldo_count;
+	u8 caps_mounted_on_dcdc_feedback;
+	u8 als_control_backup;
+	u8 als_result_backup;
+	u8 in_shutdown;
+	int dls_users;
+};
+
+struct as3676_als_group {
+	u8 gn;
+	u8 y0;
+	u8 x1;
+	s8 k1;
+	u8 x2;
+	s8 k2;
+	u8 y3;
+};
+
+#define AS3676_ATTR(_name)  \
+	__ATTR(_name, 0644, as3676_##_name##_show, as3676_##_name##_store)
+
+#define AS3676_DEV_ATTR(_name)  \
+	struct device_attribute as3676_##_name = AS3676_ATTR(_name);
+
+static u8 as3676_read_reg(struct as3676_data *data, u8 reg);
+static s32 as3676_write_reg(struct as3676_data *data, u8 reg, u8 value);
+static s32 as3676_modify_reg(struct as3676_data *data, u8 reg, u8 reset,
+		u8 set);
+static void as3676_set_brightness(struct as3676_data *data,
+		struct as3676_led *led, enum led_brightness value);
+static void as3676_switch_als(struct as3676_data *data, int als_on);
+
+static ssize_t as3676_curr4x_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_curr4x_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+static ssize_t as3676_rgbx_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_rgbx_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+static ssize_t as3676_curr126_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_curr126_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+static ssize_t as3676_curr30_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_curr30_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+static ssize_t as3676_curr31_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_curr31_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+static ssize_t as3676_curr32_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_curr32_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+static ssize_t as3676_curr33_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t as3676_curr33_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size);
+
+AS3676_DEV_ATTR(curr4x_audio_on);
+AS3676_DEV_ATTR(rgbx_audio_on);
+AS3676_DEV_ATTR(curr126_audio_on);
+AS3676_DEV_ATTR(curr30_audio_channel);
+AS3676_DEV_ATTR(curr31_audio_channel);
+AS3676_DEV_ATTR(curr32_audio_channel);
+AS3676_DEV_ATTR(curr33_audio_channel);
+
+#define AS3676_REG(NAME, VAL)[AS3676_REG_##NAME] = \
+	{.name = __stringify(NAME), .value = (VAL)}
+
+static const struct as3676_data as3676_default_data = {
+	.client = NULL,
+	.num_leds = AS3676_NUM_LEDS,
+	.leds = {{
+			.name = "as3676::curr1",
+			.reg = AS3676_REG_Curr1_current,
+			.mode_reg = AS3676_REG_curr12_control,
+			.mode_shift = 0,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_1,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 0,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control2,
+			.dls_mode_shift = 0,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 4,
+			.aud_file = &as3676_curr126_audio_on,
+		},
+		{
+			.name = "as3676::curr2",
+			.reg = AS3676_REG_Curr2_current,
+			.mode_reg = AS3676_REG_curr12_control,
+			.mode_shift = 2,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_2,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 1,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control2,
+			.dls_mode_shift = 1,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 4,
+			.aud_file = &as3676_curr126_audio_on,
+		},
+		{
+			.name = "as3676::curr6",
+			.reg = AS3676_REG_Curr6_current,
+			.mode_reg = AS3676_REG_curr_rgb_control,
+			.mode_shift = 6,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_3,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 2,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control2,
+			.dls_mode_shift = 7,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 4,
+			.aud_file = &as3676_curr126_audio_on,
+		},
+		{
+			.name = "as3676::rgb1",
+			.reg = AS3676_REG_Rgb1_current,
+			.mode_reg = AS3676_REG_curr_rgb_control,
+			.mode_shift = 0,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_1,
+			.adder_on_reg = AS3676_REG_Adder_Enable_1,
+			.adder_on_shift = 0,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 4,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 5,
+			.aud_file = &as3676_rgbx_audio_on,
+		},
+		{
+			.name = "as3676::rgb2",
+			.reg = AS3676_REG_Rgb2_current,
+			.mode_reg = AS3676_REG_curr_rgb_control,
+			.mode_shift = 2,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_2,
+			.adder_on_reg = AS3676_REG_Adder_Enable_1,
+			.adder_on_shift = 1,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 5,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 5,
+			.aud_file = &as3676_rgbx_audio_on,
+		},
+		{
+			.name = "as3676::rgb3",
+			.reg = AS3676_REG_Rgb3_current,
+			.mode_reg = AS3676_REG_curr_rgb_control,
+			.mode_shift = 4,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_3,
+			.adder_on_reg = AS3676_REG_Adder_Enable_1,
+			.adder_on_shift = 2,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 6,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 5,
+			.aud_file = &as3676_rgbx_audio_on,
+		},
+		{
+			.name = "as3676::curr41",
+			.reg = AS3676_REG_Curr41_current,
+			.mode_reg = AS3676_REG_curr4_control,
+			.mode_shift = 0,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_1,
+			.adder_on_reg = AS3676_REG_Adder_Enable_1,
+			.adder_on_shift = 3,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control2,
+			.dls_mode_shift = 2,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 6,
+			.aud_file = &as3676_curr4x_audio_on,
+		},
+		{
+			.name = "as3676::curr42",
+			.reg = AS3676_REG_Curr42_current,
+			.mode_reg = AS3676_REG_curr4_control,
+			.mode_shift = 2,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_2,
+			.adder_on_reg = AS3676_REG_Adder_Enable_1,
+			.adder_on_shift = 4,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control2,
+			.dls_mode_shift = 3,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 6,
+			.aud_file = &as3676_curr4x_audio_on,
+		},
+		{
+			.name = "as3676::curr43",
+			.reg = AS3676_REG_Curr43_current,
+			.mode_reg = AS3676_REG_curr4_control,
+			.mode_shift = 4,
+			.has_extended_mode = 0,
+			.adder_reg = AS3676_REG_Adder_Current_3,
+			.adder_on_reg = AS3676_REG_Adder_Enable_1,
+			.adder_on_shift = 5,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control2,
+			.dls_mode_shift = 4,
+			.aud_reg = AS3676_REG_Audio_Output,
+			.aud_shift = 6,
+			.aud_file = &as3676_curr4x_audio_on,
+		},
+		{
+			.name = "as3676::curr30",
+			.reg = AS3676_REG_Curr30_current,
+			.mode_reg = AS3676_REG_curr3_control,
+			.mode_shift = 0,
+			.has_extended_mode = 1,
+			.adder_reg = AS3676_REG_Adder_Current_1,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 3,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 0,
+			.aud_reg = AS3676_REG_CURR3x_audio_source,
+			.aud_shift = 0,
+			.aud_file = &as3676_curr30_audio_channel,
+		},
+		{
+			.name = "as3676::curr31",
+			.reg = AS3676_REG_Curr31_current,
+			.mode_reg = AS3676_REG_curr3_control,
+			.mode_shift = 2,
+			.has_extended_mode = 1,
+			.adder_reg = AS3676_REG_Adder_Current_2,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 4,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 1,
+			.aud_reg = AS3676_REG_CURR3x_audio_source,
+			.aud_shift = 2,
+			.aud_file = &as3676_curr31_audio_channel,
+		},
+		{
+			.name = "as3676::curr32",
+			.reg = AS3676_REG_Curr32_current,
+			.mode_reg = AS3676_REG_curr3_control,
+			.mode_shift = 4,
+			.has_extended_mode = 1,
+			.adder_reg = AS3676_REG_Adder_Current_3,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 5,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 2,
+			.aud_reg = AS3676_REG_CURR3x_audio_source,
+			.aud_shift = 4,
+			.aud_file = &as3676_curr32_audio_channel,
+		},
+		{
+			.name = "as3676::curr33",
+			.reg = AS3676_REG_Curr33_current,
+			.mode_reg = AS3676_REG_curr3_control,
+			.mode_shift = 6,
+			.has_extended_mode = 1,
+			.adder_reg = AS3676_REG_Adder_Current_4,
+			.adder_on_reg = AS3676_REG_Adder_Enable_2,
+			.adder_on_shift = 6,
+			.dls_mode_reg = AS3676_REG_DLS_mode_control1,
+			.dls_mode_shift = 3,
+			.aud_reg = AS3676_REG_CURR3x_audio_source,
+			.aud_shift = 6,
+			.aud_file = &as3676_curr33_audio_channel,
+		},
+	},
+	.regs = {
+		AS3676_REG(Control                 , 0),
+		AS3676_REG(curr12_control          , 0),
+		AS3676_REG(curr_rgb_control        , 0),
+		AS3676_REG(curr3_control           , 0),
+		AS3676_REG(curr4_control           , 0),
+		AS3676_REG(GPIO_output_1           , 0),
+		AS3676_REG(GPIO_signal_1           , 0),
+		AS3676_REG(LDO_Voltage             , 0),
+		AS3676_REG(Curr1_current           , 0),
+		AS3676_REG(Curr2_current           , 0),
+		AS3676_REG(Rgb1_current            , 0),
+		AS3676_REG(Rgb2_current            , 0),
+		AS3676_REG(Rgb3_current            , 0),
+		AS3676_REG(Curr3x_strobe           , 0),
+		AS3676_REG(Curr3x_preview          , 0),
+		AS3676_REG(Curr3x_other            , 0),
+		AS3676_REG(Curr3x_strobe_control   , 0),
+		AS3676_REG(Curr3x_control          , 0),
+		AS3676_REG(Curr41_current          , 0),
+		AS3676_REG(Curr42_current          , 0),
+		AS3676_REG(Curr43_current          , 0),
+		AS3676_REG(Pwm_control             , 0),
+		AS3676_REG(Pwm_code                , 0),
+		AS3676_REG(Pattern_control         , 0),
+		AS3676_REG(Pattern_data0           , 0),
+		AS3676_REG(Pattern_data1           , 0),
+		AS3676_REG(Pattern_data2           , 0),
+		AS3676_REG(Pattern_data3           , 0),
+		AS3676_REG(GPIO_control            , 0x44),
+		AS3676_REG(GPIO_driving_cap        , 0),
+		AS3676_REG(DCDC_control1           , 0),
+		AS3676_REG(DCDC_control2           , 0x04),
+		AS3676_REG(CP_control              , 0),
+		AS3676_REG(CP_mode_Switch1         , 0),
+		AS3676_REG(CP_mode_Switch2         , 0),
+		AS3676_REG(ADC_control             , 0x03),
+		AS3676_REG(ADC_MSB_result          , 0),
+		AS3676_REG(ADC_LSB_result          , 0),
+		AS3676_REG(Overtemp_control        , 0x01),
+		AS3676_REG(Curr_low_voltage_status1, 0),
+		AS3676_REG(Curr_low_voltage_status2, 0),
+		AS3676_REG(Gpio_current            , 0),
+		AS3676_REG(Curr6_current           , 0),
+		AS3676_REG(Adder_Current_1         , 0),
+		AS3676_REG(Adder_Current_2         , 0),
+		AS3676_REG(Adder_Current_3         , 0),
+		AS3676_REG(Adder_Enable_1          , 0),
+		AS3676_REG(Adder_Enable_2          , 0),
+		AS3676_REG(Subtract_Enable         , 0),
+		AS3676_REG(ASIC_ID1                , 0),
+		AS3676_REG(ASIC_ID2                , 0),
+		AS3676_REG(Curr30_current          , 0),
+		AS3676_REG(Curr31_current          , 0),
+		AS3676_REG(Curr32_current          , 0),
+		AS3676_REG(Curr33_current          , 0),
+		AS3676_REG(Audio_Control           , 0),
+		AS3676_REG(Audio_Input             , 0),
+		AS3676_REG(Audio_Output            , 0),
+		AS3676_REG(GPIO_output_2           , 0),
+		AS3676_REG(GPIO_signal_2           , 0),
+		AS3676_REG(Adder_Current_4         , 0),
+		AS3676_REG(CURR3x_audio_source     , 0),
+		AS3676_REG(Pattern_End             , 0),
+		AS3676_REG(Audio_Control_2         , 0),
+		AS3676_REG(DLS_mode_control1       , 0),
+		AS3676_REG(DLS_mode_control2       , 0),
+		AS3676_REG(ALS_control             , 0),
+		AS3676_REG(ALS_filter              , 0),
+		AS3676_REG(ALS_offset              , 0),
+		AS3676_REG(ALS_result              , 0),
+		AS3676_REG(ALS_curr12_group        , 0),
+		AS3676_REG(ALS_rgb_group           , 0),
+		AS3676_REG(ALS_curr3x_group        , 0),
+		AS3676_REG(ALS_curr4x_group        , 0),
+		AS3676_REG(ALS_group_1_Y0          , 0),
+		AS3676_REG(ALS_group_1_Y3          , 0),
+		AS3676_REG(ALS_group_1_X1          , 0),
+		AS3676_REG(ALS_group_1_K1          , 0),
+		AS3676_REG(ALS_group_1_X2          , 0),
+		AS3676_REG(ALS_group_1_K2          , 0),
+		AS3676_REG(ALS_group_2_Y0          , 0),
+		AS3676_REG(ALS_group_2_Y3          , 0),
+		AS3676_REG(ALS_group_2_X1          , 0),
+		AS3676_REG(ALS_group_2_K1          , 0),
+		AS3676_REG(ALS_group_2_X2          , 0),
+		AS3676_REG(ALS_group_2_K2          , 0),
+		AS3676_REG(ALS_group_3_Y0          , 0),
+		AS3676_REG(ALS_group_3_Y3          , 0),
+		AS3676_REG(ALS_group_3_X1          , 0),
+		AS3676_REG(ALS_group_3_K1          , 0),
+		AS3676_REG(ALS_group_3_X2          , 0),
+		AS3676_REG(ALS_group_3_K2          , 0),
+	},
+};
+
+static int as3676_probe(struct i2c_client *client,
+		const struct i2c_device_id *id);
+static int as3676_remove(struct i2c_client *client);
+
+static const struct i2c_device_id as3676_id[] = {
+	{ "as3676", 0 },
+	{ }
+};
+
+MODULE_DEVICE_TABLE(i2c, as3676_id);
+
+#ifdef CONFIG_PM
+static int as3676_suspend(struct device *dev)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct as3676_record *rd = i2c_get_clientdata(client);
-
+	struct as3676_data *data = dev_get_drvdata(dev);
 	dev_info(dev, "Suspending AS3676\n");
 
-	as3676_lock(rd);
-	rd->cmode = AS3676_CMODE_IMMEDIATE;
-	reg_set(rd, AS3676_REG_CTRL, 0x00);
-
-	if (rd->als_connected) {
-		as3676_als_set_enable_internal(rd, 0);
-		if (!rd->audio_enabled)
-			as3676_als_set_adc_ctrl(rd);
-		rd->als_suspend = AS3676_SUSPENDED;
-	}
-
-	as3676_unlock(rd);
+	AS3676_LOCK();
+	data->als_control_backup = AS3676_READ_REG(AS3676_REG_ALS_control);
+	data->als_result_backup = i2c_smbus_read_byte_data(data->client,
+			AS3676_REG_ALS_result);
+	as3676_switch_als(data, 0);
+	if (data->dls_users)
+		AS3676_MODIFY_REG(AS3676_REG_GPIO_control, 0x0f, 0x04);
+	if (data->ldo_count)
+		AS3676_MODIFY_REG(AS3676_REG_Control, 1, 0);
+	AS3676_UNLOCK();
 
 	return 0;
 }
 
-static int as3676_pm_resume(struct device *dev)
+static int as3676_resume(struct device *dev)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct as3676_record *rd = i2c_get_clientdata(client);
+	struct as3676_data *data = dev_get_drvdata(dev);
 
 	dev_info(dev, "Resuming AS3676\n");
 
-	as3676_lock(rd);
-	as3676_restore(rd);
-	reg_set(rd, AS3676_REG_CTRL, 0x0d);
-
-	if (rd->als_connected) {
-		if (rd->als_wait) {
-			schedule_delayed_work(&rd->als_resume_work,
-					msecs_to_jiffies(rd->als_wait));
-		} else {
-			as3676_als_set_enable_internal(rd, rd->als_enabled);
-			if (!rd->audio_enabled)
-				reg_set(rd, AS3676_ADC_CTRL, rd->als.source);
-		}
-	}
-	rd->cmode = AS3676_CMODE_SCHEDULED;
-
-	as3676_unlock(rd);
+	AS3676_LOCK();
+	AS3676_WRITE_REG(AS3676_REG_ALS_result, data->als_result_backup);
+	if (data->ldo_count)
+		AS3676_MODIFY_REG(AS3676_REG_Control, 1, 1);
+	if (data->dls_users)
+		AS3676_MODIFY_REG(AS3676_REG_GPIO_control, 0x0f, 0x00);
+	if (data->als_control_backup & 1)
+		as3676_switch_als(data, 1);
+	AS3676_UNLOCK();
 
 	return 0;
 }
-#else
-#define as3676_pm_suspend	NULL
-#define as3676_pm_resume	NULL
-#endif
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-static void as3676_early_suspend(struct early_suspend *handler)
+static int as3676_dev_suspend(struct device *dev)
 {
-	struct as3676_record *rd =
-		container_of(handler, struct as3676_record, early_suspend);
-
-	dev_info(&rd->client->dev, "%s\n", __func__);
-
-	as3676_lock(rd);
-	rd->cmode = AS3676_CMODE_IMMEDIATE;
-	reg_set(rd, AS3676_REG_CTRL, 0x00);
-
-	if (rd->als_connected) {
-		as3676_als_set_enable_internal(rd, 0);
-		if (!rd->audio_enabled)
-			as3676_als_set_adc_ctrl(rd);
-		rd->als_suspend = AS3676_SUSPENDED;
-	}
-
-	as3676_unlock(rd);
+	return as3676_suspend(dev);
 }
 
-static void as3676_late_resume(struct early_suspend *handler)
+static int as3676_dev_resume(struct device *dev)
 {
-	struct as3676_record *rd =
-		container_of(handler, struct as3676_record, early_suspend);
-
-	dev_info(&rd->client->dev, "%s\n", __func__);
-
-	as3676_lock(rd);
-	as3676_restore(rd);
-	reg_set(rd, AS3676_REG_CTRL, 0x0d);
-
-	if (rd->als_connected) {
-		if (rd->als_wait) {
-			schedule_delayed_work(&rd->als_resume_work,
-					msecs_to_jiffies(rd->als_wait));
-		} else {
-			as3676_als_set_enable_internal(rd, rd->als_enabled);
-			if (!rd->audio_enabled)
-				reg_set(rd, AS3676_ADC_CTRL, rd->als.source);
-		}
-	}
-
-	rd->cmode = AS3676_CMODE_SCHEDULED;
-
-	as3676_unlock(rd);
+	return as3676_resume(dev);
 }
+
+static const struct dev_pm_ops as3676_pm = {
+	.suspend  = as3676_dev_suspend,
+	.resume   = as3676_dev_resume,
+};
 #endif
+
 
 static void as3676_shutdown(struct i2c_client *client)
 {
-	struct as3676_record *rd = i2c_get_clientdata(client);
+	struct as3676_data *data = i2c_get_clientdata(client);
 	int i;
+
+	AS3676_LOCK();
+	data->in_shutdown = 1;
+	AS3676_UNLOCK();
 
 	dev_info(&client->dev, "Shutting down AS3676\n");
 
-	as3676_lock(rd);
-	rd->cmode = AS3676_CMODE_IMMEDIATE;
+	for (i = 0; i < data->num_leds; i++)
+		as3676_set_brightness(data, data->leds+i, 0);
 
-	for (i = 0; i < rd->n_interfaces; ++i)
-		as3676_set_interface_brightness(&rd->interfaces[i], 0);
-
-	reg_set(rd, AS3676_REG_CTRL, 0x00);
-	reg_set(rd, AS3676_MODE_SWITCH, 0x00);
-	reg_set(rd, AS3676_MODE_SWITCH_2, 0x00);
-	reg_set(rd, AS3676_OVERTEMP_CTRL, 0x10);
-	if (rd->als_connected)
-		reg_set(rd, AS3676_AMB_CTRL, 0x0);
-
-	as3676_unlock(rd);
+	AS3676_LOCK();
+	AS3676_WRITE_REG(AS3676_REG_Control, 0x00);
+	AS3676_WRITE_REG(AS3676_REG_ALS_control, 0x00);
+	AS3676_UNLOCK();
 }
-
-static int __devexit as3676_remove(struct i2c_client *client)
-{
-	struct as3676_record *rd = i2c_get_clientdata(client);
-	int i;
-
-	dev_info(&client->dev, "Removing AS3676 driver\n");
-
-	for (i = 0; i < rd->n_interfaces; ++i) {
-		struct as3676_interface *intf = &rd->interfaces[i];
-		device_remove_file(intf->cdev.dev, &dev_attr_max_current);
-		device_remove_file(intf->cdev.dev, &dev_attr_mode);
-
-		kobject_put(&intf->kobj);
-	}
-	device_remove_file(&client->dev, &dev_attr_adc_als_value);
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	unregister_early_suspend(&rd->early_suspend);
-#endif
-
-	cancel_delayed_work_sync(&rd->als_resume_work);
-	cancel_delayed_work_sync(&rd->als_enabled_work);
-	rd->cmode = AS3676_CMODE_IMMEDIATE;
-	reg_set(rd, AS3676_REG_CTRL, 0x00);
-
-	device_init_wakeup(&client->dev, 0);
-
-	kfree(rd);
-
-	return 0;
-}
-
-static int __devinit as3676_probe(struct i2c_client *client,
-		const struct i2c_device_id *id);
-
-static const struct i2c_device_id as3676_idtable[] = {
-	{AS3676_NAME, 0},
-	{}
-};
-
-MODULE_DEVICE_TABLE(i2c, as3676_idtable);
-
-static const struct dev_pm_ops as3676_pm = {
-	.suspend = as3676_pm_suspend,
-	.resume = as3676_pm_resume,
-};
 
 static struct i2c_driver as3676_driver = {
 	.driver = {
-		.owner = THIS_MODULE,
-		.name = AS3676_NAME,
-		.pm = &as3676_pm,
+		.name   = "as3676",
+#ifdef CONFIG_PM
+		.pm     = &as3676_pm,
+#endif
 	},
-	.probe   = as3676_probe,
-	.remove  = __devexit_p(as3676_remove),
+	.probe  = as3676_probe,
+	.remove = as3676_remove,
 	.shutdown = as3676_shutdown,
-	.id_table = as3676_idtable,
+	.id_table = as3676_id,
 };
 
-static int __devinit as3676_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+static int device_add_attributes(struct device *dev,
+				 struct device_attribute *attrs)
 {
-	struct as3676_record *rd = 0;
-	struct as3676_platform_data *pdata;
-	int err;
-	int i, j;
-	int ldo_val;
+	int error = 0;
+	int i;
 
-	pdata = client->dev.platform_data;
+	if (attrs) {
+		for (i = 0; attr_name(attrs[i]); i++) {
+			error = device_create_file(dev, &attrs[i]);
+			if (error)
+				break;
+		}
+		if (error)
+			while (--i >= 0)
+				device_remove_file(dev, &attrs[i]);
+	}
+	return error;
+}
 
-	if (!pdata || pdata->num_leds == 0) {
-		dev_err(&client->dev, "no/bad pdata provided\n");
-		return -EFAULT;
+static void device_remove_attributes(struct device *dev,
+				     struct device_attribute *attrs)
+{
+	int i;
+
+	if (attrs)
+		for (i = 0; attr_name(attrs[i]); i++)
+			device_remove_file(dev, &attrs[i]);
+}
+
+static u8 as3676_read_reg(struct as3676_data *data, u8 reg)
+{
+	return data->regs[reg].value;
+}
+
+static s32 as3676_write_reg(struct as3676_data *data, u8 reg, u8 value)
+{
+	s32 ret = i2c_smbus_write_byte_data(data->client, reg, value);
+	if (ret == 0)
+		data->regs[reg].value = value;
+	return ret;
+}
+
+static s32 as3676_modify_reg(struct as3676_data *data, u8 reg, u8 reset, u8 set)
+{
+	s32 ret;
+	u8 val = (data->regs[reg].value & ~reset) | set;
+
+	ret = i2c_smbus_write_byte_data(data->client, reg, val);
+
+	if (ret == 0)
+		data->regs[reg].value = val;
+	return ret;
+}
+
+static void as3676_check_DCDC_prefix(struct as3676_data *data);
+static void as3676_check_DCDC_infix(struct as3676_data *data);
+static void as3676_check_DCDC_postfix(struct as3676_data *data);
+
+static void as3676_switch_led(struct as3676_data *data,
+		struct as3676_led *led,
+		int mode)
+{
+	int pattern_running = data->pattern_running;
+
+	led->mode = mode;
+	as3676_check_DCDC_prefix(data);
+	if (led->has_extended_mode) {
+		u8 ext_pattern = (AS3676_READ_REG(AS3676_REG_Pattern_control)
+				>> (led->dls_mode_shift+4)) & 1;
+		if (ext_pattern && (mode != 1 || led->use_pattern == 0))
+			pattern_running--;
+
+		if (!ext_pattern && mode == 1 && led->use_pattern)
+			pattern_running++;
+	} else {
+		u8 old_mode = (AS3676_READ_REG(led->mode_reg)
+				>> led->mode_shift) & 0x3;
+		if (old_mode == 0x3 && (mode != 1 || led->use_pattern == 0))
+			pattern_running--;
+
+		if (old_mode != 0x3 && mode == 1 && led->use_pattern)
+			pattern_running++;
 	}
 
-	if (pdata->num_leds > AS3676_INTERFACE_MAX) {
-		dev_err(&client->dev, "pdata specifies too many leds\n");
-		return -EFAULT;
+	/* If the last led is going to leave the pattern generator stop it
+	   avoiding artefacts */
+	if (pattern_running == 0 && data->pattern_running == 1) {
+		/* Stop pattern generator avoiding flashes at next start */
+		AS3676_WRITE_PATTERN(0);
+		/* Kickstart pattern generator */
+		AS3676_WRITE_REG(AS3676_REG_Pattern_control,
+				AS3676_READ_REG(AS3676_REG_Pattern_control));
 	}
 
-	rd = kzalloc(sizeof(struct as3676_record), GFP_KERNEL);
-	if (!rd)
-		return -ENOMEM;
+	switch (mode) {
+	case 0:
+		AS3676_MODIFY_REG(led->mode_reg,
+				0x03 << led->mode_shift, 0);
+		if (led->has_extended_mode) {
+			AS3676_MODIFY_REG(AS3676_REG_Pattern_control,
+					1 << (led->dls_mode_shift+4), 0);
+		}
+		break;
+	case 1: {
+			u8 on_val = (led->use_pattern ? 0x3 : 0x1);
+			if (led->has_extended_mode) {
+				on_val = 0x3;
+				AS3676_MODIFY_REG(AS3676_REG_Pattern_control,
+						1 << (led->dls_mode_shift+4),
+						led->use_pattern
+						<< (led->dls_mode_shift+4));
+			}
+			AS3676_MODIFY_REG(led->mode_reg,
+					0x03 << led->mode_shift,
+					on_val << led->mode_shift);
+			break;
+		}
+	case 2:
+		AS3676_MODIFY_REG(led->mode_reg, 0x3<<led->mode_shift,
+				0x2<<led->mode_shift);
+		break;
 
-	rd->als_connected = pdata->als_connected;
-	rd->als_wait = pdata->als_wait;
-	rd->dls_connected = pdata->dls_connected;
+	}
+	/* If we have now the first led running on a pattern,
+	   make sure values are correct */
+	if (pattern_running == 1 && data->pattern_running == 0) {
+		AS3676_WRITE_PATTERN(data->pattern_data);
+		/* Kickstart pattern generator to correctly use pattern_delay */
+		AS3676_WRITE_REG(AS3676_REG_Pattern_control,
+				AS3676_READ_REG(AS3676_REG_Pattern_control));
+	}
+	data->pattern_running = pattern_running;
+	as3676_check_DCDC_infix(data);
+}
 
-	client->driver = &as3676_driver;
+static void as3676_check_DCDC_prefix(struct as3676_data *data)
+{ /* Here we check if one or more leds are connected to DCDC.
+     Doing the same for charge pump is not necessary due to cp_auto_on */
+	int i, on_dcdc = 0;
+	struct as3676_led *led;
+	u8 value;
 
-	mutex_init(&rd->lock);
-	INIT_WORK(&rd->work, as3676_worker);
-	INIT_DELAYED_WORK(&rd->als_resume_work, as3676_als_resume_worker);
-	INIT_DELAYED_WORK(&rd->als_enabled_work, as3676_als_enabled_worker);
+	for (i = 0; i < 3; i++) {
+		led = data->leds + i;
+		if (led->pled && led->pled->on_charge_pump)
+			continue;
+		if (led->mode) {
+			on_dcdc++;
+			continue;
+		}
+	}
+	value = AS3676_READ_REG(AS3676_REG_Control);
 
-	/* We will need the i2c device later */
-	rd->client = client;
+	if (data->caps_mounted_on_dcdc_feedback && (!(value&0x8) && on_dcdc)) {
+		/* default setup to avoid current spikes */
+		/* see application note AN3676_DCDC_1v0.pdf */
+		/* DCDC Voltage Feedback mode */
+		AS3676_MODIFY_REG(AS3676_REG_DCDC_control1, 0x6, 0x0);
+		/* Turn on DCDC */
+		AS3676_MODIFY_REG(AS3676_REG_Control, 0x8, 8);
+		usleep_range(12000, 20000);
+	}
 
-	rd->cmode = AS3676_CMODE_IMMEDIATE;
+	if ((value&0x8) && !on_dcdc) {
+		/* Turn off DCDC, this is the same for alternative and default
+		   startup sequence */
+		AS3676_MODIFY_REG(AS3676_REG_Control, 0x8, 0);
+	}
+}
 
-	i2c_set_clientdata(client, rd);
-	dev_set_drvdata(&client->dev, rd);
+static void as3676_check_DCDC_infix(struct as3676_data *data)
+{ /* Here we check if one or more leds are connected to DCDC.
+     Doing the same for charge pump is not necessary due to cp_auto_on */
+	int i, on_dcdc = 0;
+	struct as3676_led *led;
+	u8 value;
 
-	rd->n_interfaces = pdata->num_leds;
+	if (data->caps_mounted_on_dcdc_feedback)
+		return;
+	/* Only alternative startup according to app note */
 
-	for (i = 0; i < rd->n_interfaces; ++i) {
-		struct as3676_platform_led *led = &pdata->leds[i];
-		struct as3676_interface *intf = &rd->interfaces[i];
-		intf->cdev.name           = led->name;
-		intf->cdev.brightness     = led->default_brightness;
-		intf->cdev.brightness_set = as3676_brightness;
-#ifdef CONFIG_LEDS_AS3676_HW_BLINK
-		if (led->flags & AS3676_FLAG_BLINK)
-			intf->cdev.blink_set = as3676_blink;
+	for (i = 0; i < 3; i++) {
+		led = data->leds + i;
+		if (led->pled && led->pled->on_charge_pump)
+			continue;
+		if (led->mode) {
+			on_dcdc++;
+			continue;
+		}
+	}
+	value = AS3676_READ_REG(AS3676_REG_Control);
+	if (!(value&0x8) && on_dcdc) {
+		AS3676_MODIFY_REG(AS3676_REG_Control, 0x8, on_dcdc ? 8 : 0);
+		/* alternative setup to avoid current spikes */
+		/* see application note AN3676_DCDC_1v0.pdf */
+	}
+}
+
+static void as3676_check_DCDC_postfix(struct as3676_data *data)
+{ /* Here we check if one or more leds are connected to DCDC.
+     Doing the same for charge pump is not necessary due to cp_auto_on */
+	u8 value, control1;
+
+	if (!data->caps_mounted_on_dcdc_feedback)
+		return;
+
+	value = AS3676_READ_REG(AS3676_REG_Control);
+	control1 = AS3676_READ_REG(AS3676_REG_DCDC_control1);
+
+	/* If DCDC is currently on and we are still in voltage feedback mode
+	   then switch to auto feedback mode */
+	if ((value&0x8) && ((control1&0x6) == 0x00)) {
+		/* Set feedback to curr1, thus enabling auto feedback */
+		AS3676_MODIFY_REG(AS3676_REG_DCDC_control1, 0x6, 0x2);
+	}
+}
+
+static void as3676_set_led_brightness(struct led_classdev *led_cdev,
+		enum led_brightness value)
+{
+	struct device *dev = led_cdev->dev->parent;
+	struct as3676_data *data = dev_get_drvdata(dev);
+	struct as3676_led *led = ldev_to_led(led_cdev);
+	as3676_set_brightness(data, led, value);
+	if (led->dim_brightness != -1 && data->dimming_in_progress) {
+		dev_warn(dev, "LED %s is currently being dimmed, changing"
+				"brightness not possible!", led->name);
+	}
+}
+static void as3676_set_brightness(struct as3676_data *data,
+		struct as3676_led *led, enum led_brightness value)
+{
+	u8 prev_value = AS3676_READ_REG(led->reg);
+
+	AS3676_LOCK();
+	if (data->in_shutdown && value != LED_OFF)
+		goto no_action;
+	value = (value * led->pled->max_current_uA + 38250/2) / 38250;
+	if ((prev_value == LED_OFF) != (value == LED_OFF)) {
+		/* we must switch on/off */
+		as3676_switch_led(data, led, value != LED_OFF);
+		AS3676_WRITE_REG(led->reg, value);
+		as3676_check_DCDC_postfix(data);
+	} else {
+		AS3676_WRITE_REG(led->reg, value);
+	}
+no_action:
+	AS3676_UNLOCK();
+}
+
+#define MSNPRINTF(...) do { act = snprintf(buf, rem, __VA_ARGS__);	\
+				if (act > rem)				\
+					goto exit;			\
+				buf += act;				\
+				rem -= act;				\
+			} while (0)
+
+static ssize_t as3676_debug_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	size_t ps = PAGE_SIZE, cw = 0;
+	u8 cr;
+	int i = 0;
+	struct as3676_reg *reg;
+
+	while (cw < ps && i < ARRAY_SIZE(data->regs)) {
+		reg = data->regs + i;
+		if (reg->name) {
+			cr = i2c_smbus_read_byte_data(data->client, i);
+			if (cr == reg->value)
+				cw = scnprintf(buf, ps, "%24s %02x: %#04x\n",
+					reg->name, i, reg->value);
+			else
+				cw = scnprintf(buf, ps,
+						"%24s %02x: %#04x -> %#04x\n",
+						reg->name, i, reg->value, cr);
+			ps -= cw;
+			buf += cw;
+		}
+		i++;
+	}
+
+	cw = scnprintf(buf, ps, "pattern_running=%d\n",
+				data->pattern_running);
+	ps -= cw;
+	buf += cw;
+
+	return PAGE_SIZE - ps;
+}
+
+static ssize_t as3676_debug_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int i;
+	u8 reg, val;
+	i = sscanf(buf, "0x%3hhx=0x%3hhx", &reg, &val);
+	if (i != 2)
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_WRITE_REG(reg, val);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_use_pattern_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+
+	snprintf(buf, PAGE_SIZE, "%d\n", led->use_pattern);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_use_pattern_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	int i, use_pattern;
+
+	i = sscanf(buf, "%1d", &use_pattern);
+	if (i != 1)
+		return -EINVAL;
+
+	AS3676_LOCK();
+
+	led->use_pattern = use_pattern;
+
+	if (AS3676_READ_REG(led->reg) == LED_OFF)
+		goto exit;
+
+	as3676_switch_led(data, led, 1);
+exit:
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_dim_brightness_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+
+	snprintf(buf, PAGE_SIZE, "%d\n", led->dim_brightness);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_dim_brightness_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	int i;
+	int dim_brightness;
+	i = sscanf(buf, "%10d", &dim_brightness);
+	if (i != 1)
+		return -EINVAL;
+	if (dim_brightness > 255 || dim_brightness < -1)
+		return -EINVAL;
+	if (data->dimming_in_progress) {
+		dev_warn(dev, "Cannot change dimming parameters while dimming"
+				" is in progress\n");
+		return -EAGAIN;
+	}
+	led->dim_value =
+		(dim_brightness * led->pled->max_current_uA + 38250/2) / 38250;
+	led->dim_brightness = dim_brightness;
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_data_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pdata, p, i;
+	ssize_t act, rem = PAGE_SIZE;
+	AS3676_LOCK();
+	pdata  = data->pattern_data;
+	AS3676_UNLOCK();
+	p = pdata;
+	if (AS3676_READ_REG(AS3676_REG_Pattern_control) & 1) {
+		int r = 0, g = 0, b = 0, i;
+		/* 10 rgb bits in 32 bits */
+		for (i = 0; i < 10; i++) {
+			r |= (pdata & 1) << i;
+			pdata >>= 1;
+			g |= (pdata & 1) << i;
+			pdata >>= 1;
+			b |= (pdata & 1) << i;
+			pdata >>= 1;
+		}
+
+		MSNPRINTF("use_color == 1: 30 bit pattern "
+				"data %#010x, curr1/rgb1=%#05x, "
+				"curr2/rgb2=%#05x, curr6/rgb3=%#05x\n"
+				       , p, r, g, b);
+		for (i = 0; i < 10; i++) {
+			if (r & (1 << i))
+				MSNPRINTF("-");
+			else
+				MSNPRINTF("_");
+		}
+		MSNPRINTF("\n");
+		for (i = 0; i < 10; i++) {
+			if (g & (1 << i))
+				MSNPRINTF("-");
+			else
+				MSNPRINTF("_");
+		}
+		MSNPRINTF("\n");
+		for (i = 0; i < 10; i++) {
+			if (b & (1 << i))
+				MSNPRINTF("-");
+			else
+				MSNPRINTF("_");
+		}
+	} else {
+		MSNPRINTF("use_color == 0: 32 bit pattern "
+				"data %#010x\n", p);
+		for (i = 0; i < 32; i++) {
+			if (p & (1 << i))
+				MSNPRINTF("-");
+			else
+				MSNPRINTF("_");
+		}
+	}
+	MSNPRINTF("\n");
+exit:
+	return PAGE_SIZE - rem;
+}
+
+static ssize_t as3676_pattern_data_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int r, g, b, pdata, i;
+	i = sscanf(buf, "%10x,%10x,%10x", &pdata, &g, &b);
+	if (i != 1 && i != 3)
+		return -EINVAL;
+	if (i == 3) {
+		r = pdata;
+		pdata = 0;
+		/* Read in 10 rgb bits */
+		for (i = 9; i >= 0 ; i--) {
+			pdata <<= 1;
+			pdata |= (b >> i) & 1;
+			pdata <<= 1;
+			pdata |= (g >> i) & 1;
+			pdata <<= 1;
+			pdata |= (r >> i) & 1;
+		}
+
+	}
+	AS3676_LOCK();
+	data->pattern_data = pdata;
+	if (data->pattern_running)
+		AS3676_WRITE_PATTERN(pdata);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_duration_secs_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pattern_duration = 1, creg;
+	creg = AS3676_READ_REG(AS3676_REG_Gpio_current);
+	if (creg & 0x40)
+		pattern_duration *= 8;
+
+	snprintf(buf, PAGE_SIZE, "%d, possible 1,8\n", pattern_duration);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_duration_secs_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pattern_duration, i;
+	i = sscanf(buf, "%10u", &pattern_duration);
+	if (i != 1)
+		return -EINVAL;
+	if ((pattern_duration != 8) && (pattern_duration != 1))
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_Gpio_current, 0x40,
+			  (pattern_duration == 8) ? 0x40 : 0);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_use_color_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pattern_use_color = 42;
+	pattern_use_color =  AS3676_READ_REG(AS3676_REG_Pattern_control) & 1;
+	snprintf(buf, PAGE_SIZE, "%d\n", pattern_use_color);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_use_color_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pattern_use_color, i;
+	i = sscanf(buf, "%10u", &pattern_use_color);
+	pattern_use_color = !!pattern_use_color;
+	if (i != 1)
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_Pattern_control, 1, pattern_use_color);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_delay_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pattern_delay, creg, greg, pdsecs;
+	creg = AS3676_READ_REG(AS3676_REG_Pattern_control);
+	greg = AS3676_READ_REG(AS3676_REG_Gpio_current);
+	pdsecs = pattern_delay = ((creg & 0x6) >> 1) | ((greg & 0x10) >> 2);
+	if (greg & 0x40)
+		pdsecs *= 8;
+	snprintf(buf, PAGE_SIZE, "%d pattern_durations = %d secs\n",
+			pattern_delay, pdsecs);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_delay_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int pattern_delay, i;
+	i = sscanf(buf, "%3u", &pattern_delay);
+	if (i != 1)
+		return -EINVAL;
+	if (pattern_delay > 7)
+		return -EINVAL;
+	pattern_delay = pattern_delay << 1;
+	pattern_delay = (pattern_delay & 0x6) | ((pattern_delay & 0x8) << 1);
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_Pattern_control,
+			0x06, pattern_delay & 0x6);
+	AS3676_MODIFY_REG(AS3676_REG_Gpio_current, 0x10, pattern_delay & 0x10);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_filter_speed_mHz_show(struct device *dev,
+				char *buf, int offset)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int filter_speed_mHz, filter_speed;
+	filter_speed = (AS3676_READ_REG(AS3676_REG_ALS_filter) >> offset) & 0x7;
+	filter_speed_mHz = 250 << filter_speed;
+	snprintf(buf, PAGE_SIZE, "%d\n", filter_speed_mHz);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_filter_speed_mHz_store(struct device *dev,
+				const char *buf, size_t size, int offset)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int filter_speed_mHz, filter_speed, i, highest_bit;
+	i = sscanf(buf, "%10d", &filter_speed_mHz);
+	if (i != 1)
+		return -EINVAL;
+
+	/* The following code rounds to the neares power of two */
+	/* division while preserving round bit */
+	filter_speed = (filter_speed_mHz << 1) / 250;
+	highest_bit = fls(filter_speed);
+	/* now check the second most significant bit */
+	if (highest_bit < 2)
+		filter_speed = filter_speed & 1;
+	else if (filter_speed & (1 << (highest_bit - 2)))
+		filter_speed = highest_bit - 1;
+	else
+		filter_speed = highest_bit - 2;
+
+	if (filter_speed > 7)
+		filter_speed = 7;
+
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_ALS_filter, 0x7 << offset,
+			filter_speed<<offset);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_filter_up_speed_mHz_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_als_filter_speed_mHz_show(dev, buf, 0);
+}
+
+static ssize_t as3676_als_filter_up_speed_mHz_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_als_filter_speed_mHz_store(dev, buf, size, 0);
+}
+
+static ssize_t as3676_als_filter_down_speed_mHz_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_als_filter_speed_mHz_show(dev, buf, 4);
+}
+
+static ssize_t as3676_als_filter_down_speed_mHz_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_als_filter_speed_mHz_store(dev, buf, size, 4);
+}
+
+static ssize_t as3676_als_offset_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int als_offset;
+	als_offset = AS3676_READ_REG(AS3676_REG_ALS_offset);
+
+	snprintf(buf, PAGE_SIZE, "%d\n", als_offset);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_offset_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	u8 als_offset;
+	int i;
+
+	i = sscanf(buf, "%3hhu", &als_offset);
+	if (i != 1)
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_WRITE_REG(AS3676_REG_ALS_offset, als_offset);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_gain_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int als_gain, creg;
+	char *s;
+	creg = AS3676_READ_REG(AS3676_REG_ALS_control);
+	als_gain = (creg & 0x06) >> 1;
+
+	switch (als_gain) {
+	case 0:
+		s = "1/4";
+		break;
+	case 1:
+		s = "1/2";
+		break;
+	case 2:
+		s = "1";
+		break;
+	case 3:
+		s = "2";
+		break;
+	default:
+		s = "will not happen";
+		break;
+	}
+	snprintf(buf, PAGE_SIZE, "%d (corresponds to %s)\n", als_gain, s);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_gain_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	u8 als_gain;
+	int i;
+
+	i = sscanf(buf, "%3hhu", &als_gain);
+	if (i != 1)
+		return -EINVAL;
+	if (als_gain > 3)
+		return -EINVAL;
+
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_ALS_control, 0x06, als_gain<<1);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_use_softdim_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int use_softdim = AS3676_READ_REG(AS3676_REG_Pattern_control) & 0x8;
+	use_softdim >>= 3;
+	snprintf(buf, PAGE_SIZE, "%d\n", use_softdim);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_pattern_use_softdim_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int use_softdim, i;
+	i = sscanf(buf, "%10d", &use_softdim);
+	if (i != 1)
+		return -EINVAL;
+	use_softdim = !!use_softdim;
+
+	AS3676_LOCK();
+	if (((AS3676_READ_REG(AS3676_REG_Pattern_control) & 0x8) >> 3)
+		== use_softdim)
+		goto exit;
+
+	if (use_softdim && data->dimming_in_progress) {
+		dev_warn(dev, "Cannot use softdim while dimming is in"
+				" progress\n");
+		AS3676_UNLOCK();
+		return -EINVAL;
+	}
+	AS3676_MODIFY_REG(AS3676_REG_Pattern_control, 0x08, use_softdim<<3);
+exit:
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_group_n_show(u8 gid, struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	u8 group_reg;
+	s32 y0, y3, x1, x2, x, y;
+	s32 k1, k2;
+	const uint inc = 8;
+	int i;
+	ssize_t act, rem = PAGE_SIZE;
+
+	AS3676_LOCK();
+	group_reg = AS3676_REG_ALS_group_1_Y0 + (gid - 1) * 6;
+	y0 = AS3676_READ_REG(group_reg);
+	y3 = AS3676_READ_REG(group_reg + 1);
+	x1 = AS3676_READ_REG(group_reg + 2);
+	k1 = (s8) AS3676_READ_REG(group_reg + 3);
+	x2 = AS3676_READ_REG(group_reg + 4);
+	k2 = (s8) AS3676_READ_REG(group_reg + 5);
+	AS3676_UNLOCK();
+	MSNPRINTF("%d,%d,%d,%d,%d,%d"
+			"(y0=%d, x1=%d, k1=%d, x2=%d, k2=%d, y3=%d)\n",
+			y0, x1, k1, x2, k2, y3,
+			y0, x1, k1, x2, k2, y3);
+
+	MSNPRINTF("       ");
+	for (i = 0; i < 255; i += inc)
+		MSNPRINTF("y");
+	MSNPRINTF("\n");
+	/* Print first segment, straight line */
+	for (x = 0; x < x1; x += inc) {
+		MSNPRINTF("x0=%3d,y=%3d:", x, y0);
+		for (i = 0; i < y0; i += inc)
+			MSNPRINTF(" ");
+		MSNPRINTF("|\n");
+	}
+	/* Second segment, slope k1 */
+	for (; x < x2; x += inc) {
+		y = ((k1 * (x - x1)) / 32) + y0;
+		MSNPRINTF("x1=%3d,y=%3d:", x, y);
+		for (i = 0; i < y; i += inc)
+			MSNPRINTF(" ");
+		if (k1 < 0)
+			MSNPRINTF("/\n");
+		else
+			MSNPRINTF("\\\n");
+	}
+	/* Third segment, slope k2 */
+	for (; x < 256; x += inc) {
+		y = (((k1 * (x2 - x1))) / 32)
+			+ ((k2 * (x - x2)) / 32)
+			+ y0;
+		if ((k2 >= 0 && y > y3) ||
+			(k2 < 0 && y < y3))
+			break;
+		MSNPRINTF("x2=%3d,y=%3d:", x, y);
+		for (i = 0; i < y; i += inc)
+			MSNPRINTF(" ");
+		if (k2 < 0)
+			MSNPRINTF("/\n");
+		else
+			MSNPRINTF("\\\n");
+	}
+	/* Fourth and last segment straight line */
+	for (; x < 256; x += inc) {
+		MSNPRINTF("x3=%3d,y=%3d:", x, y3);
+		for (i = 0; i < y3; i += inc)
+			MSNPRINTF(" ");
+		MSNPRINTF("|\n");
+	}
+
+exit:
+	return PAGE_SIZE - rem;
+}
+
+#if AS3676_ENABLE_GROUP_CHECK
+static int as3676_als_group_check(struct device *dev,
+		struct as3676_als_group *g)
+{
+	s32 y2, x3;
+	if (g->gn == 0 || g->gn > 3) {
+			dev_warn(dev, "invalid gn must be 1-3, is %d\n",
+					g->gn);
+			return -EINVAL;
+	}
+	if (g->y0 > g->y3) {
+		if (g->k1 > 0 || g->k2 > 0) {
+			dev_warn(dev, "k1=%d and k2=%d must be negative with"
+					"this y0,y3\n", g->k1, g->k2);
+			return -EINVAL;
+		}
+	} else {
+		if (g->k1 < 0 || g->k2 < 0) {
+			dev_warn(dev, "k1=%d and k2=%d must be positive with"
+					" this given y0,y3\n", g->k1, g->k2);
+			return -EINVAL;
+		}
+	}
+	if (g->x1 == 0 || g->k1 == 0) {
+		dev_warn(dev, "k1=%d and x1=%d must not be zero\n",
+				g->k1, g->x1);
+		return -EINVAL;
+	}
+	if (g->x1 > g->x2) {
+		dev_warn(dev, "x1=%d must be smaller than x2=%d\n",
+				g->x1, g->x2);
+		return -EINVAL;
+	}
+
+	/* Test y2 */
+	y2 = g->y0 + (((s32)g->k1) * (g->x2 - g->x1)) / 32;
+
+	if (y2 < 0 || y2 > 255 ||
+		((g->k2 >= 0) && (g->y3 < y2)) ||
+		((g->k2 < 0) && (g->y3 > y2))) {
+		dev_warn(dev, "Invalid y2 would be %d\n", y2);
+		return -EINVAL;
+	}
+
+	/* Test x3 */
+	if (g->k2 == 0) {
+		if (y2 != g->y3) {
+			dev_warn(dev, "Invalid y3, must equal y2 for k2==0!\n");
+			return -EINVAL;
+		}
+	} else {
+		x3 = g->x2 + ((g->y3 - y2)) * 32 / g->k2;
+		if (x3 < 0 || x3 > 255 || x3 < g->x2) {
+			dev_warn(dev, "Invalid x3 would be %d, y2=%d\n",
+					x3, y2);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
 #endif
-		intf->flags = led->flags;
-		intf->max_current = led->max_current;
-		intf->hw_max_current = led->hw_max_current;
-		intf->index = i;
 
-		for (j = 0; j < AS3676_SINK_MAX; ++j) {
-			if (led->sinks & BIT(j)) {
-				intf->regs |= ((u64)1 << as3676_sink_map[j]);
-				if (as3676_sink[as3676_sink_map[j]].flags &
-						AS3676_FLAG_DCDC_CTRL) {
-					reg_set(rd, AS3676_DCDC_CTRL_1, 0xc2);
-					reg_set(rd, AS3676_DCDC_CTRL_2, 0x8C);
-				}
+static ssize_t as3676_als_group_n_store(u8 gid, struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int i;
+	u8 group_reg = AS3676_REG_ALS_group_1_Y0 + (gid - 1) * 6;
+	struct as3676_als_group g;
+
+	g.gn = gid;
+	i = sscanf(buf, "%3hhu,%3hhu,%3hhd,%3hhu,%3hhd,%3hhu",
+			&g.y0, &g.x1, &g.k1, &g.x2, &g.k2, &g.y3);
+
+	if (i < 6)
+		return -EINVAL;
+
+#if AS3676_ENABLE_GROUP_CHECK
+	i = as3676_als_group_check(dev, &g);
+
+	if (i != 0)
+		return i;
+#endif
+
+	AS3676_LOCK();
+	AS3676_WRITE_REG(group_reg + 0, g.y0);
+	AS3676_WRITE_REG(group_reg + 1, g.y3);
+	AS3676_WRITE_REG(group_reg + 2, g.x1);
+	AS3676_WRITE_REG(group_reg + 3, g.k1);
+	AS3676_WRITE_REG(group_reg + 4, g.x2);
+	AS3676_WRITE_REG(group_reg + 5, g.k2);
+	AS3676_UNLOCK();
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_group1_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_als_group_n_show(1, dev, attr, buf);
+}
+
+static ssize_t as3676_als_group1_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_als_group_n_store(1, dev, attr, buf, size);
+}
+static ssize_t as3676_als_group2_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_als_group_n_show(2, dev, attr, buf);
+}
+
+static ssize_t as3676_als_group2_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_als_group_n_store(2, dev, attr, buf, size);
+}
+static ssize_t as3676_als_group3_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_als_group_n_show(3, dev, attr, buf);
+}
+
+static ssize_t as3676_als_group3_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_als_group_n_store(3, dev, attr, buf, size);
+}
+
+#define DELTA(A, B) (((A) < (B)) ? ((B)-(A)) : ((A)-(B)))
+static u16 dim_speed2time[8] = { 1000, 1900, 500, 950, 100, 190, 50, 95 };
+
+static ssize_t as3676_dim_time_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int dim_speed = (AS3676_READ_REG(AS3676_REG_Pwm_control) >> 3) & 0x7;
+	u16 dim_time = dim_speed2time[dim_speed];
+	snprintf(buf, PAGE_SIZE, "%d (50,95,190,500,950,1900)\n", dim_time);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_dim_time_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int dim_time, i, curr_best = 3, delta;
+	i = sscanf(buf, "%10d", &dim_time);
+	if (i != 1 || dim_time > 10000)
+		return -EINVAL;
+	delta = 65535;
+	for (i = 0; i < ARRAY_SIZE(dim_speed2time) ; i++) {
+		/* Omit settings where there exist better ones */
+		if (i == 0 || i == 4)
+			continue;
+		if (DELTA(dim_time, dim_speed2time[i]) < delta) {
+			delta = DELTA(dim_time, dim_speed2time[i]);
+			curr_best = i;
+		}
+	}
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x38, curr_best<<3);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_dim_start_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	if (data->dimming_in_progress)
+		snprintf(buf, PAGE_SIZE, "1 (in progress)\n");
+	else
+		snprintf(buf, PAGE_SIZE, "0 (ready)\n");
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static void as3676_clear_dimming(struct as3676_data *data)
+{
+	int i;
+	for (i = 0; i < data->num_leds; i++) {
+		struct as3676_led *led = data->leds + i;
+		led->dim_brightness = -1;
+		led->dim_value = -1;
+	}
+	data->dimming_in_progress = 0;
+}
+
+static int as3676_get_dimming_direction(struct as3676_data *data)
+{
+	int i, dir = 0, err = 0;
+	for (i = 0; i < data->num_leds; i++) {
+		struct as3676_led *led = data->leds + i;
+		if (led->dim_brightness == -1)
+			continue;
+		if (AS3676_READ_REG(led->reg) == led->dim_value)
+			continue;
+		switch (dir) {
+		case 0:
+			if (AS3676_READ_REG(led->reg)
+					> led->dim_value)
+				dir = -1;
+			else
+				dir = 1;
+			break;
+		case 1:
+			if (AS3676_READ_REG(led->reg)
+					> led->dim_value)
+				err = -EINVAL;
+			break;
+		case -1:
+			if (AS3676_READ_REG(led->reg)
+					< led->dim_value)
+				err = -EINVAL;
+			break;
+		}
+	}
+	if (err)
+		return err;
+	return dir;
+}
+
+static int as3676_check_cross_dimming(struct device *dev,
+struct as3676_data *data, int dir)
+{
+	int i, j, use_group;
+	for (i = 0; i < data->num_leds; i++) {
+		struct as3676_led *led = data->leds + i;
+		led->marker = 0;
+	}
+	for (i = 0; i < data->num_leds; i++) {
+		struct as3676_led *led = data->leds + i;
+		int adder1, adder2;
+		if (led->marker)
+			continue;
+		if (led->dim_brightness == -1)
+			continue;
+
+		use_group = AS3676_READ_REG(led->mode_reg + 0x93)
+			& (0x3<<led->mode_shift);
+		if (dir == 1)
+			adder1 = AS3676_READ_REG(led->reg);
+		else
+			adder1 = led->dim_value;
+		led->marker = 1;
+		for (j = i; j < data->num_leds; j++) {
+			struct as3676_led *led2 = data->leds + j;
+			if (led2->dim_brightness == -1)
+				continue;
+			if (led2->adder_reg != led->adder_reg)
+				continue;
+			if (led2->marker)
+				continue;
+			if (use_group) {
+				dev_warn(dev, "Led %s uses ALS, cannot be "
+					      "dimmed together with led %s\n",
+					      led->name, led2->name);
+				return -EINVAL;
+			}
+			if (AS3676_READ_REG(led->mode_reg + 0x93)
+					& (0x3<<led->mode_shift)) {
+				dev_warn(dev, "Led %s uses ALS, cannot be "
+						"dimmed together with led %s\n",
+						led2->name, led->name);
+				return -EINVAL;
+			}
+
+			led2->marker = 1;
+			if (dir == 1)
+				adder2 = AS3676_READ_REG(led2->reg);
+			else
+				adder2 = led2->dim_value;
+			if (adder1 != adder2) {
+				dev_warn(dev, "Led %s would need adder value %d"
+				       " and led %s would need adder value %d.",
+					led->name, adder1, led2->name, adder2);
+				return -EINVAL;
 			}
 		}
-		err = led_classdev_register(&client->dev, &intf->cdev);
-		if (err < 0) {
-			dev_info(&client->dev, "Failed to add %s\n",
-					intf->cdev.name);
+	}
+	return 0;
+}
+
+static u8 as3676_als_corrected_adder(u8 value, struct as3676_data *data,
+		struct as3676_led *led)
+{
+	int gid = AS3676_READ_REG(led->mode_reg + 0x93) &
+		(0x3<<led->mode_shift);
+	int amb_result;
+	u8 group_reg = AS3676_REG_ALS_group_1_Y0 + (gid - 1) * 6;
+	s32 y0, y3, x1, x2, x3, out;
+	s32 k1, k2;
+
+	if (gid == 0)
+		return value;
+
+	amb_result = i2c_smbus_read_byte_data(data->client,
+			AS3676_REG_ALS_result);
+
+	y0 = AS3676_READ_REG(group_reg);
+	y3 = AS3676_READ_REG(group_reg + 1);
+	x1 = AS3676_READ_REG(group_reg + 2);
+	k1 = (s8) AS3676_READ_REG(group_reg + 3);
+	x2 = AS3676_READ_REG(group_reg + 4);
+	k2 = (s8) AS3676_READ_REG(group_reg + 5);
+	x3 = x2 + (y3 - (x2 - x1) * k1 / 32 - y0) * 32 / k2;
+
+	if (amb_result < x1) /* first part */
+		out = y0;
+	else if (amb_result < x2) /* second part */
+		out = k1 * (amb_result - x1) / 32 + y0;
+	else if (amb_result < x3) /* third part */
+		out = k1 * (x2 - x1) / 32 + k2 * (amb_result - x2) / 32 + y0;
+	else /* fourth part */
+		out = y3;
+
+	return value * out / 256;
+}
+
+static void handle_ldo(struct as3676_data *data, enum ldo_users user,
+		bool enable)
+{
+	if (enable) {
+		if (!data->ldo_count) {
+			AS3676_MODIFY_REG(AS3676_REG_Control, 1, 1);
+			dev_info(&data->client->dev, "LDO on\n");
 		}
-		if (rd->als_connected && (intf->flags & AS3676_FLAG_ALS_MASK))
-			as3676_create_als_tree(rd, intf);
+		data->ldo_count |= user;
+	} else {
+		data->ldo_count &= ~user;
+		if (!data->ldo_count) {
+			AS3676_MODIFY_REG(AS3676_REG_Control, 1, 0);
+			dev_info(&data->client->dev, "LDO off\n");
+		}
+	}
+}
 
-		err = device_create_file(intf->cdev.dev, &dev_attr_max_current);
-		if (err)
-			dev_err(&client->dev,
-				"create dev_attr_max_current failed\n");
-		err = device_create_file(intf->cdev.dev, &dev_attr_mode);
-		if (err)
-			dev_err(&client->dev,
-				"create dev_attr_mode failed\n");
+static ssize_t as3676_dim_start_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int dim_start, i, dir, err = 0, dim_speed, use_softdim;
+	u16 dim_time;
+
+	use_softdim = (AS3676_READ_REG(AS3676_REG_Pattern_control) & 0x8)>>3;
+
+	i = sscanf(buf, "%5d", &dim_start);
+	if (i != 1)
+		return -EINVAL;
+	if (dim_start != 1 && dim_start != 0)
+		return -EINVAL;
+
+	if (!dim_start)
+		goto exit_clr;
+
+	if (use_softdim) {
+		dev_warn(dev, "pattern_use_softdim is set,"
+				" dimming not possible\n");
+		err = -EBUSY;
+		goto exit_clr;
 	}
 
-	err = device_create_file(&client->dev, &dev_attr_adc_als_value);
+	if (dim_start && data->dimming_in_progress) {
+		dev_warn(dev, "Dimming in progress, try again later\n");
+		return -EAGAIN;
+	}
+
+	data->dimming_in_progress = 1;
+
+	/* Before continuing remove dimming request which don't require
+	   dimming */
+	for (i = 0; i < data->num_leds; i++) {
+		struct as3676_led *led = data->leds + i;
+		if (AS3676_READ_REG(led->reg) == led->dim_value)
+			led->dim_brightness = -1;
+	}
+
+	dir = as3676_get_dimming_direction(data);
+	if (dir != 1 && dir != -1) {
+		dev_warn(dev, "Inconsistent dimming directions, "
+				"resetting dim values\n");
+		goto exit_clr;
+	}
+
+	err = as3676_check_cross_dimming(dev, data, dir);
+	if (err) {
+		dev_warn(dev, "Inconsistent cross dimming, "
+				"each subset of curr1/rgb1/curr30,curr41, "
+				"curr2/rgb2/curr31/curr42 and "
+				"curr6/rgb3/curr32/curr43 must either dim up "
+				"from the same value or down to the same "
+				"value!\n");
+		goto exit_clr;
+	}
+
+	AS3676_LOCK();
+	dim_speed = (AS3676_READ_REG(AS3676_REG_Pwm_control) >> 3) & 0x7;
+	dim_time = dim_speed2time[dim_speed];
+	if (dir == -1) { /* down dimming */
+		/* To be safe disable adder and pwm, should be disabled already
+		   anyway */
+		AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x6, 0x0);
+		AS3676_WRITE_REG(AS3676_REG_Pwm_code, 0xff);
+
+		for (i = 0; i < data->num_leds; i++) {
+			struct as3676_led *led = data->leds + i;
+			if (led->dim_brightness == -1)
+				continue;
+			/* turn off adder */
+			AS3676_MODIFY_REG(led->adder_on_reg,
+					1<<led->adder_on_shift, 0);
+			AS3676_WRITE_REG(led->adder_reg,
+					as3676_als_corrected_adder(
+					led->dim_value, data, led));
+			AS3676_WRITE_REG(led->reg, AS3676_READ_REG(led->reg) -
+					led->dim_value);
+			/* FIXME Here the LED is at a lower value until the next
+			   i2c command hits. Alternatively we could do something
+			   like pumping the value over or having one i2c request
+			   for the two registers and good i2c driver */
+			AS3676_MODIFY_REG(led->adder_on_reg, 0,
+					1<<led->adder_on_shift);
+			/* Switch led to pwm */
+			as3676_switch_led(data, led, 2);
+		}
+
+		/* Enable down dimming */
+		AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x6, 0x4);
+		/* Wait for dimming to be finished */
+		schedule_delayed_work(&data->dim_work,
+				msecs_to_jiffies(dim_time));
+	} else { /* up dimming */
+		/* To be safe disable adder and pwm, should be disabled already
+		   anyway */
+		AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x6, 0x0);
+		AS3676_WRITE_REG(AS3676_REG_Pwm_code, 0x00);
+
+		for (i = 0; i < data->num_leds; i++) {
+			struct as3676_led *led = data->leds + i;
+			if (led->dim_brightness == -1)
+				continue;
+			AS3676_MODIFY_REG(led->adder_on_reg,
+					1<<led->adder_on_shift, 0);
+			AS3676_WRITE_REG(led->adder_reg,
+				as3676_als_corrected_adder(
+				AS3676_READ_REG(led->reg), data, led));
+			/* Switch to pwm */
+			as3676_switch_led(data, led, 2);
+			/* FIXME Here the LED is for a short while off until
+			   the next i2c command hits */
+			/* Alternatively we could do something like pumping the
+			   value over */
+			/* or having one i2c request for the two registers and
+			   good i2c driver */
+			AS3676_MODIFY_REG(led->adder_on_reg, 0,
+					1<<led->adder_on_shift);
+			AS3676_WRITE_REG(led->reg, led->dim_value -
+					AS3676_READ_REG(led->reg));
+			as3676_check_DCDC_postfix(data);
+		}
+		/* Now start the updimming */
+		AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x6, 0x2);
+		/* Wait for dimming to be finished */
+		schedule_delayed_work(&data->dim_work,
+				msecs_to_jiffies(dim_time));
+	}
+	AS3676_UNLOCK();
+	goto exit;
+exit_clr:
+	as3676_clear_dimming(data);
+exit:
 	if (err)
-		dev_err(&client->dev,
-			"create dev_attr_adc_als_value failed\n");
+		return err;
+	return strnlen(buf, PAGE_SIZE);
+}
 
-	/* Enable charge pump and connect all leds to it */
-	/* TODO: double check that these are appropriate according to pdata */
-	reg_set(rd, AS3676_REG_CTRL, 0x05);
+static ssize_t as3676_use_dls_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	int use_dls = AS3676_READ_REG(led->dls_mode_reg);
 
-	if (pdata->ldo_mV <= 0) {
-		ldo_val = 0x1f;
-	} else if ((pdata->ldo_mV < AS3676_LDO_MIN) ||
-			(pdata->ldo_mV > AS3676_LDO_MAX)) {
-		dev_err(&client->dev, "ldo_mV in pdata is out-of-range\n");
-		err = -EINVAL;
-		goto error;
+	use_dls >>= led->dls_mode_shift;
+	use_dls &= 1;
+	snprintf(buf, PAGE_SIZE, "%d\n", use_dls);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static void as3676_use_dls(struct as3676_data *data, struct as3676_led *led,
+				bool use_dls)
+{
+	if (led->use_dls == use_dls)
+		return;
+	AS3676_MODIFY_REG(led->dls_mode_reg,
+			1 << led->dls_mode_shift,
+			use_dls << led->dls_mode_shift);
+	led->use_dls = use_dls;
+	if (use_dls) {
+		if (!data->dls_users) {
+			handle_ldo(data, LDO_FOR_DLS, true);
+			/*GPIO1 - Input/Nopull*/
+			AS3676_MODIFY_REG(AS3676_REG_GPIO_control, 0x0f, 0x00);
+		}
+		data->dls_users++;
 	} else {
-		ldo_val = (pdata->ldo_mV - AS3676_LDO_MIN) / 50;
+		data->dls_users--;
+		if (!data->dls_users) {
+			/*GPIO1 - Input/Pull-Down*/
+			AS3676_MODIFY_REG(AS3676_REG_GPIO_control, 0x0f, 0x04);
+			handle_ldo(data, LDO_FOR_DLS, false);
+		}
+	}
+}
+
+static ssize_t as3676_use_dls_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	int i;
+	u8 use_dls;
+	i = sscanf(buf, "%3hhu", &use_dls);
+	if (i != 1)
+		return -EINVAL;
+	AS3676_LOCK();
+	as3676_use_dls(data, led, !!use_dls);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_group_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	int als_group = AS3676_READ_REG(led->mode_reg + 0x93);
+
+	als_group >>= led->mode_shift;
+	als_group &= 0x3;
+	snprintf(buf, PAGE_SIZE, "%d (0=no ambient control, N = groupN)\n"
+				, als_group);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_group_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	int i;
+	u8 als_group;
+	i = sscanf(buf, "%3hhu", &als_group);
+	if (i != 1 || als_group > 3)
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(led->mode_reg + 0x93,
+			3 << led->mode_shift,
+			als_group << led->mode_shift);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int als_on = AS3676_READ_REG(AS3676_REG_ALS_control) & 1;
+	snprintf(buf, PAGE_SIZE, "%d\n", als_on);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static void as3676_switch_als(struct as3676_data *data, int als_on)
+{
+	int i;
+	u8 adc_result;
+
+	AS3676_MODIFY_REG(AS3676_REG_ALS_control, 1, als_on);
+	/* It is important to always start a ADC conversion to prevent AS3676
+	   from drawing too much power when switching off ALS. */
+	AS3676_WRITE_REG(AS3676_REG_ADC_control, 0x80); /* GPIO2/LIGHT */
+	for (i = 0; i < 10; i++) {
+		adc_result = i2c_smbus_read_byte_data(data->client,
+				AS3676_REG_ADC_MSB_result);
+		if (!(adc_result & 0x80))
+			break;
+		udelay(10);
+	}
+}
+static ssize_t as3676_als_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int als_on, i;
+	i = sscanf(buf, "%10d", &als_on);
+	if (i != 1)
+		return -EINVAL;
+	if (als_on != 1 && als_on != 0)
+		return -EINVAL;
+
+	if ((AS3676_READ_REG(AS3676_REG_ALS_control) & 1) == als_on)
+		goto skip;
+	AS3676_LOCK();
+	handle_ldo(data, LDO_FOR_ALS, als_on);
+	as3676_switch_als(data, als_on);
+	AS3676_UNLOCK();
+skip:
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_result_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int i;
+	s32 als_result, amb_gain, offset;
+	u32 adc_result;
+	s32 hw_result = i2c_smbus_read_byte_data(data->client,
+			AS3676_REG_ALS_result);
+
+	/* Start measuring GPIO2/LIGHT */
+	AS3676_LOCK();
+	AS3676_WRITE_REG(AS3676_REG_ADC_control, 0x80);
+	for (i = 0; i < 10; i++) {
+		adc_result = i2c_smbus_read_byte_data(data->client,
+				AS3676_REG_ADC_MSB_result);
+		if (!(adc_result & 0x80))
+			break;
+		udelay(10);
+	}
+	adc_result <<= 3;
+	adc_result |= i2c_smbus_read_byte_data(data->client,
+			AS3676_REG_ADC_LSB_result);
+
+	amb_gain = (AS3676_READ_REG(AS3676_REG_ALS_control) & 0x06) >> 1;
+	amb_gain = 1 << amb_gain; /* Have gain ready for calculations */
+	offset = AS3676_READ_REG(AS3676_REG_ALS_offset);
+	AS3676_UNLOCK();
+
+	/* multiply always before doing divisions to preserve precision.
+	   Overflows should not happen with the values */
+	als_result = (adc_result - 4 * offset) * amb_gain / 4;
+
+	snprintf(buf, PAGE_SIZE, "adc=%d,offset=%d,amb_gain %d/4 => calc=%d,"
+			" filtered=%d\n",
+			adc_result, offset, amb_gain, als_result, hw_result);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_als_result_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return -EINVAL;
+}
+
+static void as3676_dim_work(struct work_struct *work)
+{
+	struct as3676_data *data =
+		container_of(work, struct as3676_data, dim_work.work);
+
+	int i, dir;
+
+	dir = as3676_get_dimming_direction(data);
+
+	AS3676_LOCK();
+	if (dir == -1) { /* down dimming */
+		for (i = 0; i < data->num_leds; i++) {
+			struct as3676_led *led = data->leds + i;
+			if (led->dim_brightness == -1)
+				continue;
+			AS3676_WRITE_REG(led->reg, led->dim_value);
+			AS3676_MODIFY_REG(led->adder_on_reg,
+					1<<led->adder_on_shift, 0);
+			/* Here the LED is turned off until the next i2c command
+			   hits. Alternatively we could do something like
+			   pumping the value over. Switch from pwm to desired
+			   mode */
+			as3676_switch_led(data, led, led->dim_value != 0);
+			led->ldev.brightness = led->dim_brightness;
+		}
+		/* Turn off Pwm */
+		AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x6, 0x0);
+		/* Possibly DCDC can be switched off now */
+		as3676_check_DCDC_postfix(data);
+	} else { /* up dimming */
+		for (i = 0; i < data->num_leds; i++) {
+			struct as3676_led *led = data->leds + i;
+			if (led->dim_brightness == -1)
+				continue;
+			/* Switch off the adder */
+			AS3676_MODIFY_REG(led->adder_on_reg,
+					1<<led->adder_on_shift, 0);
+			/* Here the LED is at a lower value until the next
+			   command hits. Alternatively we could do something
+			   like pumping the value over */
+			AS3676_WRITE_REG(led->reg, led->dim_value);
+			/* Switch to desired mode */
+			as3676_switch_led(data, led, 1);
+			led->ldev.brightness = led->dim_brightness;
+		}
+		/* Turn off Pwm */
+		AS3676_MODIFY_REG(AS3676_REG_Pwm_control, 0x6, 0x0);
+	}
+	as3676_clear_dimming(data);
+	AS3676_UNLOCK();
+}
+
+static ssize_t as3676_led_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	int val = AS3676_READ_REG(led->aud_reg) >> led->aud_shift;
+	val &= 1;
+
+	snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return strnlen(buf, PAGE_SIZE);
+}
+static ssize_t as3676_led_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	int audio_on, i;
+	i = sscanf(buf, "%10d", &audio_on);
+	if (i != 1)
+		return -EINVAL;
+
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(led->aud_reg, 1<<led->aud_shift,
+			audio_on<<led->aud_shift);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+static ssize_t as3676_curr4x_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_led_audio_on_show(dev, attr, buf);
+}
+static ssize_t as3676_curr4x_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_led_audio_on_store(dev, attr, buf, size);
+}
+static ssize_t as3676_rgbx_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_led_audio_on_show(dev, attr, buf);
+}
+static ssize_t as3676_rgbx_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_led_audio_on_store(dev, attr, buf, size);
+}
+static ssize_t as3676_curr126_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_led_audio_on_show(dev, attr, buf);
+}
+static ssize_t as3676_curr126_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_led_audio_on_store(dev, attr, buf, size);
+}
+static ssize_t as3676_curr3x_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	int val = AS3676_READ_REG(led->aud_reg) >> led->aud_shift;
+	val &= 0x3;
+
+	snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return strnlen(buf, PAGE_SIZE);
+}
+static ssize_t as3676_curr3x_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_led *led = ldev_to_led(dev_get_drvdata(dev));
+	struct as3676_data *data = dev_get_drvdata(dev->parent);
+	int val, i;
+	i = sscanf(buf, "%10d", &val);
+	if (i != 1)
+		return -EINVAL;
+	if (val < 0 || val > 3)
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(led->aud_reg, 0x3<<led->aud_shift,
+			val<<led->aud_shift);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+static ssize_t as3676_curr30_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_curr3x_audio_channel_show(dev, attr, buf);
+}
+static ssize_t as3676_curr30_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_curr3x_audio_channel_store(dev, attr, buf, size);
+}
+static ssize_t as3676_curr31_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_curr3x_audio_channel_show(dev, attr, buf);
+}
+static ssize_t as3676_curr31_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_curr3x_audio_channel_store(dev, attr, buf, size);
+}
+static ssize_t as3676_curr32_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_curr3x_audio_channel_show(dev, attr, buf);
+}
+static ssize_t as3676_curr32_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_curr3x_audio_channel_store(dev, attr, buf, size);
+}
+static ssize_t as3676_curr33_audio_channel_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return as3676_curr3x_audio_channel_show(dev, attr, buf);
+}
+static ssize_t as3676_curr33_audio_channel_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	return as3676_curr3x_audio_channel_store(dev, attr, buf, size);
+}
+static ssize_t as3676_audio_on_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int val = AS3676_READ_REG(AS3676_REG_Audio_Control);
+	val &= 1;
+	snprintf(buf, PAGE_SIZE, "%d\n", val);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_audio_on_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int audio_on, i;
+	i = sscanf(buf, "%10d", &audio_on);
+	if (i != 1)
+		return -EINVAL;
+	if (audio_on != 1 && audio_on != 0)
+		return -EINVAL;
+
+	if ((AS3676_READ_REG(AS3676_REG_ALS_control) & 1) == audio_on)
+		goto exit;
+
+	AS3676_LOCK();
+	handle_ldo(data, LDO_FOR_AUDIO, audio_on);
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Control, 1, audio_on);
+	AS3676_UNLOCK();
+
+exit:
+	return strnlen(buf, PAGE_SIZE);
+}
+static ssize_t as3676_audio_color_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int audio_color = AS3676_READ_REG(AS3676_REG_Audio_Control);
+	audio_color >>= 1;
+	audio_color &= 0x7;
+	snprintf(buf, PAGE_SIZE, "%d\n", audio_color);
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t as3676_audio_color_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct as3676_data *data = dev_get_drvdata(dev);
+	int audio_color, i;
+	i = sscanf(buf, "%10d", &audio_color);
+	if (i < 0 || i > 7)
+		return -EINVAL;
+	AS3676_LOCK();
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Control, 0xe, audio_color << 1);
+	AS3676_UNLOCK();
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static struct device_attribute as3676_attributes[] = {
+	AS3676_ATTR(debug),
+	AS3676_ATTR(dim_start),
+	AS3676_ATTR(dim_time),
+	AS3676_ATTR(pattern_data),
+	AS3676_ATTR(pattern_duration_secs),
+	AS3676_ATTR(pattern_use_color),
+	AS3676_ATTR(pattern_delay),
+	AS3676_ATTR(pattern_use_softdim),
+	AS3676_ATTR(als_filter_up_speed_mHz),
+	AS3676_ATTR(als_filter_down_speed_mHz),
+	AS3676_ATTR(als_group1),
+	AS3676_ATTR(als_group2),
+	AS3676_ATTR(als_group3),
+	AS3676_ATTR(als_result),
+	AS3676_ATTR(als_offset),
+	AS3676_ATTR(als_gain),
+	AS3676_ATTR(als_on),
+	AS3676_ATTR(audio_on),
+	AS3676_ATTR(audio_color),
+	__ATTR_NULL
+};
+
+static struct device_attribute as3676_led_attributes[] = {
+	AS3676_ATTR(als_group),
+	AS3676_ATTR(dim_brightness),
+	AS3676_ATTR(use_dls),
+	AS3676_ATTR(use_pattern),
+	__ATTR_NULL
+};
+
+static int as3676_configure(struct i2c_client *client,
+		struct as3676_data *data, struct as3676_platform_data *pdata)
+{
+	int i, err = 0;
+
+	if (pdata == NULL)
+		return -EINVAL;
+
+	INIT_DELAYED_WORK(&data->dim_work, as3676_dim_work);
+
+	AS3676_MODIFY_REG(AS3676_REG_DCDC_control1, 0xf8,
+			pdata->step_up_vtuning << 3);
+
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Input, 0x7,
+			pdata->audio_gain);
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Input, 0x38,
+			pdata->audio_agc_ctrl << 3);
+	/* full amplitude, regulate using current regs: */
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Output, 0x07, 0x07);
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Control_2, 0x0e,
+			pdata->audio_speed_up << 1);
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Control, 0xc0,
+			pdata->audio_speed_down << 6);
+	AS3676_WRITE_REG(AS3676_REG_LDO_Voltage, TO_LDO_VOLT_REG(
+		pdata->ldo_voltage ? pdata->ldo_voltage : LDO_VOLT_DEFALUT_MV));
+
+	/* Configure GPIO1 and GPIO2 for DLS / Light using minimal power
+	   GPIO1 : digital input, Pull Down
+	   GPIO2 : analog input, no pulls */
+	AS3676_WRITE_REG(AS3676_REG_GPIO_control, 0xc4);
+
+	AS3676_MODIFY_REG(AS3676_REG_Audio_Control_2, 0x30,
+			pdata->audio_source << 4);
+
+	data->caps_mounted_on_dcdc_feedback =
+		pdata->caps_mounted_on_dcdc_feedback;
+
+	/* Configure for auto feedback mode according to application note */
+	/* AN3676_DCDC_v1.0.pdf: set auto feedback */
+	AS3676_MODIFY_REG(AS3676_REG_DCDC_control2, 0x80, 0x80);
+	if (pdata->step_up_lowcur)
+		AS3676_MODIFY_REG(AS3676_REG_DCDC_control2, 0x08, 0x08);
+	/* Auto feedback needs one of the currents selected as feedback: */
+	AS3676_MODIFY_REG(AS3676_REG_DCDC_control1, 0x6, 0x2);
+	if (pdata->reset_on_i2c_shutdown)
+		AS3676_MODIFY_REG(AS3676_REG_Overtemp_control, 0x10, 0x10);
+	/* Remove curr33 since it is used as audio input */
+	if (pdata->audio_source == 0)
+		data->num_leds--;
+
+	for (i = 0; i < data->num_leds; i++) {
+		struct as3676_led *led = &data->leds[i];
+		struct as3676_platform_led *pled = &pdata->leds[i];
+		led->pled = pled;
+		if (pled->name)
+			led->name = pled->name;
+		if (pled->on_charge_pump) {
+			AS3676_MODIFY_REG(led->dls_mode_reg - 0x32,
+					1 << led->dls_mode_shift,
+					1 << led->dls_mode_shift);
+		}
+		if (led->pled->max_current_uA > 38250)
+			led->pled->max_current_uA = 38250;
+		if (led->pled->startup_current_uA > led->pled->max_current_uA)
+			led->pled->startup_current_uA =
+				led->pled->max_current_uA;
+		/* Round down max current to next step */
+		led->pled->max_current_uA =
+			led->pled->max_current_uA / 150 * 150;
+		led->client = client;
+		led->ldev.name = led->name;
+		led->ldev.brightness = LED_OFF;
+		led->ldev.brightness_set = as3676_set_led_brightness;
+		led->ldev.blink_set = NULL;
+		led->dim_brightness = -1;
+		err = led_classdev_register(&client->dev, &led->ldev);
+		if (err < 0) {
+			dev_err(&client->dev,
+					"couldn't register LED %s\n",
+					led->name);
+			goto exit;
+		}
+		err = device_add_attributes(led->ldev.dev,
+				as3676_led_attributes);
+		if (err < 0) {
+			dev_err(&client->dev,
+					"couldn't add attributes %s\n",
+					led->name);
+			goto exit;
+		}
+		err = device_create_file(led->ldev.dev, led->aud_file);
+		if (err < 0) {
+			dev_err(&client->dev,
+					"couldn't add attributes %s\n",
+					led->name);
+			goto exit;
+		}
+		if (led->pled->use_dls)
+			as3676_use_dls(data, led, true);
 	}
 
-	reg_set(rd, AS3676_LDO_VOLTAGE, ldo_val);
+	err = device_add_attributes(&client->dev, as3676_attributes);
 
-	reg_set(rd, AS3676_MODE_SWITCH, 0x70);
-	/* Allow dimming up */
-	reg_set(rd, AS3676_REG_PWM_CODE, 0);
-	reg_set(rd, AS3676_REG_PWM_CTRL, 4<<3 | 1<<1);
+	if (err)
+		goto exit;
 
-	if (pdata->als_config) {
-		memcpy(&rd->als, pdata->als_config,
-				sizeof(struct as3676_als_config));
-	} else {
-		memcpy(&rd->als, &as3676_default_config,
-				sizeof(struct as3676_als_config));
+	for (i = 0; i < ARRAY_SIZE(data->leds); i++) {
+		struct as3676_led *led = &data->leds[i];
+		if (led->pled->startup_current_uA) {
+			as3676_set_brightness(data, led,
+				led->pled->startup_current_uA * 255 /
+				led->pled->max_current_uA);
+
+		}
 	}
-
-	if (pdata->audio_config) {
-		memcpy(&rd->audio, pdata->audio_config,
-				sizeof(struct as3676_audio_config));
-	} else {
-		memset(&rd->audio, 0,
-				sizeof(struct as3676_audio_config));
-	}
-
-	if (rd->als_connected) {
-		as3676_als_set_params(rd, &rd->als);
-		/* By default, ALS should be enabled */
-		rd->als_enabled = 1;
-		as3676_als_set_enable_internal(rd, rd->als_enabled);
-		rd->als_suspend = AS3676_NO_SUSPEND;
-	}
-
-	if (rd->dls_connected)
-		reg_set(rd, AS3676_REG_GPIO_CURR, 1 << 7);
-
-	for (i = 0; i < rd->n_interfaces; ++i) {
-		struct as3676_interface *intf = &rd->interfaces[i];
-		as3676_set_interface_brightness(intf, intf->cdev.brightness);
-		intf->flags &= ~AS3676_FLAG_PWM_INIT;
-		if ((rd->als_connected) && (intf->flags & AS3676_FLAG_ALS_MASK))
-			as3676_set_als_config(rd, &rd->als, intf);
-	}
-
-	rd->cmode = AS3676_CMODE_SCHEDULED;
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	rd->early_suspend.suspend = as3676_early_suspend;
-	rd->early_suspend.resume = as3676_late_resume;
-	register_early_suspend(&rd->early_suspend);
-#endif
 	return 0;
 
-error:
-	kfree(rd);
+exit:
+	device_remove_attributes(&client->dev, as3676_attributes);
+	if (i > 0)
+		for (i = i - 1; i >= 0; i--) {
+			struct as3676_led *led = &data->leds[i];
+			device_remove_attributes(led->ldev.dev,
+				as3676_led_attributes);
+			device_remove_file(led->ldev.dev, led->aud_file);
+			led_classdev_unregister(&data->leds[i].ldev);
+		}
 	return err;
+}
+
+static int as3676_probe(struct i2c_client *client,
+		const struct i2c_device_id *id)
+{
+	struct as3676_data *data;
+	struct as3676_platform_data *as3676_pdata = client->dev.platform_data;
+	int id1, id2, i;
+	int err = 0;
+
+	if (!as3676_pdata)
+		return -EIO;
+
+	if (!i2c_check_functionality(client->adapter,
+				I2C_FUNC_SMBUS_BYTE_DATA))
+		return -EIO;
+
+	data = kzalloc(sizeof(*data), GFP_USER);
+	if (!data)
+		return -ENOMEM;
+
+	/* initialize with meaningful data ( register names, etc.) */
+	*data = as3676_default_data;
+
+	dev_set_drvdata(&client->dev, data);
+
+	data->client = client;
+	mutex_init(&data->update_lock);
+
+	id1 = i2c_smbus_read_byte_data(client, AS3676_REG_ASIC_ID1);
+	id2 = i2c_smbus_read_byte_data(client, AS3676_REG_ASIC_ID2);
+	if (id1 < 0) {
+		err = id1;
+		goto exit;
+	}
+	if (id2 < 0) {
+		err = id2;
+		goto exit;
+	}
+	if ((id1 != 0xae) || (id2&0xf0) != 0x50) {
+		err = -ENXIO;
+		dev_err(&client->dev, "wrong chip detected, ids %x %x",
+				id1, id2);
+		goto exit;
+	}
+	dev_info(&client->dev, "AS3676 driver v1.6: detected AS3676"
+			"compatible chip with ids %x %x\n",
+			id1, id2);
+	/* all voltages on */
+	data->client = client;
+
+	for (i = 0; i < ARRAY_SIZE(data->regs); i++) {
+		if (data->regs[i].name)
+			i2c_smbus_write_byte_data(client,
+					i, data->regs[i].value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(data->regs); i++) {
+		if (!data->regs[i].name)
+			continue;
+		data->regs[i].value = i2c_smbus_read_byte_data(client, i);
+	}
+
+	AS3676_WRITE_REG(AS3676_REG_Control, 0x00);
+	AS3676_WRITE_REG(AS3676_REG_CP_control, as3676_pdata->cp_control);
+
+	i2c_set_clientdata(client, data);
+
+
+	err = as3676_configure(client, data, as3676_pdata);
+exit:
+	if (err) {
+		kfree(data);
+		dev_err(&client->dev, "could not configure %x", err);
+		i2c_set_clientdata(client, NULL);
+	}
+
+	return err;
+}
+
+static int as3676_remove(struct i2c_client *client)
+{
+	struct as3676_data *data = i2c_get_clientdata(client);
+	int i;
+
+	for (i = 0; i < AS3676_NUM_LEDS; i++) {
+		struct as3676_led *led = &data->leds[i];
+		device_remove_attributes(led->ldev.dev, as3676_led_attributes);
+		device_remove_file(led->ldev.dev, led->aud_file);
+		led_classdev_unregister(&led->ldev);
+	}
+	device_remove_attributes(&client->dev, as3676_attributes);
+
+	kfree(data);
+	i2c_set_clientdata(client, NULL);
+	return 0;
 }
 
 static int __init as3676_init(void)
@@ -1851,9 +2678,10 @@ static void __exit as3676_exit(void)
 	i2c_del_driver(&as3676_driver);
 }
 
+MODULE_AUTHOR("Ulrich Herrmann <ulrich.herrmann@austriamicrosystems.com>");
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("AS3676 LED dimmer");
+
 module_init(as3676_init);
 module_exit(as3676_exit);
 
-MODULE_AUTHOR("Courtney Cavin <courtney.cavin@sonyericsson.com>");
-MODULE_DESCRIPTION("AS3676 I2C LED driver");
-MODULE_LICENSE("GPL v2");
