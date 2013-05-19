@@ -3871,7 +3871,7 @@ static struct bma250_platform_data bma250_platform_data = {
 #endif
 #define APDS9702_WAIT_TIME   5000
 
-static int apds9702_gpio_setup(int request)
+static int apds9702_gpio_setup(struct device *dev, int request)
 {
 	if (request) {
 		return gpio_request(APDS9702_DOUT_GPIO, "apds9702_dout");
@@ -3881,7 +3881,8 @@ static int apds9702_gpio_setup(int request)
 	}
 }
 
-static void apds9702_power_mode(int enable)
+
+static void apds9702_power_mode(struct device *dev, int enable)
 {
 	enable = !!enable;
 	if (enable)

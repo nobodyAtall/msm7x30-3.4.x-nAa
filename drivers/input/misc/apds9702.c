@@ -12,9 +12,9 @@
  * of the License, or (at your option) any later version.
  */
 
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
@@ -67,9 +67,9 @@ static int apds9702_write_byte(struct i2c_client *i2c_client, u8 reg, u8 val)
 		if (rc < 0) {
 			dev_err(&i2c_client->dev,
 					"i2c_smbus write failed, %d\n", rc);
-			pdata->hw_config(0);
+			pdata->hw_config(&i2c_client->dev, 0);
 			msleep(APDS9702_WAIT_TIME);
-			pdata->hw_config(1);
+			pdata->hw_config(&i2c_client->dev, 1);
 		} else
 			return 0;
 	}
@@ -83,17 +83,17 @@ static int apds9702_do_sensing(struct apds9702data *data, int enable)
 
 	dev_dbg(&data->client->dev, "%s: enable = %d\n", __func__, enable);
 	if (enable) {
-		pdata->hw_config(1);
+		pdata->hw_config(&data->client->dev, 1);
 		err = apds9702_write_byte(data->client,
 						data->ctl_reg & 0xFF,
 						data->ctl_reg >> 8);
 		if (err)
-			pdata->hw_config(0);
+			pdata->hw_config(&data->client->dev, 0);
 		else
 			data->active = 1;
 	} else {
 		err = apds9702_write_byte(data->client, 0, 0);
-		pdata->hw_config(0);
+		pdata->hw_config(&data->client->dev, 0);
 		data->active = 0;
 	}
 	if (err)
@@ -168,18 +168,6 @@ static ssize_t attr_threshold_set(struct device *dev,
 		return size;
 	}
 	return -EINVAL;
-}
-
-static ssize_t attr_nburst_show(struct device *dev,
-				   struct device_attribute *attr,
-				   char *buf)
-{
-	struct apds9702data *data = dev_get_drvdata(dev);
-	int nburst =
-		(data->ctl_reg & APDS9702_NBURST_MAX << APDS9702_NBURST_BIT)
-		>> APDS9702_NBURST_BIT;
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", nburst);
 }
 
 static ssize_t attr_nburst_set(struct device *dev,
@@ -264,7 +252,7 @@ static ssize_t attr_rfilt_set(struct device *dev,
 
 static struct device_attribute attributes[] = {
 	__ATTR(threshold, 0600, attr_threshold_show, attr_threshold_set),
-	__ATTR(nburst, 0600, attr_nburst_show, attr_nburst_set),
+	__ATTR(nburst, 0200, NULL, attr_nburst_set),
 	__ATTR(freq, 0200, NULL, attr_freq_set),
 	__ATTR(cycle, 0200, NULL, attr_duration_cycle_set),
 	__ATTR(filter, 0200, NULL, attr_rfilt_set),
@@ -331,14 +319,14 @@ static int apds9702_probe(struct i2c_client *client,
 			__func__);
 		return -ENODEV;
 	}
-	err = pdata->gpio_setup(1);
+	err = pdata->gpio_setup(&client->dev, 1);
 	if (err) {
 		dev_err(&client->dev, "%s: gpio_setup failed\n", __func__);
 		goto err_gpio_setup_failed;
 	}
-	pdata->hw_config(1);
+	pdata->hw_config(&client->dev, 1);
 	err = apds9702_write_byte(client, 0, 0);
-	pdata->hw_config(0);
+	pdata->hw_config(&client->dev, 0);
 	if (err) {
 		dev_err(&client->dev, "%s: device not responding"
 			" error = %d\n", __func__, err);
@@ -432,7 +420,7 @@ err_get_irq_num_failed:
 	kfree(data);
 exit_alloc_data_failed:
 err_not_responding:
-	pdata->gpio_setup(0);
+	pdata->gpio_setup(&client->dev, 0);
 err_gpio_setup_failed:
 	dev_err(&client->dev, "%s: device create failed.\n", __func__);
 	return err;
@@ -448,8 +436,8 @@ static int apds9702_remove(struct i2c_client *client)
 	input_unregister_device(data->input_dev);
 	input_free_device(data->input_dev);
 	input_set_drvdata(data->input_dev, NULL);
-	pdata->hw_config(0);
-	pdata->gpio_setup(0);
+	pdata->hw_config(&client->dev, 0);
+	pdata->gpio_setup(&client->dev, 0);
 	kfree(data);
 	i2c_set_clientdata(client, NULL);
 	return 0;

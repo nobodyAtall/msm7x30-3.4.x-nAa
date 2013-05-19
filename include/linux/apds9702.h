@@ -7,6 +7,8 @@
 
 #define APDS9702_NAME "apds9702"
 
+struct device;
+
 struct apds9702_ctl_reg {
 	unsigned int trg:1;
 	unsigned int pwr:1;
@@ -22,7 +24,7 @@ struct apds9702_platform_data {
 	struct apds9702_ctl_reg ctl_reg;
 	char *phys_dev_path;
 	unsigned int is_irq_wakeup:1;
-	void (*hw_config)(int enable);
-	int (*gpio_setup)(int request);
+	void (*hw_config)(struct device *dev, int enable);
+	int (*gpio_setup)(struct device *dev, int request);
 };
 #endif
