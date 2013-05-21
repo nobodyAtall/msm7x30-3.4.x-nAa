@@ -1,4 +1,4 @@
-/* /kernel/arch/arm/mach-msm/leds-smultron.c
+/* /kernel/arch/arm/mach-msm/leds-urushi.c
  *
  * Copyright 2013 Vassilis Tsogkas (tsogkas@ceid.upatras.gr)
  *
@@ -32,7 +32,7 @@ struct as3676_platform_data as3676_platform_data = {
 		.on_charge_pump = 0,
 		.max_current_uA = 20000,
 		.startup_current_uA = 4000,
-		.use_dls = true,
+		.use_dls = false,
 	},
 	.leds[1] = {
 		.name = "led_2-not-connected",
@@ -48,6 +48,7 @@ struct as3676_platform_data as3676_platform_data = {
 		.name = "led_4-not-connected",
 		.on_charge_pump = 0,
 		.max_current_uA = 0,
+	},
 	.leds[4] = {
 		.name = "led_5-not-connected",
 		.on_charge_pump = 0,
