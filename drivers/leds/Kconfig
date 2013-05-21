@@ -378,15 +378,6 @@ config LEDS_AS3676
           This option enables support for LEDs connected to AS3676
           LED driver chips accessed via the I2C bus.
 
-config LEDS_AS3676_SEMC
-	tristate "LED Support for AMS AS3676 I2C chips (Semc)"
-	depends on LEDS_CLASS && I2C && !LEDS_AS3676
-	default n
-	help
-	  This option enables support for LEDs connected to AS3676
-	  LED driver chips accessed via the I2C bus using the semc
-	  supplied driver.
-
 config LEDS_AS3676_HW_BLINK
         bool "HW blink support for AS3676 chips"
 	default y
