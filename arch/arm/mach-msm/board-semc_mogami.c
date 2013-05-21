@@ -159,7 +159,7 @@
 #include <mach/sdio_al.h>
 #include "smd_private.h"
 
-#include <linux/leds-as3676_semc.h>
+#include <linux/leds-as3676.h>
 #include "board-semc_mogami-leds.h"
 #include "board-semc_mogami-touch.h"
 #include <mach/semc_rpc_server_handset.h>
