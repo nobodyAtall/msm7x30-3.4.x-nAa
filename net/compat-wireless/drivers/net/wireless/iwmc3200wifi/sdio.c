@@ -63,7 +63,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/netdevice.h>
 #include <linux/debugfs.h>

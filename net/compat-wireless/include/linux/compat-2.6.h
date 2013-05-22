@@ -9,8 +9,9 @@
 #else
 #include <linux/autoconf.h>
 #endif
+#ifndef COMPAT_STATIC
 #include <linux/compat_autoconf.h>
-
+#endif
 /*
  * Each compat file represents compatibility code for new kernel
  * code introduced for *that* kernel revision.

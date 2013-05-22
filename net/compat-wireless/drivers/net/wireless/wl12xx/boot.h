@@ -28,8 +28,6 @@
 
 int wl1271_boot(struct wl1271 *wl);
 int wl1271_load_firmware(struct wl1271 *wl);
-int wl128x_boot_clk(struct wl1271 *wl, int *selected_clock);
-int wl127x_boot_clk(struct wl1271 *wl);
 
 #define WL1271_NO_SUBBANDS 8
 #define WL1271_NO_POWER_LEVELS 4
@@ -56,6 +54,15 @@ struct wl1271_static_data {
 #define OCP_REG_CLK_TYPE     0x0448
 #define OCP_REG_CLK_POLARITY 0x0cb2
 #define OCP_REG_CLK_PULL     0x0cb4
+
+#define REG_FUSE_DATA_2_1    0x050a
+#define PG_VER_MASK          0x3c
+#define PG_VER_OFFSET        2
+
+#define PG_MAJOR_VER_MASK    0x3
+#define PG_MAJOR_VER_OFFSET  0x0
+#define PG_MINOR_VER_MASK    0xc
+#define PG_MINOR_VER_OFFSET  0x2
 
 #define CMD_MBOX_ADDRESS     0x407B4
 

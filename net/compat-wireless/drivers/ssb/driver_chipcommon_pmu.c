@@ -2,7 +2,7 @@
  * Sonics Silicon Backplane
  * Broadcom ChipCommon Power Management Unit driver
  *
- * Copyright 2009, Michael Buesch <m@bues.ch>
+ * Copyright 2009, Michael Buesch <mb@bu3sch.de>
  * Copyright 2007, Broadcom Corporation
  *
  * Licensed under the GNU/GPL. See COPYING for details.
@@ -12,7 +12,6 @@
 #include <linux/ssb/ssb_regs.h>
 #include <linux/ssb/ssb_driver_chipcommon.h>
 #include <linux/delay.h>
-#include <linux/export.h>
 
 #include "ssb_private.h"
 
@@ -418,9 +417,9 @@ static void ssb_pmu_resources_init(struct ssb_chipcommon *cc)
 	u32 min_msk = 0, max_msk = 0;
 	unsigned int i;
 	const struct pmu_res_updown_tab_entry *updown_tab = NULL;
-	unsigned int updown_tab_size = 0;
+	unsigned int updown_tab_size;
 	const struct pmu_res_depend_tab_entry *depend_tab = NULL;
-	unsigned int depend_tab_size = 0;
+	unsigned int depend_tab_size;
 
 	switch (bus->chip_id) {
 	case 0x4312:

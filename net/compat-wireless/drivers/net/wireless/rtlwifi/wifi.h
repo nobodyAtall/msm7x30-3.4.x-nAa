@@ -32,6 +32,7 @@
 
 #include <linux/sched.h>
 #include <linux/firmware.h>
+#include <linux/version.h>
 #include <linux/etherdevice.h>
 #include <linux/vmalloc.h>
 #include <linux/usb.h>
@@ -63,7 +64,6 @@
 #define AC_MAX					4
 #define QOS_QUEUE_NUM				4
 #define RTL_MAC80211_NUM_QUEUE			5
-#define REALTEK_USB_VENQT_MAX_BUF_SIZE		254
 
 #define QBSS_LOAD_SIZE				5
 #define MAX_WMMELE_LENGTH			64
@@ -165,12 +165,6 @@ enum hardware_type {
 (IS_HARDWARE_TYPE_8723E(rtlhal) || IS_HARDWARE_TYPE_8723U(rtlhal))
 #define IS_HARDWARE_TYPE_8723U(rtlhal)			\
 	(rtlhal->hw_type == HARDWARE_TYPE_RTL8723U)
-
-#define RX_HAL_IS_CCK_RATE(_pdesc)\
-	(_pdesc->rxmcs == DESC92_RATE1M ||		\
-	 _pdesc->rxmcs == DESC92_RATE2M ||		\
-	 _pdesc->rxmcs == DESC92_RATE5_5M ||		\
-	 _pdesc->rxmcs == DESC92_RATE11M)
 
 enum scan_operation_backup_opt {
 	SCAN_OPT_BACKUP = 0,
@@ -309,6 +303,9 @@ enum hw_variables {
 	HW_VAR_DATA_FILTER,
 };
 
+#define HWSET_MAX_SIZE				128
+#define EFUSE_MAX_SECTION			16
+
 enum _RT_MEDIA_STATUS {
 	RT_MEDIA_DISCONNECT = 0,
 	RT_MEDIA_CONNECT = 1
@@ -393,41 +390,6 @@ enum rtl_hal_state {
 	_HAL_STATE_START = 1,
 };
 
-enum rtl_desc92_rate {
-	DESC92_RATE1M = 0x00,
-	DESC92_RATE2M = 0x01,
-	DESC92_RATE5_5M = 0x02,
-	DESC92_RATE11M = 0x03,
-
-	DESC92_RATE6M = 0x04,
-	DESC92_RATE9M = 0x05,
-	DESC92_RATE12M = 0x06,
-	DESC92_RATE18M = 0x07,
-	DESC92_RATE24M = 0x08,
-	DESC92_RATE36M = 0x09,
-	DESC92_RATE48M = 0x0a,
-	DESC92_RATE54M = 0x0b,
-
-	DESC92_RATEMCS0 = 0x0c,
-	DESC92_RATEMCS1 = 0x0d,
-	DESC92_RATEMCS2 = 0x0e,
-	DESC92_RATEMCS3 = 0x0f,
-	DESC92_RATEMCS4 = 0x10,
-	DESC92_RATEMCS5 = 0x11,
-	DESC92_RATEMCS6 = 0x12,
-	DESC92_RATEMCS7 = 0x13,
-	DESC92_RATEMCS8 = 0x14,
-	DESC92_RATEMCS9 = 0x15,
-	DESC92_RATEMCS10 = 0x16,
-	DESC92_RATEMCS11 = 0x17,
-	DESC92_RATEMCS12 = 0x18,
-	DESC92_RATEMCS13 = 0x19,
-	DESC92_RATEMCS14 = 0x1a,
-	DESC92_RATEMCS15 = 0x1b,
-	DESC92_RATEMCS15_SG = 0x1c,
-	DESC92_RATEMCS32 = 0x20,
-};
-
 enum rtl_var_map {
 	/*reg map */
 	SYS_ISO_CTRL = 0,
@@ -451,7 +413,6 @@ enum rtl_var_map {
 	EFUSE_HWSET_MAX_SIZE,
 	EFUSE_MAX_SECTION_MAP,
 	EFUSE_REAL_CONTENT_SIZE,
-	EFUSE_OOB_PROTECT_BYTES_LEN,
 
 	/*CAM map */
 	RWCAM,
@@ -946,12 +907,14 @@ struct rtl_io {
 	void (*write8_async) (struct rtl_priv *rtlpriv, u32 addr, u8 val);
 	void (*write16_async) (struct rtl_priv *rtlpriv, u32 addr, u16 val);
 	void (*write32_async) (struct rtl_priv *rtlpriv, u32 addr, u32 val);
-	void (*writeN_sync) (struct rtl_priv *rtlpriv, u32 addr, void *buf,
-			     u16 len);
+	int (*writeN_async) (struct rtl_priv *rtlpriv, u32 addr, u16 len,
+			     u8 *pdata);
 
 	u8(*read8_sync) (struct rtl_priv *rtlpriv, u32 addr);
 	u16(*read16_sync) (struct rtl_priv *rtlpriv, u32 addr);
 	u32(*read32_sync) (struct rtl_priv *rtlpriv, u32 addr);
+	int (*readN_sync) (struct rtl_priv *rtlpriv, u32 addr, u16 len,
+			    u8 *pdata);
 
 };
 
@@ -975,7 +938,7 @@ struct rtl_mac {
 	int n_channels;
 	int n_bitrates;
 
-	bool offchan_delay;
+	bool offchan_deley;
 
 	/*filters */
 	u32 rx_conf;
@@ -1225,6 +1188,7 @@ struct rtl_efuse {
 
 struct rtl_ps_ctl {
 	bool pwrdomain_protect;
+	bool set_rfpowerstate_inprogress;
 	bool in_powersavemode;
 	bool rfchange_inprogress;
 	bool swrf_processing;
@@ -1328,7 +1292,6 @@ struct rtl_stats {
 	s8 rx_mimo_signalquality[2];
 	bool packet_matchbssid;
 	bool is_cck;
-	bool is_ht;
 	bool packet_toself;
 	bool packet_beacon;	/*for rssi */
 	char cck_adc_pwdb[4];	/*for rx path selection */
@@ -1490,9 +1453,6 @@ struct rtl_mod_params {
 	/* default: 0 = using hardware encryption */
 	int sw_crypto;
 
-	/* default: 0 = DBG_EMERG (0)*/
-	int debug;
-
 	/* default: 1 = using no linked power save */
 	bool inactiveps;
 
@@ -1544,7 +1504,6 @@ struct rtl_hal_cfg {
 struct rtl_locks {
 	/* mutex */
 	struct mutex conf_mutex;
-	struct mutex ps_mutex;
 
 	/*spin lock */
 	spinlock_t ips_lock;
@@ -1552,6 +1511,7 @@ struct rtl_locks {
 	spinlock_t h2c_lock;
 	spinlock_t rf_ps_lock;
 	spinlock_t rf_lock;
+	spinlock_t lps_lock;
 	spinlock_t waitq_lock;
 
 	/*Dual mac*/
@@ -1576,8 +1536,6 @@ struct rtl_works {
 	/* For SW LPS */
 	struct delayed_work ps_work;
 	struct delayed_work ps_rfon_wq;
-
-	struct work_struct lps_leave_work;
 };
 
 struct rtl_debug {
@@ -2025,7 +1983,7 @@ static inline u16 rtl_get_tid(struct sk_buff *skb)
 
 static inline struct ieee80211_sta *get_sta(struct ieee80211_hw *hw,
 					    struct ieee80211_vif *vif,
-					    const u8 *bssid)
+					    u8 *bssid)
 {
 	return ieee80211_find_sta(vif, bssid);
 }

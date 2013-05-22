@@ -20,11 +20,12 @@
 
 /* netdev_printk helpers, similar to dev_printk */
 
-#ifndef netdev_name
-#define netdev_name(__dev) \
-	((__dev->reg_state != NETREG_REGISTERED) ? \
-		"(unregistered net_device)" : __dev->name)
-#endif
+static inline const char *netdev_name(const struct net_device *dev)
+{
+	if (dev->reg_state != NETREG_REGISTERED)
+		return "(unregistered net_device)";
+	return dev->name;
+}
 
 #define netdev_printk(level, netdev, format, args...)		\
 	dev_printk(level, (netdev)->dev.parent,			\
@@ -46,9 +47,6 @@
 #define netdev_info(dev, format, args...)			\
 	netdev_printk(KERN_INFO, dev, format, ##args)
 
-/* mask netdev_dbg as RHEL6 backports this */
-#if !defined(netdev_dbg)
-
 #if defined(DEBUG)
 #define netdev_dbg(__dev, format, args...)			\
 	netdev_printk(KERN_DEBUG, __dev, format, ##args)
@@ -67,11 +65,6 @@ do {								\
 })
 #endif
 
-#endif
-
-/* mask netdev_vdbg as RHEL6 backports this */
-#if !defined(netdev_dbg)
-
 #if defined(VERBOSE_DEBUG)
 #define netdev_vdbg	netdev_dbg
 #else
@@ -82,8 +75,6 @@ do {								\
 		netdev_printk(KERN_DEBUG, dev, format, ##args);	\
 	0;							\
 })
-#endif
-
 #endif
 
 /*
@@ -117,9 +108,6 @@ do {					  			\
 #define netif_info(priv, type, dev, fmt, args...)		\
 	netif_printk(priv, type, KERN_INFO, (dev), fmt, ##args)
 
-/* mask netif_dbg as RHEL6 backports this */
-#if !defined(netif_dbg)
-
 #if defined(DEBUG)
 #define netif_dbg(priv, type, dev, format, args...)		\
 	netif_printk(priv, type, KERN_DEBUG, dev, format, ##args)
@@ -140,11 +128,6 @@ do {								\
 })
 #endif
 
-#endif
-
-/* mask netif_vdbg as RHEL6 backports this */
-#if !defined(netif_vdbg)
-
 #if defined(VERBOSE_DEBUG)
 #define netif_vdbg	netdev_dbg
 #else
@@ -154,7 +137,6 @@ do {								\
 		netif_printk(KERN_DEBUG, dev, format, ##args);	\
 	0;							\
 })
-#endif
 #endif
 /* source: include/linux/netdevice.h */
 
@@ -231,8 +213,6 @@ do {							\
 #define usb_alloc_coherent(dev, size, mem_flags, dma) usb_buffer_alloc(dev, size, mem_flags, dma)
 #define usb_free_coherent(dev, size, addr, dma) usb_buffer_free(dev, size, addr, dma)
 
-/* only include this if DEFINE_DMA_UNMAP_ADDR is not set as debian squeeze also backports this  */
-#ifndef DEFINE_DMA_UNMAP_ADDR
 #ifdef CONFIG_NEED_DMA_MAP_STATE
 #define DEFINE_DMA_UNMAP_ADDR(ADDR_NAME)        dma_addr_t ADDR_NAME
 #define DEFINE_DMA_UNMAP_LEN(LEN_NAME)          __u32 LEN_NAME
@@ -248,10 +228,6 @@ do {							\
 #define dma_unmap_len(PTR, LEN_NAME)             (0)
 #define dma_unmap_len_set(PTR, LEN_NAME, VAL)    do { } while (0)
 #endif
-#endif
-
-/* mask dma_set_coherent_mask as debian squeeze also backports this */
-#define dma_set_coherent_mask(a, b) compat_dma_set_coherent_mask(a, b)
 
 static inline int dma_set_coherent_mask(struct device *dev, u64 mask)
 {
@@ -276,21 +252,6 @@ static inline int usb_disable_autosuspend(struct usb_device *udev)
 #define rcu_dereference_raw(p)	rcu_dereference(p)
 
 #define KEY_WPS_BUTTON		0x211	/* WiFi Protected Setup key */
-
-/*
- * This looks more complex than it should be. But we need to
- * get the type for the ~ right in round_down (it needs to be
- * as wide as the result!), and we want to evaluate the macro
- * arguments just once each.
- */
-#define __round_mask(x, y) ((__typeof__(x))((y)-1))
-#define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
-#define round_down(x, y) ((x) & ~__round_mask(x, y))
-
-static inline int rcu_read_lock_held(void)
-{
-	return 1;
-}
 
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34)) */
 

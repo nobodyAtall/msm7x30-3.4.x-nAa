@@ -37,6 +37,25 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	if (!local->open_count)
 		goto suspend;
 
+	/* PM code has a watchdog to trigger a BUG when
+	 * suspend callback is not returning in several seconds.
+	 * Some WLAN hardware has longer timeouts for non-interruptible
+	 * configuration-related operations, leading to the watchdog
+	 * timeout while ieee80211_scan_cancel is waiting on the mutex.
+	 *
+	 * The code below checks if interface mutex is already held
+	 * and rejects suspend if there is a possibility of locking.
+	 *
+	 * It's a bit racy, but handles most of cases.
+	 */
+	if (mutex_trylock(&local->mtx))
+		mutex_unlock(&local->mtx);
+	else {
+		wiphy_warn(hw->wiphy, "Suspend when operation "
+			"is in progress. Suspend aborted.\n");
+		return -EBUSY;
+	}
+
 	ieee80211_scan_cancel(local);
 
 	if (hw->flags & IEEE80211_HW_AMPDU_AGGREGATION) {
@@ -75,30 +94,17 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	local->wowlan = wowlan && local->open_count;
 	if (local->wowlan) {
 		int err = drv_suspend(local, wowlan);
-		if (err < 0) {
-			local->quiescing = false;
+		if (err) {
 			local->wowlan = false;
-			if (hw->flags & IEEE80211_HW_AMPDU_AGGREGATION) {
-				mutex_lock(&local->sta_mtx);
-				list_for_each_entry(sta,
-						    &local->sta_list, list) {
-					clear_sta_flag(sta, WLAN_STA_BLOCK_BA);
-				}
-				mutex_unlock(&local->sta_mtx);
-			}
+			local->quiescing = false;
 			ieee80211_wake_queues_by_reason(hw,
 					IEEE80211_QUEUE_STOP_REASON_SUSPEND);
 			return err;
-		} else if (err > 0) {
-			WARN_ON(err != 1);
-			local->wowlan = false;
-		} else {
-			list_for_each_entry(sdata, &local->interfaces, list) {
-				cancel_work_sync(&sdata->work);
-				ieee80211_quiesce(sdata);
-			}
-			goto suspend;
 		}
+		list_for_each_entry(sdata, &local->interfaces, list) {
+			cancel_work_sync(&sdata->work);
+		}
+		goto suspend;
 	}
 
 	/* disable keys */
@@ -136,7 +142,7 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 		ieee80211_bss_info_change_notify(sdata,
 			BSS_CHANGED_BEACON_ENABLED);
 
-		drv_remove_interface(local, sdata);
+		drv_remove_interface(local, &sdata->vif);
 	}
 
 	/* stop hardware - this must stop RX */

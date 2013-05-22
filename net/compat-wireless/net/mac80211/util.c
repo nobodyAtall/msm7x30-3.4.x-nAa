@@ -13,7 +13,6 @@
 
 #include <net/mac80211.h>
 #include <linux/netdevice.h>
-#include <linux/export.h>
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/skbuff.h>
@@ -97,13 +96,13 @@ u8 *ieee80211_get_bssid(struct ieee80211_hdr *hdr, size_t len,
 
 void ieee80211_tx_set_protected(struct ieee80211_tx_data *tx)
 {
-	struct sk_buff *skb;
+	struct sk_buff *skb = tx->skb;
 	struct ieee80211_hdr *hdr;
 
-	skb_queue_walk(&tx->skbs, skb) {
+	do {
 		hdr = (struct ieee80211_hdr *) skb->data;
 		hdr->frame_control |= cpu_to_le16(IEEE80211_FCTL_PROTECTED);
-	}
+	} while ((skb = skb->next));
 }
 
 int ieee80211_frame_duration(struct ieee80211_local *local, size_t len,
@@ -590,6 +589,12 @@ void ieee80211_queue_delayed_work(struct ieee80211_hw *hw,
 }
 EXPORT_SYMBOL(ieee80211_queue_delayed_work);
 
+void ieee802_11_parse_elems(u8 *start, size_t len,
+			    struct ieee802_11_elems *elems)
+{
+	ieee802_11_parse_elems_crc(start, len, elems, 0, 0);
+}
+
 u32 ieee802_11_parse_elems_crc(u8 *start, size_t len,
 			       struct ieee802_11_elems *elems,
 			       u64 filter, u32 crc)
@@ -673,6 +678,24 @@ u32 ieee802_11_parse_elems_crc(u8 *start, size_t len,
 					}
 				}
 			}
+			if (elen >= 4 && pos[0] == 0x50 && pos[1] == 0x6F &&
+			    pos[2] == 0x9A) {
+				/* P2P OUI (50:6F:9A) */
+				if (calc_crc)
+					crc = crc32_be(crc, pos - 2, elen + 2);
+
+				if (!elems->p2p_ie) {
+					elems->p2p_ie = pos - 2;
+					elems->p2p_ie_len = elen + 2;
+				} else if (elems->p2p_ie + elems->p2p_ie_len ==
+					pos - 2) {
+					/*
+					* if the two P2P IE
+					* are next to each other
+					*/
+					elems->p2p_ie_len += elen + 2;
+				}
+			}
 			break;
 		case WLAN_EID_RSN:
 			elems->rsn = pos;
@@ -702,9 +725,9 @@ u32 ieee802_11_parse_elems_crc(u8 *start, size_t len,
 			if (elen >= sizeof(struct ieee80211_meshconf_ie))
 				elems->mesh_config = (void *)pos;
 			break;
-		case WLAN_EID_PEER_MGMT:
-			elems->peering = pos;
-			elems->peering_len = elen;
+		case WLAN_EID_PEER_LINK:
+			elems->peer_link = pos;
+			elems->peer_link_len = elen;
 			break;
 		case WLAN_EID_PREQ:
 			elems->preq = pos;
@@ -754,12 +777,6 @@ u32 ieee802_11_parse_elems_crc(u8 *start, size_t len,
 	}
 
 	return crc;
-}
-
-void ieee802_11_parse_elems(u8 *start, size_t len,
-			    struct ieee802_11_elems *elems)
-{
-	ieee802_11_parse_elems_crc(start, len, elems, 0, 0);
 }
 
 void ieee80211_set_wmm_default(struct ieee80211_sub_if_data *sdata)
@@ -822,8 +839,7 @@ void ieee80211_set_wmm_default(struct ieee80211_sub_if_data *sdata)
 
 		qparam.uapsd = false;
 
-		sdata->tx_conf[queue] = qparam;
-		drv_conf_tx(local, sdata, queue, &qparam);
+		drv_conf_tx(local, queue, &qparam);
 	}
 
 	/* after reinitialize QoS TX queues setting to default,
@@ -897,9 +913,11 @@ void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 
 	skb = dev_alloc_skb(local->hw.extra_tx_headroom +
 			    sizeof(*mgmt) + 6 + extra_len);
-	if (!skb)
+	if (!skb) {
+		printk(KERN_DEBUG "%s: failed to allocate buffer for auth "
+		       "frame\n", sdata->name);
 		return;
-
+	}
 	skb_reserve(skb, local->hw.extra_tx_headroom);
 
 	mgmt = (struct ieee80211_mgmt *) skb_put(skb, 24 + 6);
@@ -939,8 +957,6 @@ int ieee80211_build_preq_ies(struct ieee80211_local *local, u8 *buffer,
 	int ext_rates_len;
 
 	sband = local->hw.wiphy->bands[band];
-	if (WARN_ON_ONCE(!sband))
-		return 0;
 
 	pos = buffer;
 
@@ -1006,9 +1022,23 @@ int ieee80211_build_preq_ies(struct ieee80211_local *local, u8 *buffer,
 		offset = noffset;
 	}
 
-	if (sband->ht_cap.ht_supported)
-		pos = ieee80211_ie_build_ht_cap(pos, &sband->ht_cap,
-						sband->ht_cap.cap);
+	if (sband->ht_cap.ht_supported) {
+		u16 cap = sband->ht_cap.cap;
+		__le16 tmp;
+
+		*pos++ = WLAN_EID_HT_CAPABILITY;
+		*pos++ = sizeof(struct ieee80211_ht_cap);
+		memset(pos, 0, sizeof(struct ieee80211_ht_cap));
+		tmp = cpu_to_le16(cap);
+		memcpy(pos, &tmp, sizeof(u16));
+		pos += sizeof(u16);
+		*pos++ = sband->ht_cap.ampdu_factor |
+			 (sband->ht_cap.ampdu_density <<
+				IEEE80211_HT_AMPDU_PARM_DENSITY_SHIFT);
+		memcpy(pos, &sband->ht_cap.mcs, sizeof(sband->ht_cap.mcs));
+		pos += sizeof(sband->ht_cap.mcs);
+		pos += 2 + 4 + 1; /* ext info, BF cap, antsel */
+	}
 
 	/*
 	 * If adding more here, adjust code in main.c
@@ -1028,8 +1058,7 @@ int ieee80211_build_preq_ies(struct ieee80211_local *local, u8 *buffer,
 struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 					  u8 *dst, u32 ratemask,
 					  const u8 *ssid, size_t ssid_len,
-					  const u8 *ie, size_t ie_len,
-					  bool directed)
+					  const u8 *ie, size_t ie_len)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct sk_buff *skb;
@@ -1040,19 +1069,14 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 
 	/* FIXME: come up with a proper value */
 	buf = kmalloc(200 + ie_len, GFP_KERNEL);
-	if (!buf)
+	if (!buf) {
+		printk(KERN_DEBUG "%s: failed to allocate temporary IE "
+		       "buffer\n", sdata->name);
 		return NULL;
+	}
 
-	/*
-	 * Do not send DS Channel parameter for directed probe requests
-	 * in order to maximize the chance that we get a response.  Some
-	 * badly-behaved APs don't respond when this parameter is included.
-	 */
-	if (directed)
-		chan = 0;
-	else
-		chan = ieee80211_frequency_to_channel(
-			local->hw.conf.channel->center_freq);
+	chan = ieee80211_frequency_to_channel(
+		local->hw.conf.channel->center_freq);
 
 	buf_len = ieee80211_build_preq_ies(local, buf, ie, ie_len,
 					   local->hw.conf.channel->band,
@@ -1061,8 +1085,6 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 	skb = ieee80211_probereq_get(&local->hw, &sdata->vif,
 				     ssid, ssid_len,
 				     buf, buf_len);
-	if (!skb)
-		goto out;
 
 	if (dst) {
 		mgmt = (struct ieee80211_mgmt *) skb->data;
@@ -1071,8 +1093,6 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 	}
 
 	IEEE80211_SKB_CB(skb)->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT;
-
- out:
 	kfree(buf);
 
 	return skb;
@@ -1081,12 +1101,12 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 void ieee80211_send_probe_req(struct ieee80211_sub_if_data *sdata, u8 *dst,
 			      const u8 *ssid, size_t ssid_len,
 			      const u8 *ie, size_t ie_len,
-			      u32 ratemask, bool directed, bool no_cck)
+			      u32 ratemask, bool no_cck)
 {
 	struct sk_buff *skb;
 
 	skb = ieee80211_build_probe_req(sdata, dst, ratemask, ssid, ssid_len,
-					ie, ie_len, directed);
+			ie, ie_len);
 	if (skb) {
 		if (no_cck)
 			IEEE80211_SKB_CB(skb)->flags |=
@@ -1147,16 +1167,24 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 	struct ieee80211_hw *hw = &local->hw;
 	struct ieee80211_sub_if_data *sdata;
 	struct sta_info *sta;
-	int res, i;
+	int res;
 
 #ifdef CONFIG_PM
 	if (local->suspended)
 		local->resuming = true;
 
 	if (local->wowlan) {
+		bool suspended = local->suspended;
 		local->wowlan = false;
+		/*
+		* When the driver is resumed, first data is dropped
+		* by MAC layer. To eliminate it, the local->suspended
+		* should be clear.
+		*/
+		local->suspended = false;
 		res = drv_resume(local);
 		if (res < 0) {
+			local->suspended = suspended;
 			local->resuming = false;
 			return res;
 		}
@@ -1206,46 +1234,28 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 		if (sdata->vif.type != NL80211_IFTYPE_AP_VLAN &&
 		    sdata->vif.type != NL80211_IFTYPE_MONITOR &&
 		    ieee80211_sdata_running(sdata))
-			res = drv_add_interface(local, sdata);
+			res = drv_add_interface(local, &sdata->vif);
 	}
 
 	/* add STAs back */
 	mutex_lock(&local->sta_mtx);
 	list_for_each_entry(sta, &local->sta_list, list) {
-		enum ieee80211_sta_state state;
+		if (sta->uploaded) {
+			sdata = sta->sdata;
+			if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
+				sdata = container_of(sdata->bss,
+					     struct ieee80211_sub_if_data,
+					     u.ap);
 
-		if (!sta->uploaded)
-			continue;
-
-		/* AP-mode stations will be added later */
-		if (sta->sdata->vif.type == NL80211_IFTYPE_AP)
-			continue;
-
-		if (WARN_ON(drv_sta_add(local, sta->sdata, &sta->sta)))
-			continue;
-
-		for (state = IEEE80211_STA_NONE;
-		     state < sta->sta.state; state++)
-			drv_sta_state(local, sta->sdata, &sta->sta, state + 1);
+			WARN_ON(drv_sta_add(local, sdata, &sta->sta));
+		}
 	}
 	mutex_unlock(&local->sta_mtx);
-
-	/* reconfigure tx conf */
-	list_for_each_entry(sdata, &local->interfaces, list) {
-		if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN ||
-		    sdata->vif.type == NL80211_IFTYPE_MONITOR ||
-		    !ieee80211_sdata_running(sdata))
-			continue;
-
-		for (i = 0; i < hw->queues; i++)
-			drv_conf_tx(local, sdata, i, &sdata->tx_conf[i]);
-	}
 
 	/* reconfigure hardware */
 	ieee80211_hw_config(local, ~0);
 
 	ieee80211_configure_filter(local);
-	drv_set_rx_filters(local, local->wowlan_patterns);
 
 	/* Finally also reconfigure all the BSS information */
 	list_for_each_entry(sdata, &local->interfaces, list) {
@@ -1263,13 +1273,11 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 			  BSS_CHANGED_BEACON_INT |
 			  BSS_CHANGED_BSSID |
 			  BSS_CHANGED_CQM |
-			  BSS_CHANGED_QOS |
-			  BSS_CHANGED_IDLE;
+			  BSS_CHANGED_QOS;
 
 		switch (sdata->vif.type) {
 		case NL80211_IFTYPE_STATION:
-			changed |= BSS_CHANGED_ASSOC |
-				   BSS_CHANGED_ARP_FILTER;
+			changed |= BSS_CHANGED_ASSOC;
 			mutex_lock(&sdata->u.mgd.mtx);
 			ieee80211_bss_info_change_notify(sdata, changed);
 			mutex_unlock(&sdata->u.mgd.mtx);
@@ -1278,12 +1286,6 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 			changed |= BSS_CHANGED_IBSS;
 			/* fall through */
 		case NL80211_IFTYPE_AP:
-			changed |= BSS_CHANGED_SSID;
-
-			if (sdata->vif.type == NL80211_IFTYPE_AP)
-				changed |= BSS_CHANGED_AP_PROBE_RESP;
-
-			/* fall through */
 		case NL80211_IFTYPE_MESH_POINT:
 			changed |= BSS_CHANGED_BEACON |
 				   BSS_CHANGED_BEACON_ENABLED;
@@ -1303,51 +1305,6 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 			break;
 		}
 	}
-
-	ieee80211_recalc_ps(local, -1);
-	/*
-	 * The sta might be in psm against the ap (e.g. because
-	 * that's the state it was before the hw restart), so we
-	 * explicitly send a null packet in order to make sure it'll
-	 * sync against the ap.
-	 */
-	if (!(local->hw.conf.flags & IEEE80211_CONF_PS)) {
-		list_for_each_entry(sdata, &local->interfaces, list) {
-			if (sdata->vif.type != NL80211_IFTYPE_STATION)
-				continue;
-
-			ieee80211_send_nullfunc(local, sdata, 0);
-		}
-	}
-
-	/* APs are now beaconing, add back stations */
-	mutex_lock(&local->sta_mtx);
-	list_for_each_entry(sta, &local->sta_list, list) {
-		enum ieee80211_sta_state state;
-
-		if (!sta->uploaded)
-			continue;
-
-		if (sta->sdata->vif.type != NL80211_IFTYPE_AP)
-			continue;
-
-		if (WARN_ON(drv_sta_add(local, sta->sdata, &sta->sta)))
-			continue;
-
-		for (state = IEEE80211_STA_NONE;
-		     state < sta->sta.state; state++)
-			drv_sta_state(local, sta->sdata, &sta->sta, state + 1);
-	}
-	mutex_unlock(&local->sta_mtx);
-
-	/* add back keys */
-	list_for_each_entry(sdata, &local->interfaces, list)
-		if (ieee80211_sdata_running(sdata))
-			ieee80211_enable_keys(sdata);
-
- wake_up:
-	local->in_reconfig = false;
-	barrier();
 
 	/*
 	 * Clear the WLAN_STA_BLOCK_BA flag so new aggregation
@@ -1370,6 +1327,12 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 		mutex_unlock(&local->sta_mtx);
 	}
 
+	/* add back keys */
+	list_for_each_entry(sdata, &local->interfaces, list)
+		if (ieee80211_sdata_running(sdata))
+			ieee80211_enable_keys(sdata);
+
+ wake_up:
 	ieee80211_wake_queues_by_reason(hw,
 			IEEE80211_QUEUE_STOP_REASON_SUSPEND);
 
@@ -1413,33 +1376,6 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 #endif
 	return 0;
 }
-
-void ieee80211_resume_disconnect(struct ieee80211_vif *vif)
-{
-	struct ieee80211_sub_if_data *sdata;
-	struct ieee80211_local *local;
-	struct ieee80211_key *key;
-
-	if (WARN_ON(!vif))
-		return;
-
-	sdata = vif_to_sdata(vif);
-	local = sdata->local;
-
-	if (WARN_ON(!local->resuming))
-		return;
-
-	if (WARN_ON(vif->type != NL80211_IFTYPE_STATION))
-		return;
-
-	sdata->flags |= IEEE80211_SDATA_DISCONNECT_RESUME;
-
-	mutex_lock(&local->key_mtx);
-	list_for_each_entry(key, &sdata->key_list, list)
-		key->flags |= KEY_FLAG_TAINTED;
-	mutex_unlock(&local->key_mtx);
-}
-EXPORT_SYMBOL_GPL(ieee80211_resume_disconnect);
 
 static int check_mgd_smps(struct ieee80211_if_managed *ifmgd,
 			  enum ieee80211_smps_mode *smps_mode)
@@ -1557,257 +1493,3 @@ size_t ieee80211_ie_split_vendor(const u8 *ies, size_t ielen, size_t offset)
 
 	return pos;
 }
-
-static void _ieee80211_enable_rssi_reports(struct ieee80211_sub_if_data *sdata,
-					    int rssi_min_thold,
-					    int rssi_max_thold)
-{
-	trace_api_enable_rssi_reports(sdata, rssi_min_thold, rssi_max_thold);
-
-	if (WARN_ON(sdata->vif.type != NL80211_IFTYPE_STATION))
-		return;
-
-	/*
-	 * Scale up threshold values before storing it, as the RSSI averaging
-	 * algorithm uses a scaled up value as well. Change this scaling
-	 * factor if the RSSI averaging algorithm changes.
-	 */
-	sdata->u.mgd.rssi_min_thold = rssi_min_thold*16;
-	sdata->u.mgd.rssi_max_thold = rssi_max_thold*16;
-}
-
-void ieee80211_enable_rssi_reports(struct ieee80211_vif *vif,
-				    int rssi_min_thold,
-				    int rssi_max_thold)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-
-	WARN_ON(rssi_min_thold == rssi_max_thold ||
-		rssi_min_thold > rssi_max_thold);
-
-	_ieee80211_enable_rssi_reports(sdata, rssi_min_thold,
-				       rssi_max_thold);
-}
-EXPORT_SYMBOL(ieee80211_enable_rssi_reports);
-
-void ieee80211_disable_rssi_reports(struct ieee80211_vif *vif)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-
-	_ieee80211_enable_rssi_reports(sdata, 0, 0);
-}
-EXPORT_SYMBOL(ieee80211_disable_rssi_reports);
-
-u8 *ieee80211_ie_build_ht_cap(u8 *pos, struct ieee80211_sta_ht_cap *ht_cap,
-			      u16 cap)
-{
-	__le16 tmp;
-
-	*pos++ = WLAN_EID_HT_CAPABILITY;
-	*pos++ = sizeof(struct ieee80211_ht_cap);
-	memset(pos, 0, sizeof(struct ieee80211_ht_cap));
-
-	/* capability flags */
-	tmp = cpu_to_le16(cap);
-	memcpy(pos, &tmp, sizeof(u16));
-	pos += sizeof(u16);
-
-	/* AMPDU parameters */
-	*pos++ = ht_cap->ampdu_factor |
-		 (ht_cap->ampdu_density <<
-			IEEE80211_HT_AMPDU_PARM_DENSITY_SHIFT);
-
-	/* MCS set */
-	memcpy(pos, &ht_cap->mcs, sizeof(ht_cap->mcs));
-	pos += sizeof(ht_cap->mcs);
-
-	/* extended capabilities */
-	pos += sizeof(__le16);
-
-	/* BF capabilities */
-	pos += sizeof(__le32);
-
-	/* antenna selection */
-	pos += sizeof(u8);
-
-	return pos;
-}
-
-u8 *ieee80211_ie_build_ht_info(u8 *pos,
-			       struct ieee80211_sta_ht_cap *ht_cap,
-			       struct ieee80211_channel *channel,
-			       enum nl80211_channel_type channel_type)
-{
-	struct ieee80211_ht_info *ht_info;
-	/* Build HT Information */
-	*pos++ = WLAN_EID_HT_INFORMATION;
-	*pos++ = sizeof(struct ieee80211_ht_info);
-	ht_info = (struct ieee80211_ht_info *)pos;
-	ht_info->control_chan =
-			ieee80211_frequency_to_channel(channel->center_freq);
-	switch (channel_type) {
-	case NL80211_CHAN_HT40MINUS:
-		ht_info->ht_param = IEEE80211_HT_PARAM_CHA_SEC_BELOW;
-		break;
-	case NL80211_CHAN_HT40PLUS:
-		ht_info->ht_param = IEEE80211_HT_PARAM_CHA_SEC_ABOVE;
-		break;
-	case NL80211_CHAN_HT20:
-	default:
-		ht_info->ht_param = IEEE80211_HT_PARAM_CHA_SEC_NONE;
-		break;
-	}
-	if (ht_cap->cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40)
-		ht_info->ht_param |= IEEE80211_HT_PARAM_CHAN_WIDTH_ANY;
-
-	/*
-	 * Note: According to 802.11n-2009 9.13.3.1, HT Protection field and
-	 * RIFS Mode are reserved in IBSS mode, therefore keep them at 0
-	 */
-	ht_info->operation_mode = 0x0000;
-	ht_info->stbc_param = 0x0000;
-
-	/* It seems that Basic MCS set and Supported MCS set
-	   are identical for the first 10 bytes */
-	memset(&ht_info->basic_set, 0, 16);
-	memcpy(&ht_info->basic_set, &ht_cap->mcs, 10);
-
-	return pos + sizeof(struct ieee80211_ht_info);
-}
-
-enum nl80211_channel_type
-ieee80211_ht_info_to_channel_type(struct ieee80211_ht_info *ht_info)
-{
-	enum nl80211_channel_type channel_type;
-
-	if (!ht_info)
-		return NL80211_CHAN_NO_HT;
-
-	switch (ht_info->ht_param & IEEE80211_HT_PARAM_CHA_SEC_OFFSET) {
-	case IEEE80211_HT_PARAM_CHA_SEC_NONE:
-		channel_type = NL80211_CHAN_HT20;
-		break;
-	case IEEE80211_HT_PARAM_CHA_SEC_ABOVE:
-		channel_type = NL80211_CHAN_HT40PLUS;
-		break;
-	case IEEE80211_HT_PARAM_CHA_SEC_BELOW:
-		channel_type = NL80211_CHAN_HT40MINUS;
-		break;
-	default:
-		channel_type = NL80211_CHAN_NO_HT;
-	}
-
-	return channel_type;
-}
-
-int ieee80211_add_srates_ie(struct ieee80211_vif *vif, struct sk_buff *skb)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_supported_band *sband;
-	int rate;
-	u8 i, rates, *pos;
-
-	sband = local->hw.wiphy->bands[local->hw.conf.channel->band];
-	rates = sband->n_bitrates;
-	if (rates > 8)
-		rates = 8;
-
-	if (skb_tailroom(skb) < rates + 2)
-		return -ENOMEM;
-
-	pos = skb_put(skb, rates + 2);
-	*pos++ = WLAN_EID_SUPP_RATES;
-	*pos++ = rates;
-	for (i = 0; i < rates; i++) {
-		rate = sband->bitrates[i].bitrate;
-		*pos++ = (u8) (rate / 5);
-	}
-
-	return 0;
-}
-
-int ieee80211_add_ext_srates_ie(struct ieee80211_vif *vif, struct sk_buff *skb)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_supported_band *sband;
-	int rate;
-	u8 i, exrates, *pos;
-
-	sband = local->hw.wiphy->bands[local->hw.conf.channel->band];
-	exrates = sband->n_bitrates;
-	if (exrates > 8)
-		exrates -= 8;
-	else
-		exrates = 0;
-
-	if (skb_tailroom(skb) < exrates + 2)
-		return -ENOMEM;
-
-	if (exrates) {
-		pos = skb_put(skb, exrates + 2);
-		*pos++ = WLAN_EID_EXT_SUPP_RATES;
-		*pos++ = exrates;
-		for (i = 8; i < sband->n_bitrates; i++) {
-			rate = sband->bitrates[i].bitrate;
-			*pos++ = (u8) (rate / 5);
-		}
-	}
-	return 0;
-}
-
-int ieee80211_get_open_count(struct ieee80211_hw *hw,
-			     struct ieee80211_vif *exclude_vif)
-{
-	struct ieee80211_local *local = hw_to_local(hw);
-	struct ieee80211_sub_if_data *sdata;
-	int count = 0;
-
-	list_for_each_entry(sdata, &local->interfaces, list) {
-		if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN ||
-		    sdata->vif.type == NL80211_IFTYPE_MONITOR ||
-		    !ieee80211_sdata_running(sdata))
-			continue;
-
-		if (exclude_vif == &sdata->vif)
-			continue;
-
-		count++;
-	}
-	return count;
-}
-EXPORT_SYMBOL(ieee80211_get_open_count);
-
-bool ieee80211_suspending(struct ieee80211_hw *hw)
-{
-	struct ieee80211_local *local = hw_to_local(hw);
-
-	return local->quiescing;
-}
-EXPORT_SYMBOL(ieee80211_suspending);
-
-int ieee80211_started_vifs_count(struct ieee80211_hw *hw)
-{
-	struct ieee80211_local *local = hw_to_local(hw);
-	struct ieee80211_sub_if_data *sdata;
-	int count = 0;
-
-	rcu_read_lock();
-
-	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
-		if (!ieee80211_sdata_running(sdata))
-			continue;
-
-		if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN ||
-		    sdata->vif.type == NL80211_IFTYPE_MONITOR)
-			continue;
-
-		if (!sdata->vif.bss_conf.idle)
-			count++;
-	}
-
-	rcu_read_unlock();
-	return count;
-}
-EXPORT_SYMBOL(ieee80211_started_vifs_count);

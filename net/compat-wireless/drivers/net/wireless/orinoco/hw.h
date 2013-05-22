@@ -22,6 +22,9 @@
 
 /* Forward declarations */
 struct orinoco_private;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35))
+struct dev_addr_list;
+#endif
 
 int determine_fw_capabilities(struct orinoco_private *priv, char *fw_name,
 			      size_t fw_name_len, u32 *hw_ver);
@@ -45,7 +48,7 @@ int __orinoco_hw_set_multicast_list(struct orinoco_private *priv,
 				    struct net_device *dev,
 				    int mc_count, int promisc);
 int orinoco_hw_get_essid(struct orinoco_private *priv, int *active,
-			 char buf[IW_ESSID_MAX_SIZE + 1]);
+			 char buf[IW_ESSID_MAX_SIZE+1]);
 int orinoco_hw_get_freq(struct orinoco_private *priv);
 int orinoco_hw_get_bitratelist(struct orinoco_private *priv,
 			       int *numrates, s32 *rates, int max);

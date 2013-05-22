@@ -330,12 +330,13 @@ ieee80211_crypto_wep_encrypt(struct ieee80211_tx_data *tx)
 
 	ieee80211_tx_set_protected(tx);
 
-	skb_queue_walk(&tx->skbs, skb) {
+	skb = tx->skb;
+	do {
 		if (wep_encrypt_skb(tx, skb) < 0) {
 			I802_DEBUG_INC(tx->local->tx_handlers_drop_wep);
 			return TX_DROP;
 		}
-	}
+	} while ((skb = skb->next));
 
 	return TX_CONTINUE;
 }

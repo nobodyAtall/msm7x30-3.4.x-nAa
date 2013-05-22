@@ -28,7 +28,7 @@
 
 /* sparse doesn't like tracepoint macros */
 #ifndef __CHECKER__
-#include "iwl-trans.h"
+#include "iwl-dev.h"
 
 #define CREATE_TRACE_POINTS
 #include "iwl-devtrace.h"

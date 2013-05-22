@@ -1,11 +1,9 @@
 /*
  * This file contains the handling of TX in wlan driver.
  */
-#include <linux/hardirq.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/sched.h>
-#include <linux/export.h>
 #include <net/cfg80211.h>
 
 #include "host.h"
@@ -13,7 +11,6 @@
 #include "decl.h"
 #include "defs.h"
 #include "dev.h"
-#include "mesh.h"
 
 /**
  * convert_radiotap_rate_to_mv - converts Tx/Rx rates from IEEE80211_RADIOTAP_RATE
@@ -201,7 +198,7 @@ void lbs_send_tx_feedback(struct lbs_private *priv, u32 try_count)
 	if (priv->connect_status == LBS_CONNECTED)
 		netif_wake_queue(priv->dev);
 
-	if (priv->mesh_dev && netif_running(priv->mesh_dev))
+	if (priv->mesh_dev && lbs_mesh_connected(priv))
 		netif_wake_queue(priv->mesh_dev);
 }
 EXPORT_SYMBOL_GPL(lbs_send_tx_feedback);

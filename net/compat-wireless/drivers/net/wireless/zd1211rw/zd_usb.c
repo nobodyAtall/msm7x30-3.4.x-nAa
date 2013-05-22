@@ -28,7 +28,6 @@
 #include <linux/skbuff.h>
 #include <linux/usb.h>
 #include <linux/workqueue.h>
-#include <linux/module.h>
 #include <net/mac80211.h>
 #include <asm/unaligned.h>
 
@@ -111,9 +110,6 @@ MODULE_DEVICE_TABLE(usb, usb_ids);
 
 #define FW_ZD1211_PREFIX	"zd1211/zd1211_"
 #define FW_ZD1211B_PREFIX	"zd1211/zd1211b_"
-
-static bool check_read_regs(struct zd_usb *usb, struct usb_req_read_regs *req,
-			    unsigned int count);
 
 /* USB device initialization */
 static void int_urb_complete(struct urb *urb);
@@ -369,20 +365,6 @@ exit:
 
 #define urb_dev(urb) (&(urb)->dev->dev)
 
-static inline void handle_regs_int_override(struct urb *urb)
-{
-	struct zd_usb *usb = urb->context;
-	struct zd_usb_interrupt *intr = &usb->intr;
-
-	spin_lock(&intr->lock);
-	if (atomic_read(&intr->read_regs_enabled)) {
-		atomic_set(&intr->read_regs_enabled, 0);
-		intr->read_regs_int_overridden = 1;
-		complete(&intr->read_regs.completion);
-	}
-	spin_unlock(&intr->lock);
-}
-
 static inline void handle_regs_int(struct urb *urb)
 {
 	struct zd_usb *usb = urb->context;
@@ -401,45 +383,25 @@ static inline void handle_regs_int(struct urb *urb)
 				USB_MAX_EP_INT_BUFFER);
 		spin_unlock(&mac->lock);
 		schedule_work(&mac->process_intr);
-	} else if (atomic_read(&intr->read_regs_enabled)) {
-		len = urb->actual_length;
-		intr->read_regs.length = urb->actual_length;
+	} else if (intr->read_regs_enabled) {
+		intr->read_regs.length = len = urb->actual_length;
+
 		if (len > sizeof(intr->read_regs.buffer))
 			len = sizeof(intr->read_regs.buffer);
-
 		memcpy(intr->read_regs.buffer, urb->transfer_buffer, len);
-
-		/* Sometimes USB_INT_ID_REGS is not overridden, but comes after
-		 * USB_INT_ID_RETRY_FAILED. Read-reg retry then gets this
-		 * delayed USB_INT_ID_REGS, but leaves USB_INT_ID_REGS of
-		 * retry unhandled. Next read-reg command then might catch
-		 * this wrong USB_INT_ID_REGS. Fix by ignoring wrong reads.
-		 */
-		if (!check_read_regs(usb, intr->read_regs.req,
-						intr->read_regs.req_count))
-			goto out;
-
-		atomic_set(&intr->read_regs_enabled, 0);
-		intr->read_regs_int_overridden = 0;
+		intr->read_regs_enabled = 0;
 		complete(&intr->read_regs.completion);
-
 		goto out;
 	}
 
 out:
 	spin_unlock(&intr->lock);
-
-	/* CR_INTERRUPT might override read_reg too. */
-	if (int_num == CR_INTERRUPT && atomic_read(&intr->read_regs_enabled))
-		handle_regs_int_override(urb);
 }
 
 static void int_urb_complete(struct urb *urb)
 {
 	int r;
 	struct usb_int_header *hdr;
-	struct zd_usb *usb;
-	struct zd_usb_interrupt *intr;
 
 	switch (urb->status) {
 	case 0:
@@ -467,14 +429,6 @@ static void int_urb_complete(struct urb *urb)
 		dev_dbg_f(urb_dev(urb), "error: urb %p wrong type\n", urb);
 		goto resubmit;
 	}
-
-	/* USB_INT_ID_RETRY_FAILED triggered by tx-urb submit can override
-	 * pending USB_INT_ID_REGS causing read command timeout.
-	 */
-	usb = urb->context;
-	intr = &usb->intr;
-	if (hdr->id != USB_INT_ID_REGS && atomic_read(&intr->read_regs_enabled))
-		handle_regs_int_override(urb);
 
 	switch (hdr->id) {
 	case USB_INT_ID_REGS:
@@ -625,8 +579,8 @@ static void handle_rx_packet(struct zd_usb *usb, const u8 *buffer,
 
 	if (length < sizeof(struct rx_length_info)) {
 		/* It's not a complete packet anyhow. */
-		dev_dbg_f(zd_usb_dev(usb), "invalid, small RX packet : %d\n",
-					   length);
+		printk("%s: invalid, small RX packet : %d\n",
+		       __func__, length);
 		return;
 	}
 	length_info = (struct rx_length_info *)
@@ -1175,7 +1129,6 @@ static inline void init_usb_interrupt(struct zd_usb *usb)
 	spin_lock_init(&intr->lock);
 	intr->interval = int_urb_interval(zd_usb_to_usbdev(usb));
 	init_completion(&intr->read_regs.completion);
-	atomic_set(&intr->read_regs_enabled, 0);
 	intr->read_regs.cr_int_addr = cpu_to_le16((u16)CR_INTERRUPT);
 }
 
@@ -1610,16 +1563,12 @@ static int usb_int_regs_length(unsigned int count)
 	return sizeof(struct usb_int_regs) + count * sizeof(struct reg_data);
 }
 
-static void prepare_read_regs_int(struct zd_usb *usb,
-				  struct usb_req_read_regs *req,
-				  unsigned int count)
+static void prepare_read_regs_int(struct zd_usb *usb)
 {
 	struct zd_usb_interrupt *intr = &usb->intr;
 
 	spin_lock_irq(&intr->lock);
-	atomic_set(&intr->read_regs_enabled, 1);
-	intr->read_regs.req = req;
-	intr->read_regs.req_count = count;
+	intr->read_regs_enabled = 1;
 	INIT_COMPLETION(intr->read_regs.completion);
 	spin_unlock_irq(&intr->lock);
 }
@@ -1629,52 +1578,12 @@ static void disable_read_regs_int(struct zd_usb *usb)
 	struct zd_usb_interrupt *intr = &usb->intr;
 
 	spin_lock_irq(&intr->lock);
-	atomic_set(&intr->read_regs_enabled, 0);
+	intr->read_regs_enabled = 0;
 	spin_unlock_irq(&intr->lock);
 }
 
-static bool check_read_regs(struct zd_usb *usb, struct usb_req_read_regs *req,
-			    unsigned int count)
-{
-	int i;
-	struct zd_usb_interrupt *intr = &usb->intr;
-	struct read_regs_int *rr = &intr->read_regs;
-	struct usb_int_regs *regs = (struct usb_int_regs *)rr->buffer;
-
-	/* The created block size seems to be larger than expected.
-	 * However results appear to be correct.
-	 */
-	if (rr->length < usb_int_regs_length(count)) {
-		dev_dbg_f(zd_usb_dev(usb),
-			 "error: actual length %d less than expected %d\n",
-			 rr->length, usb_int_regs_length(count));
-		return false;
-	}
-
-	if (rr->length > sizeof(rr->buffer)) {
-		dev_dbg_f(zd_usb_dev(usb),
-			 "error: actual length %d exceeds buffer size %zu\n",
-			 rr->length, sizeof(rr->buffer));
-		return false;
-	}
-
-	for (i = 0; i < count; i++) {
-		struct reg_data *rd = &regs->regs[i];
-		if (rd->addr != req->addr[i]) {
-			dev_dbg_f(zd_usb_dev(usb),
-				 "rd[%d] addr %#06hx expected %#06hx\n", i,
-				 le16_to_cpu(rd->addr),
-				 le16_to_cpu(req->addr[i]));
-			return false;
-		}
-	}
-
-	return true;
-}
-
 static int get_results(struct zd_usb *usb, u16 *values,
-		       struct usb_req_read_regs *req, unsigned int count,
-		       bool *retry)
+	               struct usb_req_read_regs *req, unsigned int count)
 {
 	int r;
 	int i;
@@ -1685,19 +1594,31 @@ static int get_results(struct zd_usb *usb, u16 *values,
 	spin_lock_irq(&intr->lock);
 
 	r = -EIO;
-
-	/* Read failed because firmware bug? */
-	*retry = !!intr->read_regs_int_overridden;
-	if (*retry)
+	/* The created block size seems to be larger than expected.
+	 * However results appear to be correct.
+	 */
+	if (rr->length < usb_int_regs_length(count)) {
+		dev_dbg_f(zd_usb_dev(usb),
+			 "error: actual length %d less than expected %d\n",
+			 rr->length, usb_int_regs_length(count));
 		goto error_unlock;
-
-	if (!check_read_regs(usb, req, count)) {
-		dev_dbg_f(zd_usb_dev(usb), "error: invalid read regs\n");
+	}
+	if (rr->length > sizeof(rr->buffer)) {
+		dev_dbg_f(zd_usb_dev(usb),
+			 "error: actual length %d exceeds buffer size %zu\n",
+			 rr->length, sizeof(rr->buffer));
 		goto error_unlock;
 	}
 
 	for (i = 0; i < count; i++) {
 		struct reg_data *rd = &regs->regs[i];
+		if (rd->addr != req->addr[i]) {
+			dev_dbg_f(zd_usb_dev(usb),
+				 "rd[%d] addr %#06hx expected %#06hx\n", i,
+				 le16_to_cpu(rd->addr),
+				 le16_to_cpu(req->addr[i]));
+			goto error_unlock;
+		}
 		values[i] = le16_to_cpu(rd->value);
 	}
 
@@ -1710,11 +1631,11 @@ error_unlock:
 int zd_usb_ioread16v(struct zd_usb *usb, u16 *values,
 	             const zd_addr_t *addresses, unsigned int count)
 {
-	int r, i, req_len, actual_req_len, try_count = 0;
+	int r;
+	int i, req_len, actual_req_len;
 	struct usb_device *udev;
 	struct usb_req_read_regs *req = NULL;
 	unsigned long timeout;
-	bool retry = false;
 
 	if (count < 1) {
 		dev_dbg_f(zd_usb_dev(usb), "error: count is zero\n");
@@ -1750,10 +1671,8 @@ int zd_usb_ioread16v(struct zd_usb *usb, u16 *values,
 	for (i = 0; i < count; i++)
 		req->addr[i] = cpu_to_le16((u16)addresses[i]);
 
-retry_read:
-	try_count++;
 	udev = zd_usb_to_usbdev(usb);
-	prepare_read_regs_int(usb, req, count);
+	prepare_read_regs_int(usb);
 	r = zd_ep_regs_out_msg(udev, req, req_len, &actual_req_len, 50 /*ms*/);
 	if (r) {
 		dev_dbg_f(zd_usb_dev(usb),
@@ -1777,12 +1696,7 @@ retry_read:
 		goto error;
 	}
 
-	r = get_results(usb, values, req, count, &retry);
-	if (retry && try_count < 20) {
-		dev_dbg_f(zd_usb_dev(usb), "read retry, tries so far: %d\n",
-				try_count);
-		goto retry_read;
-	}
+	r = get_results(usb, values, req, count);
 error:
 	return r;
 }

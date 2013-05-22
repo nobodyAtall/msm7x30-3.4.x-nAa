@@ -9,7 +9,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/export.h>
 #include <net/mac80211.h>
 #include "ieee80211_i.h"
 #include "rate.h"
@@ -163,31 +162,11 @@ static void ieee80211_handle_filtered_frame(struct ieee80211_local *local,
 	dev_kfree_skb(skb);
 }
 
-static void ieee80211_check_pending_bar(struct sta_info *sta, u8 *addr, u8 tid)
-{
-	struct tid_ampdu_tx *tid_tx;
-
-	tid_tx = rcu_dereference(sta->ampdu_mlme.tid_tx[tid]);
-	if (!tid_tx || !tid_tx->bar_pending)
-		return;
-
-	tid_tx->bar_pending = false;
-	ieee80211_send_bar(&sta->sdata->vif, addr, tid, tid_tx->failed_bar_ssn);
-}
-
 static void ieee80211_frame_acked(struct sta_info *sta, struct sk_buff *skb)
 {
 	struct ieee80211_mgmt *mgmt = (void *) skb->data;
 	struct ieee80211_local *local = sta->local;
 	struct ieee80211_sub_if_data *sdata = sta->sdata;
-
-	if (ieee80211_is_data_qos(mgmt->frame_control)) {
-		struct ieee80211_hdr *hdr = (void *) skb->data;
-		u8 *qc = ieee80211_get_qos_ctl(hdr);
-		u16 tid = qc[0] & 0xf;
-
-		ieee80211_check_pending_bar(sta, hdr->addr1, tid);
-	}
 
 	if (ieee80211_is_action(mgmt->frame_control) &&
 	    sdata->vif.type == NL80211_IFTYPE_STATION &&
@@ -217,114 +196,6 @@ static void ieee80211_frame_acked(struct sta_info *sta, struct sk_buff *skb)
 	}
 }
 
-static void ieee80211_set_bar_pending(struct sta_info *sta, u8 tid, u16 ssn)
-{
-	struct tid_ampdu_tx *tid_tx;
-
-	tid_tx = rcu_dereference(sta->ampdu_mlme.tid_tx[tid]);
-	if (!tid_tx)
-		return;
-
-	tid_tx->failed_bar_ssn = ssn;
-	tid_tx->bar_pending = true;
-}
-
-static int ieee80211_tx_radiotap_len(struct ieee80211_tx_info *info)
-{
-	int len = sizeof(struct ieee80211_radiotap_header);
-
-	/* IEEE80211_RADIOTAP_RATE rate */
-	if (info->status.rates[0].idx >= 0 &&
-	    !(info->status.rates[0].flags & IEEE80211_TX_RC_MCS))
-		len += 2;
-
-	/* IEEE80211_RADIOTAP_TX_FLAGS */
-	len += 2;
-
-	/* IEEE80211_RADIOTAP_DATA_RETRIES */
-	len += 1;
-
-	/* IEEE80211_TX_RC_MCS */
-	if (info->status.rates[0].idx >= 0 &&
-	    info->status.rates[0].flags & IEEE80211_TX_RC_MCS)
-		len += 3;
-
-	return len;
-}
-
-static void ieee80211_add_tx_radiotap_header(struct ieee80211_supported_band
-					     *sband, struct sk_buff *skb,
-					     int retry_count, int rtap_len)
-{
-	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
-	struct ieee80211_radiotap_header *rthdr;
-	unsigned char *pos;
-	u16 txflags;
-
-	rthdr = (struct ieee80211_radiotap_header *) skb_push(skb, rtap_len);
-
-	memset(rthdr, 0, rtap_len);
-	rthdr->it_len = cpu_to_le16(rtap_len);
-	rthdr->it_present =
-		cpu_to_le32((1 << IEEE80211_RADIOTAP_TX_FLAGS) |
-			    (1 << IEEE80211_RADIOTAP_DATA_RETRIES));
-	pos = (unsigned char *)(rthdr + 1);
-
-	/*
-	 * XXX: Once radiotap gets the bitmap reset thing the vendor
-	 *	extensions proposal contains, we can actually report
-	 *	the whole set of tries we did.
-	 */
-
-	/* IEEE80211_RADIOTAP_RATE */
-	if (info->status.rates[0].idx >= 0 &&
-	    !(info->status.rates[0].flags & IEEE80211_TX_RC_MCS)) {
-		rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_RATE);
-		*pos = sband->bitrates[info->status.rates[0].idx].bitrate / 5;
-		/* padding for tx flags */
-		pos += 2;
-	}
-
-	/* IEEE80211_RADIOTAP_TX_FLAGS */
-	txflags = 0;
-	if (!(info->flags & IEEE80211_TX_STAT_ACK) &&
-	    !is_multicast_ether_addr(hdr->addr1))
-		txflags |= IEEE80211_RADIOTAP_F_TX_FAIL;
-
-	if ((info->status.rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS) ||
-	    (info->status.rates[0].flags & IEEE80211_TX_RC_USE_CTS_PROTECT))
-		txflags |= IEEE80211_RADIOTAP_F_TX_CTS;
-	else if (info->status.rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS)
-		txflags |= IEEE80211_RADIOTAP_F_TX_RTS;
-
-	put_unaligned_le16(txflags, pos);
-	pos += 2;
-
-	/* IEEE80211_RADIOTAP_DATA_RETRIES */
-	/* for now report the total retry_count */
-	*pos = retry_count;
-	pos++;
-
-	/* IEEE80211_TX_RC_MCS */
-	if (info->status.rates[0].idx >= 0 &&
-	    info->status.rates[0].flags & IEEE80211_TX_RC_MCS) {
-		rthdr->it_present |= cpu_to_le32(1 << IEEE80211_RADIOTAP_MCS);
-		pos[0] = IEEE80211_RADIOTAP_MCS_HAVE_MCS |
-			 IEEE80211_RADIOTAP_MCS_HAVE_GI |
-			 IEEE80211_RADIOTAP_MCS_HAVE_BW;
-		if (info->status.rates[0].flags & IEEE80211_TX_RC_SHORT_GI)
-			pos[1] |= IEEE80211_RADIOTAP_MCS_SGI;
-		if (info->status.rates[0].flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
-			pos[1] |= IEEE80211_RADIOTAP_MCS_BW_40;
-		if (info->status.rates[0].flags & IEEE80211_TX_RC_GREEN_FIELD)
-			pos[1] |= IEEE80211_RADIOTAP_MCS_FMT_GF;
-		pos[2] = info->status.rates[0].idx;
-		pos += 3;
-	}
-
-}
-
 /*
  * Use a static threshold for now, best value to be determined
  * by testing ...
@@ -340,8 +211,10 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
 	struct ieee80211_local *local = hw_to_local(hw);
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	u16 frag, type;
 	__le16 fc;
 	struct ieee80211_supported_band *sband;
+	struct ieee80211_tx_status_rtap_hdr *rthdr;
 	struct ieee80211_sub_if_data *sdata;
 	struct net_device *prev_dev = NULL;
 	struct sta_info *sta, *tmp;
@@ -349,9 +222,6 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	int rates_idx = -1;
 	bool send_to_cooked;
 	bool acked;
-	struct ieee80211_bar *bar;
-	u16 tid;
-	int rtap_len;
 
 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
 		if (info->status.rates[i].idx < 0) {
@@ -407,29 +277,8 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 			tid = qc[0] & 0xf;
 			ssn = ((le16_to_cpu(hdr->seq_ctrl) + 0x10)
 						& IEEE80211_SCTL_SEQ);
-			ieee80211_send_bar(&sta->sdata->vif, hdr->addr1,
+			ieee80211_send_bar(sta->sdata, hdr->addr1,
 					   tid, ssn);
-		}
-
-		if (!acked && ieee80211_is_back_req(fc)) {
-			u16 control;
-
-			/*
-			 * BAR failed, store the last SSN and retry sending
-			 * the BAR when the next unicast transmission on the
-			 * same TID succeeds.
-			 */
-			bar = (struct ieee80211_bar *) skb->data;
-			control = le16_to_cpu(bar->control);
-			if (!(control & IEEE80211_BAR_CTRL_MULTI_TID)) {
-				u16 ssn = le16_to_cpu(bar->start_seq_num);
-
-				tid = (control &
-				       IEEE80211_BAR_CTRL_TID_INFO_MASK) >>
-				      IEEE80211_BAR_CTRL_TID_INFO_SHIFT;
-
-				ieee80211_set_bar_pending(sta, tid, ssn);
-			}
 		}
 
 		if (info->flags & IEEE80211_TX_STAT_TX_FILTERED) {
@@ -475,8 +324,12 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	 * Fragments are passed to low-level drivers as separate skbs, so these
 	 * are actually fragments, not frames. Update frame counters only for
 	 * the first fragment of the frame. */
+
+	frag = le16_to_cpu(hdr->seq_ctrl) & IEEE80211_SCTL_FRAG;
+	type = le16_to_cpu(hdr->frame_control) & IEEE80211_FCTL_FTYPE;
+
 	if (info->flags & IEEE80211_TX_STAT_ACK) {
-		if (ieee80211_is_first_frag(hdr->seq_ctrl)) {
+		if (frag == 0) {
 			local->dot11TransmittedFrameCount++;
 			if (is_multicast_ether_addr(hdr->addr1))
 				local->dot11MulticastTransmittedFrameCount++;
@@ -491,11 +344,11 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 		 * with a multicast address in the address 1 field of type Data
 		 * or Management. */
 		if (!is_multicast_ether_addr(hdr->addr1) ||
-		    ieee80211_is_data(fc) ||
-		    ieee80211_is_mgmt(fc))
+		    type == IEEE80211_FTYPE_DATA ||
+		    type == IEEE80211_FTYPE_MGMT)
 			local->dot11TransmittedFragmentCount++;
 	} else {
-		if (ieee80211_is_first_frag(hdr->seq_ctrl))
+		if (frag == 0)
 			local->dot11FailedCount++;
 	}
 
@@ -512,54 +365,30 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	}
 
 	if (info->flags & IEEE80211_TX_INTFL_NL80211_FRAME_TX) {
+		struct ieee80211_work *wk;
 		u64 cookie = (unsigned long)skb;
 
-		if (ieee80211_is_nullfunc(hdr->frame_control) ||
-		    ieee80211_is_qos_nullfunc(hdr->frame_control)) {
-			bool acked = info->flags & IEEE80211_TX_STAT_ACK;
-			cfg80211_probe_status(skb->dev, hdr->addr1,
-					      cookie, acked, GFP_ATOMIC);
-		} else {
-			struct ieee80211_work *wk;
-
-			rcu_read_lock();
-			list_for_each_entry_rcu(wk, &local->work_list, list) {
-				if (wk->type != IEEE80211_WORK_OFFCHANNEL_TX)
-					continue;
-				if (wk->offchan_tx.frame != skb)
-					continue;
-				wk->offchan_tx.status = true;
-				break;
-			}
-			rcu_read_unlock();
-			if (local->hw_roc_skb_for_status == skb) {
-				cookie = local->hw_roc_cookie ^ 2;
-				local->hw_roc_skb_for_status = NULL;
-			}
-
-			cfg80211_mgmt_tx_status(
-				skb->dev, cookie, skb->data, skb->len,
-				!!(info->flags & IEEE80211_TX_STAT_ACK),
-				GFP_ATOMIC);
+		rcu_read_lock();
+		list_for_each_entry_rcu(wk, &local->work_list, list) {
+			if (wk->type != IEEE80211_WORK_OFFCHANNEL_TX)
+				continue;
+			if (wk->offchan_tx.frame != skb)
+				continue;
+			wk->offchan_tx.frame = NULL;
+			break;
 		}
-	}
+		rcu_read_unlock();
+		if (local->hw_roc_skb_for_status == skb) {
+			cookie = local->hw_roc_cookie ^ 2;
+			local->hw_roc_skb_for_status = NULL;
+		}
 
-	if (unlikely(info->ack_frame_id)) {
-		struct sk_buff *ack_skb;
-		unsigned long flags;
+		if (cookie == local->hw_offchan_tx_cookie)
+			local->hw_offchan_tx_cookie = 0;
 
-		spin_lock_irqsave(&local->ack_status_lock, flags);
-		ack_skb = idr_find(&local->ack_status_frames,
-				   info->ack_frame_id);
-		if (ack_skb)
-			idr_remove(&local->ack_status_frames,
-				   info->ack_frame_id);
-		spin_unlock_irqrestore(&local->ack_status_lock, flags);
-
-		/* consumes ack_skb */
-		if (ack_skb)
-			skb_complete_wifi_ack(ack_skb,
-				info->flags & IEEE80211_TX_STAT_ACK);
+		cfg80211_mgmt_tx_status(
+			skb->dev, cookie, skb->data, skb->len,
+			!!(info->flags & IEEE80211_TX_STAT_ACK), GFP_ATOMIC);
 	}
 
 	/* this was a transmitted frame, but now we want to reuse it */
@@ -567,7 +396,7 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 
 	/* Need to make a copy before skb->cb gets cleared */
 	send_to_cooked = !!(info->flags & IEEE80211_TX_CTL_INJECTED) ||
-			 !(ieee80211_is_data(fc));
+			(type != IEEE80211_FTYPE_DATA);
 
 	/*
 	 * This is a bit racy but we can avoid a lot of work
@@ -579,13 +408,44 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 	}
 
 	/* send frame to monitor interfaces now */
-	rtap_len = ieee80211_tx_radiotap_len(info);
-	if (WARN_ON_ONCE(skb_headroom(skb) < rtap_len)) {
+
+	if (skb_headroom(skb) < sizeof(*rthdr)) {
 		printk(KERN_ERR "ieee80211_tx_status: headroom too small\n");
 		dev_kfree_skb(skb);
 		return;
 	}
-	ieee80211_add_tx_radiotap_header(sband, skb, retry_count, rtap_len);
+
+	rthdr = (struct ieee80211_tx_status_rtap_hdr *)
+				skb_push(skb, sizeof(*rthdr));
+
+	memset(rthdr, 0, sizeof(*rthdr));
+	rthdr->hdr.it_len = cpu_to_le16(sizeof(*rthdr));
+	rthdr->hdr.it_present =
+		cpu_to_le32((1 << IEEE80211_RADIOTAP_TX_FLAGS) |
+			    (1 << IEEE80211_RADIOTAP_DATA_RETRIES) |
+			    (1 << IEEE80211_RADIOTAP_RATE));
+
+	if (!(info->flags & IEEE80211_TX_STAT_ACK) &&
+	    !is_multicast_ether_addr(hdr->addr1))
+		rthdr->tx_flags |= cpu_to_le16(IEEE80211_RADIOTAP_F_TX_FAIL);
+
+	/*
+	 * XXX: Once radiotap gets the bitmap reset thing the vendor
+	 *	extensions proposal contains, we can actually report
+	 *	the whole set of tries we did.
+	 */
+	if ((info->status.rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS) ||
+	    (info->status.rates[0].flags & IEEE80211_TX_RC_USE_CTS_PROTECT))
+		rthdr->tx_flags |= cpu_to_le16(IEEE80211_RADIOTAP_F_TX_CTS);
+	else if (info->status.rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS)
+		rthdr->tx_flags |= cpu_to_le16(IEEE80211_RADIOTAP_F_TX_RTS);
+	if (info->status.rates[0].idx >= 0 &&
+	    !(info->status.rates[0].flags & IEEE80211_TX_RC_MCS))
+		rthdr->rate = sband->bitrates[
+				info->status.rates[0].idx].bitrate / 5;
+
+	/* for now report the total retry_count */
+	rthdr->data_retries = retry_count;
 
 	/* XXX: is this sufficient for BPF? */
 	skb_set_mac_header(skb, 0);
@@ -632,37 +492,3 @@ void ieee80211_report_low_ack(struct ieee80211_sta *pubsta, u32 num_packets)
 				    num_packets, GFP_ATOMIC);
 }
 EXPORT_SYMBOL(ieee80211_report_low_ack);
-
-
-void ieee80211_roaming_status(struct ieee80211_vif *vif, bool enabled)
-{
-	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
-	cfg80211_roaming_status(sdata->dev, enabled, GFP_KERNEL);
-}
-EXPORT_SYMBOL(ieee80211_roaming_status);
-
-void ieee80211_free_txskb(struct ieee80211_hw *hw, struct sk_buff *skb)
-{
-	struct ieee80211_local *local = hw_to_local(hw);
-	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-
-	if (unlikely(info->ack_frame_id)) {
-		struct sk_buff *ack_skb;
-		unsigned long flags;
-
-		spin_lock_irqsave(&local->ack_status_lock, flags);
-		ack_skb = idr_find(&local->ack_status_frames,
-				   info->ack_frame_id);
-		if (ack_skb)
-			idr_remove(&local->ack_status_frames,
-				   info->ack_frame_id);
-		spin_unlock_irqrestore(&local->ack_status_lock, flags);
-
-		/* consumes ack_skb */
-		if (ack_skb)
-			dev_kfree_skb_any(ack_skb);
-	}
-
-	dev_kfree_skb_any(skb);
-}
-EXPORT_SYMBOL(ieee80211_free_txskb);

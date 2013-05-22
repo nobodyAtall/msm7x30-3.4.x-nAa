@@ -158,7 +158,7 @@ EXPORT_SYMBOL(compat_genl_unregister_family);
 #undef led_brightness_set
 #undef led_classdev_unregister
 
-static DEFINE_SPINLOCK(led_lock);
+spinlock_t led_lock;
 static LIST_HEAD(led_timers);
 
 struct led_timer {
@@ -345,7 +345,7 @@ EXPORT_SYMBOL(compat_led_classdev_unregister);
  *	For tight control over page level allocator and protection flags
  *	use __vmalloc() instead.
  */
-void *compat_vzalloc(unsigned long size)
+void *vzalloc(unsigned long size)
 {
 	void *buf;
 	buf = vmalloc(size);
@@ -353,6 +353,6 @@ void *compat_vzalloc(unsigned long size)
 		memset(buf, 0, size);
 	return buf;
 }
-EXPORT_SYMBOL(compat_vzalloc);
+EXPORT_SYMBOL(vzalloc);
 
 #endif

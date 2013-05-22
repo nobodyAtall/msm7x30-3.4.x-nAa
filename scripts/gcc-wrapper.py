@@ -45,6 +45,7 @@ allowed_warnings = set([
     "return_address.c:62",
     "tx.c:1804",
     "tx.c:1832",
+    "tx.c:2448",
  ])
 
 # Capture the name of the object file, can find it.

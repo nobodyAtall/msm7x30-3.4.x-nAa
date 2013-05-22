@@ -185,14 +185,13 @@ int mwifiex_recv_packet(struct mwifiex_adapter *adapter, struct sk_buff *skb)
  * corresponding waiting function. Otherwise, it processes the
  * IOCTL response and frees the response buffer.
  */
-int mwifiex_complete_cmd(struct mwifiex_adapter *adapter,
-			 struct cmd_ctrl_node *cmd_node)
+int mwifiex_complete_cmd(struct mwifiex_adapter *adapter)
 {
 	atomic_dec(&adapter->cmd_pending);
 	dev_dbg(adapter->dev, "cmd completed: status=%d\n",
 					adapter->cmd_wait_q.status);
 
-	*(cmd_node->condition) = true;
+	adapter->cmd_wait_q.condition = true;
 
 	if (adapter->cmd_wait_q.status == -ETIMEDOUT)
 		dev_err(adapter->dev, "cmd timeout\n");

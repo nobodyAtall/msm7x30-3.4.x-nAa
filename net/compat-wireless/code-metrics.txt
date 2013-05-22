@@ -1,4 +1,14 @@
 
 [36mcompat-wireless code metrics[00m
 
-[35m    830385[00m - Total upstream lines of code being pulled
+[35m    822973[00m - Total upstream lines of code being pulled
+[01;32m      2396[00m - backport code changes
+[01;32m      2086[00m - backport code additions
+[01;32m       310[00m - backport code deletions
+[01;32m      8102[00m - backport from compat module
+[01;32m     10498[00m - total backport code
+[31m    1.2756[00m - % of code consists of backport work
+
+Base tree: [01;32mlinux-2.6-allstable.git[00m
+Base tree version: [35mv3.0-rc4[00m
+compat-wireless release: [01;33mcompat-wireless-v3.0-rc4-1[00m

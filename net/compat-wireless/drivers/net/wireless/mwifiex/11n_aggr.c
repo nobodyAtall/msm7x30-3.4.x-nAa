@@ -164,13 +164,12 @@ mwifiex_11n_aggregate_pkt(struct mwifiex_private *priv,
 	struct mwifiex_tx_param tx_param;
 	struct txpd *ptx_pd = NULL;
 
-	skb_src = skb_peek(&pra_list->skb_head);
-	if (!skb_src) {
+	if (skb_queue_empty(&pra_list->skb_head)) {
 		spin_unlock_irqrestore(&priv->wmm.ra_list_spinlock,
 				       ra_list_flags);
 		return 0;
 	}
-
+	skb_src = skb_peek(&pra_list->skb_head);
 	tx_info_src = MWIFIEX_SKB_TXCB(skb_src);
 	skb_aggr = dev_alloc_skb(adapter->tx_buf_size);
 	if (!skb_aggr) {
@@ -185,14 +184,17 @@ mwifiex_11n_aggregate_pkt(struct mwifiex_private *priv,
 	tx_info_aggr->bss_index = tx_info_src->bss_index;
 	skb_aggr->priority = skb_src->priority;
 
-	do {
-		/* Check if AMSDU can accommodate this MSDU */
-		if (skb_tailroom(skb_aggr) < (skb_src->len + LLC_SNAP_LEN))
-			break;
+	while (skb_src && ((skb_headroom(skb_aggr) + skb_src->len
+					+ LLC_SNAP_LEN)
+				<= adapter->tx_buf_size)) {
 
-		skb_src = skb_dequeue(&pra_list->skb_head);
+		if (!skb_queue_empty(&pra_list->skb_head))
+			skb_src = skb_dequeue(&pra_list->skb_head);
+		else
+			skb_src = NULL;
 
-		pra_list->total_pkts_size -= skb_src->len;
+		if (skb_src)
+			pra_list->total_pkts_size -= skb_src->len;
 
 		atomic_dec(&priv->wmm.tx_pkts_queued);
 
@@ -210,15 +212,11 @@ mwifiex_11n_aggregate_pkt(struct mwifiex_private *priv,
 			return -1;
 		}
 
-		if (skb_tailroom(skb_aggr) < pad) {
-			pad = 0;
-			break;
-		}
-		skb_put(skb_aggr, pad);
-
-		skb_src = skb_peek(&pra_list->skb_head);
-
-	} while (skb_src);
+		if (!skb_queue_empty(&pra_list->skb_head))
+			skb_src = skb_peek(&pra_list->skb_head);
+		else
+			skb_src = NULL;
+	}
 
 	spin_unlock_irqrestore(&priv->wmm.ra_list_spinlock, ra_list_flags);
 
@@ -232,21 +230,14 @@ mwifiex_11n_aggregate_pkt(struct mwifiex_private *priv,
 
 	skb_push(skb_aggr, headroom);
 
-	/*
-	 * Padding per MSDU will affect the length of next
-	 * packet and hence the exact length of next packet
-	 * is uncertain here.
-	 *
-	 * Also, aggregation of transmission buffer, while
-	 * downloading the data to the card, wont gain much
-	 * on the AMSDU packets as the AMSDU packets utilizes
-	 * the transmission buffer space to the maximum
-	 * (adapter->tx_buf_size).
-	 */
-	tx_param.next_pkt_len = 0;
-
+	tx_param.next_pkt_len = ((pra_list->total_pkts_size) ?
+				 (((pra_list->total_pkts_size) >
+				   adapter->tx_buf_size) ? adapter->
+				  tx_buf_size : pra_list->total_pkts_size +
+				  LLC_SNAP_LEN + sizeof(struct txpd)) : 0);
 	ret = adapter->if_ops.host_to_card(adapter, MWIFIEX_TYPE_DATA,
-					   skb_aggr, &tx_param);
+					     skb_aggr->data,
+					     skb_aggr->len, &tx_param);
 	switch (ret) {
 	case -EBUSY:
 		spin_lock_irqsave(&priv->wmm.ra_list_spinlock, ra_list_flags);

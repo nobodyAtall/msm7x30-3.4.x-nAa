@@ -9,14 +9,13 @@
  */
 #define DRV_NAME "lbtf_usb"
 
-#undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include "libertas_tf.h"
 #include "if_usb.h"
 
 #include <linux/delay.h>
-#include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/firmware.h>
 #include <linux/netdevice.h>
 #include <linux/slab.h>

@@ -15,9 +15,9 @@ DESTDIR?=
 
 ifneq ($(KERNELRELEASE),)
 
-export COMPAT_WLAN_BUILT_IN ?= y
+export STERICSSON_WLAN_BUILT_IN ?= y
 
-ifeq ($(COMPAT_WLAN_BUILT_IN),y)
+ifeq ($(STERICSSON_WLAN_BUILT_IN),y)
 NOSTDINC_FLAGS := -I$(srctree)/net/compat-wireless/include/ \
 	-include $(srctree)/net/compat-wireless/include/linux/compat-2.6.h \
 	-DCOMPAT_STATIC
@@ -34,16 +34,18 @@ obj-y := compat/
 obj-$(CONFIG_COMPAT_RFKILL) += net/rfkill/
 
 ifeq ($(BT),)
-obj-$(CONFIG_COMPAT_WIRELESS) += net/wireless/
-obj-$(CONFIG_COMPAT_WIRELESS) += net/mac80211/
+obj-$(CONFIG_COMPAT_WIRELESS) += net/wireless/ net/mac80211/
 obj-$(CONFIG_COMPAT_WIRELESS_MODULES) += drivers/net/wireless/
 
+obj-$(CONFIG_COMPAT_NET_USB_MODULES) += drivers/net/usb/
 
-obj-$(CONFIG_COMPAT_NETWORK_MODULES) += drivers/net/ethernet/atheros/
-obj-$(CONFIG_COMPAT_NETWORK_MODULES) += drivers/net/ethernet/broadcom/
-
+obj-$(CONFIG_COMPAT_NETWORK_MODULES) += drivers/net/
+obj-$(CONFIG_COMPAT_VAR_MODULES) +=  drivers/ssb/ drivers/misc/eeprom/
 
 ifeq ($(CONFIG_STAGING_EXCLUDE_BUILD),)
+#obj-$(CONFIG_COMPAT_STAGING) += drivers/staging/ath6kl/
+#obj-$(CONFIG_COMPAT_STAGING) += drivers/staging/brcm80211/
+obj-y += drivers/staging/cw1200/
 endif
 
 endif
@@ -53,7 +55,7 @@ obj-$(CONFIG_COMPAT_BLUETOOTH_MODULES) += drivers/bluetooth/
 
 else
 
-export PWD :=	$(shell pwd)/net/compat-wireless
+export PWD :=	$(shell pwd)
 CFLAGS += \
         -DCOMPAT_BASE_TREE="\"$(shell cat compat_base_tree)\"" \
         -DCOMPAT_BASE_TREE_VERSION="\"$(shell cat compat_base_tree_version)\"" \
@@ -171,6 +173,7 @@ install: uninstall install-modules install-scripts
 install-modules: modules
 	$(MAKE) -C $(KLIB_BUILD) M=$(PWD) $(KMODDIR_ARG) $(KMODPATH_ARG) \
 		modules_install
+	@./scripts/update-initramfs
 
 install-scripts:
 	@# All the scripts we can use
@@ -335,12 +338,14 @@ uninstall:
 	@rm -rf $(KLIB)/$(KMODDIR)/net/mac80211/
 	@rm -rf $(KLIB)/$(KMODDIR)/net/rfkill/
 	@rm -rf $(KLIB)/$(KMODDIR)/net/wireless/
+	@rm -rf $(KLIB)/$(KMODDIR)/drivers/ssb/
 	@rm -rf $(KLIB)/$(KMODDIR)/drivers/net/usb/
 	@rm -rf $(KLIB)/$(KMODDIR)/drivers/net/wireless/
 	@rm -rf $(KLIB)/$(KMODDIR)/drivers/staging/
 	@rm -rf $(KLIB)/$(KMODDIR)/drivers/net/atl*
 	@# Lets only remove the stuff we are sure we are providing
 	@# on the misc directory.
+	@rm -f $(KLIB)/$(KMODDIR)/drivers/misc/eeprom/eeprom_93cx6.ko*
 	@rm -f $(KLIB)/$(KMODDIR)/drivers/misc/eeprom_93cx6.ko*
 	@rm -f $(KLIB)/$(KMODDIR)/drivers/net/b44.ko*
 	@/sbin/depmod -a

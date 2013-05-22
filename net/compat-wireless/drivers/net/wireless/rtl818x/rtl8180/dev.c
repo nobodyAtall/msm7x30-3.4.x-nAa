@@ -16,13 +16,11 @@
  */
 
 #include <linux/init.h>
-#include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
 #include <linux/eeprom_93cx6.h>
-#include <linux/module.h>
 #include <net/mac80211.h>
 
 #include "rtl8180.h"
@@ -670,8 +668,7 @@ static void rtl8180_stop(struct ieee80211_hw *dev)
 		rtl8180_free_tx_ring(dev, i);
 }
 
-static u64 rtl8180_get_tsf(struct ieee80211_hw *dev,
-			   struct ieee80211_vif *vif)
+static u64 rtl8180_get_tsf(struct ieee80211_hw *dev)
 {
 	struct rtl8180_priv *priv = dev->priv;
 
@@ -703,7 +700,7 @@ static void rtl8180_beacon_work(struct work_struct *work)
 	 * TODO: make hardware update beacon timestamp
 	 */
 	mgmt = (struct ieee80211_mgmt *)skb->data;
-	mgmt->u.beacon.timestamp = cpu_to_le64(rtl8180_get_tsf(dev, vif));
+	mgmt->u.beacon.timestamp = cpu_to_le64(rtl8180_get_tsf(dev));
 
 	/* TODO: use actual beacon queue */
 	skb_set_queue_mapping(skb, 0);
@@ -814,10 +811,19 @@ static void rtl8180_bss_info_changed(struct ieee80211_hw *dev,
 	}
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 static u64 rtl8180_prepare_multicast(struct ieee80211_hw *dev,
 				     struct netdev_hw_addr_list *mc_list)
+#else
+static u64 rtl8180_prepare_multicast(struct ieee80211_hw *dev, int mc_count,
+				     struct dev_addr_list *mc_list)
+#endif
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	return netdev_hw_addr_list_count(mc_list);
+#else
+	return mc_count;
+#endif
 }
 
 static void rtl8180_configure_filter(struct ieee80211_hw *dev,

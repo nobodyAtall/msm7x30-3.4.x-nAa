@@ -5,7 +5,6 @@ extern const struct ieee80211_regdomain *cfg80211_regdomain;
 
 bool is_world_regdom(const char *alpha2);
 bool reg_is_valid_request(const char *alpha2);
-bool reg_supported_dfs_region(u8 dfs_region);
 
 int regulatory_hint_user(const char *alpha2);
 
@@ -16,8 +15,6 @@ int __init regulatory_init(void);
 void regulatory_exit(void);
 
 int set_regdom(const struct ieee80211_regdomain *rd);
-
-void regulatory_update(struct wiphy *wiphy, enum nl80211_reg_initiator setby);
 
 /**
  * regulatory_hint_found_beacon - hints a beacon was found on a channel
@@ -62,10 +59,12 @@ int regulatory_hint_found_beacon(struct wiphy *wiphy,
  * not observed. For this reason if a triplet is seen with channel
  * information for a band the BSS is not present in it will be ignored.
  */
+#if !defined(CONFIG_CW1200_DISABLE_REGULATORY_HINT_11D)
 void regulatory_hint_11d(struct wiphy *wiphy,
 			 enum ieee80211_band band,
 			 u8 *country_ie,
 			 u8 country_ie_len);
+#endif
 
 /**
  * regulatory_hint_disconnect - informs all devices have been disconneted

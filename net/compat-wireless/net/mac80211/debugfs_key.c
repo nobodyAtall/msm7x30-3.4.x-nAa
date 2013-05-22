@@ -78,7 +78,7 @@ KEY_OPS(algorithm);
 static ssize_t key_tx_spec_read(struct file *file, char __user *userbuf,
 				size_t count, loff_t *ppos)
 {
-	u64 pn;
+	const u8 *tpn;
 	char buf[20];
 	int len;
 	struct ieee80211_key *key = file->private_data;
@@ -94,16 +94,15 @@ static ssize_t key_tx_spec_read(struct file *file, char __user *userbuf,
 				key->u.tkip.tx.iv16);
 		break;
 	case WLAN_CIPHER_SUITE_CCMP:
-		pn = atomic64_read(&key->u.ccmp.tx_pn);
+		tpn = key->u.ccmp.tx_pn;
 		len = scnprintf(buf, sizeof(buf), "%02x%02x%02x%02x%02x%02x\n",
-				(u8)(pn >> 40), (u8)(pn >> 32), (u8)(pn >> 24),
-				(u8)(pn >> 16), (u8)(pn >> 8), (u8)pn);
+				tpn[0], tpn[1], tpn[2], tpn[3], tpn[4], tpn[5]);
 		break;
 	case WLAN_CIPHER_SUITE_AES_CMAC:
-		pn = atomic64_read(&key->u.aes_cmac.tx_pn);
+		tpn = key->u.aes_cmac.tx_pn;
 		len = scnprintf(buf, sizeof(buf), "%02x%02x%02x%02x%02x%02x\n",
-				(u8)(pn >> 40), (u8)(pn >> 32), (u8)(pn >> 24),
-				(u8)(pn >> 16), (u8)(pn >> 8), (u8)pn);
+				tpn[0], tpn[1], tpn[2], tpn[3], tpn[4],
+				tpn[5]);
 		break;
 	default:
 		return 0;

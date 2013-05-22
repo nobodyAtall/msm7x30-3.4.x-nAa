@@ -2,14 +2,11 @@
  * This file contains the handling of RX in wlan driver.
  */
 
-#undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/etherdevice.h>
-#include <linux/hardirq.h>
 #include <linux/slab.h>
 #include <linux/types.h>
-#include <linux/export.h>
 #include <net/cfg80211.h>
 
 #include "defs.h"
@@ -17,7 +14,6 @@
 #include "radiotap.h"
 #include "decl.h"
 #include "dev.h"
-#include "mesh.h"
 
 struct eth803hdr {
 	u8 dest_addr[6];

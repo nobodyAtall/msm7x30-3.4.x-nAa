@@ -12,9 +12,6 @@
 
 extern struct kobj_ns_type_operations net_ns_type_operations;
 
-/* mask skb_checksum_none_assert as RHEL6 backports this */
-#define skb_checksum_none_assert(a) compat_skb_checksum_none_assert(a)
-
 /**
  * skb_checksum_none_assert - make sure skb ip_summed is CHECKSUM_NONE
  * @skb: skb to check
@@ -113,9 +110,6 @@ extern void compat_led_brightness_set(struct led_classdev *led_cdev,
 
 #define netdev_refcnt_read(a) atomic_read(&a->refcnt)
 
-/* mask vzalloc as RHEL6 backports this */
-#define vzalloc(a) compat_vzalloc(a)
-
 extern void *vzalloc(unsigned long size);
 
 #define rtnl_dereference(p)                                     \
@@ -129,11 +123,6 @@ extern void *vzalloc(unsigned long size);
  */
 #define RCU_INIT_POINTER(p, v) \
 		p = (typeof(*v) __force __rcu *)(v)
-
-static inline bool skb_has_frag_list(const struct sk_buff *skb)
-{
-	return skb_shinfo(skb)->frag_list != NULL;
-}
 
 #endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)) */
 

@@ -10,7 +10,6 @@
  */
 
 #include <linux/init.h>
-#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -1892,9 +1891,9 @@ mwl8k_txq_xmit(struct ieee80211_hw *hw, int index, struct sk_buff *skb)
 
 	txpriority = index;
 
-	if (priv->ap_fw && sta && sta->ht_cap.ht_supported
-			&& skb->protocol != cpu_to_be16(ETH_P_PAE)
-			&& ieee80211_is_data_qos(wh->frame_control)) {
+	if (ieee80211_is_data_qos(wh->frame_control) &&
+	    skb->protocol != cpu_to_be16(ETH_P_PAE) &&
+	    sta->ht_cap.ht_supported && priv->ap_fw) {
 		tid = qos & 0xf;
 		mwl8k_tx_count_packet(sta, tid);
 		spin_lock(&priv->stream_lock);
@@ -2540,15 +2539,21 @@ struct mwl8k_cmd_mac_multicast_adr {
 
 static struct mwl8k_cmd_pkt *
 __mwl8k_cmd_mac_multicast_adr(struct ieee80211_hw *hw, int allmulti,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 			      struct netdev_hw_addr_list *mc_list)
+#else
+			      int mc_count, struct dev_addr_list *ha)
+#endif
 {
 	struct mwl8k_priv *priv = hw->priv;
 	struct mwl8k_cmd_mac_multicast_adr *cmd;
 	int size;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	int mc_count = 0;
 
 	if (mc_list)
 		mc_count = netdev_hw_addr_list_count(mc_list);
+#endif
 
 	if (allmulti || mc_count > priv->num_mcaddrs) {
 		allmulti = 1;
@@ -2569,13 +2574,27 @@ __mwl8k_cmd_mac_multicast_adr(struct ieee80211_hw *hw, int allmulti,
 	if (allmulti) {
 		cmd->action |= cpu_to_le16(MWL8K_ENABLE_RX_ALL_MULTICAST);
 	} else if (mc_count) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 		struct netdev_hw_addr *ha;
 		int i = 0;
+#else
+		int i;
+#endif
 
 		cmd->action |= cpu_to_le16(MWL8K_ENABLE_RX_MULTICAST);
 		cmd->numaddr = cpu_to_le16(mc_count);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 		netdev_hw_addr_list_for_each(ha, mc_list) {
 			memcpy(cmd->addr[i], ha->addr, ETH_ALEN);
+#else
+		for (i = 0; i < mc_count && ha; i++) {
+			if (ha->da_addrlen != ETH_ALEN) {
+				kfree(cmd);
+				return NULL;
+			}
+			memcpy(cmd->addr[i], ha->da_addr, ETH_ALEN);
+			ha = ha->next;
+#endif
 		}
 	}
 
@@ -4097,6 +4116,9 @@ static int mwl8k_set_key(struct ieee80211_hw *hw,
 
 		if (rc)
 			goto out;
+
+		mwl8k_vif->is_hw_crypto_enabled = false;
+
 	}
 out:
 	return rc;
@@ -4723,7 +4745,11 @@ mwl8k_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 }
 
 static u64 mwl8k_prepare_multicast(struct ieee80211_hw *hw,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 				   struct netdev_hw_addr_list *mc_list)
+#else
+				   int mc_count, struct dev_addr_list *ha)
+#endif
 {
 	struct mwl8k_cmd_pkt *cmd;
 
@@ -4734,7 +4760,11 @@ static u64 mwl8k_prepare_multicast(struct ieee80211_hw *hw,
 	 * we'll end up throwing this packet away and creating a new
 	 * one in mwl8k_configure_filter().
 	 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	cmd = __mwl8k_cmd_mac_multicast_adr(hw, 0, mc_list);
+#else
+	cmd = __mwl8k_cmd_mac_multicast_adr(hw, 0, mc_count, ha);
+#endif
 
 	return (unsigned long)cmd;
 }
@@ -4856,7 +4886,11 @@ static void mwl8k_configure_filter(struct ieee80211_hw *hw,
 	 */
 	if (*total_flags & FIF_ALLMULTI) {
 		kfree(cmd);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 		cmd = __mwl8k_cmd_mac_multicast_adr(hw, 1, NULL);
+#else
+		cmd = __mwl8k_cmd_mac_multicast_adr(hw, 1, 0, NULL);
+#endif
 	}
 
 	if (cmd != NULL) {
@@ -4915,8 +4949,7 @@ static int mwl8k_sta_add(struct ieee80211_hw *hw,
 	return ret;
 }
 
-static int mwl8k_conf_tx(struct ieee80211_hw *hw,
-			 struct ieee80211_vif *vif, u16 queue,
+static int mwl8k_conf_tx(struct ieee80211_hw *hw, u16 queue,
 			 const struct ieee80211_tx_queue_params *params)
 {
 	struct mwl8k_priv *priv = hw->priv;
@@ -5463,7 +5496,7 @@ static int mwl8k_reload_firmware(struct ieee80211_hw *hw, char *fw_image)
 		goto fail;
 
 	for (i = 0; i < MWL8K_TX_WMM_QUEUES; i++) {
-		rc = mwl8k_conf_tx(hw, NULL, i, &priv->wmm_params[i]);
+		rc = mwl8k_conf_tx(hw, i, &priv->wmm_params[i]);
 		if (rc)
 			goto fail;
 	}
@@ -5502,14 +5535,6 @@ static int mwl8k_firmware_load_success(struct mwl8k_priv *priv)
 
 	/* Set rssi values to dBm */
 	hw->flags |= IEEE80211_HW_SIGNAL_DBM | IEEE80211_HW_HAS_RATE_CONTROL;
-
-	/*
-	 * Ask mac80211 to not to trigger PS mode
-	 * based on PM bit of incoming frames.
-	 */
-	if (priv->ap_fw)
-		hw->flags |= IEEE80211_HW_AP_LINK_PS;
-
 	hw->vif_data_size = sizeof(struct mwl8k_vif);
 	hw->sta_data_size = sizeof(struct mwl8k_sta);
 

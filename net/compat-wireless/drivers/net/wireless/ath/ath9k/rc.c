@@ -16,7 +16,6 @@
  */
 
 #include <linux/slab.h>
-#include <linux/export.h>
 
 #include "ath9k.h"
 
@@ -380,30 +379,7 @@ static const struct ath_rate_table ar5416_11g_ratetable = {
 };
 
 static int ath_rc_get_rateindex(const struct ath_rate_table *rate_table,
-				struct ieee80211_tx_rate *rate)
-{
-	int rix = 0, i = 0;
-	static const int mcs_rix_off[] = { 7, 15, 20, 21, 22, 23 };
-
-	if (!(rate->flags & IEEE80211_TX_RC_MCS))
-		return rate->idx;
-
-	while (i < ARRAY_SIZE(mcs_rix_off) && rate->idx > mcs_rix_off[i]) {
-		rix++; i++;
-	}
-
-	rix += rate->idx + rate_table->mcs_start;
-
-	if ((rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH) &&
-	    (rate->flags & IEEE80211_TX_RC_SHORT_GI))
-		rix = rate_table->info[rix].ht_index;
-	else if (rate->flags & IEEE80211_TX_RC_SHORT_GI)
-		rix = rate_table->info[rix].sgi_index;
-	else if (rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
-		rix = rate_table->info[rix].cw40index;
-
-	return rix;
-}
+				struct ieee80211_tx_rate *rate);
 
 static void ath_rc_sort_validrates(const struct ath_rate_table *rate_table,
 				   struct ath_rate_priv *ath_rc_priv)
@@ -557,7 +533,7 @@ static u8 ath_rc_setvalid_rates(struct ath_rate_priv *ath_rc_priv,
 					[valid_rate_count] = j;
 				ath_rc_priv->valid_phy_ratecnt[phy] += 1;
 				ath_rc_set_valid_rate_idx(ath_rc_priv, j, 1);
-				hi = max(hi, j);
+				hi = A_MAX(hi, j);
 			}
 		}
 	}
@@ -593,7 +569,7 @@ static u8 ath_rc_setvalid_htrates(struct ath_rate_priv *ath_rc_priv,
 				[ath_rc_priv->valid_phy_ratecnt[phy]] = j;
 			ath_rc_priv->valid_phy_ratecnt[phy] += 1;
 			ath_rc_set_valid_rate_idx(ath_rc_priv, j, 1);
-			hi = max(hi, j);
+			hi = A_MAX(hi, j);
 		}
 	}
 
@@ -604,8 +580,7 @@ static u8 ath_rc_setvalid_htrates(struct ath_rate_priv *ath_rc_priv,
 static u8 ath_rc_get_highest_rix(struct ath_softc *sc,
 			         struct ath_rate_priv *ath_rc_priv,
 				 const struct ath_rate_table *rate_table,
-				 int *is_probing,
-				 bool legacy)
+				 int *is_probing)
 {
 	u32 best_thruput, this_thruput, now_msec;
 	u8 rate, next_rate, best_rate, maxindex, minindex;
@@ -626,8 +601,6 @@ static u8 ath_rc_get_highest_rix(struct ath_softc *sc,
 		u8 per_thres;
 
 		rate = ath_rc_priv->valid_rate_index[index];
-		if (legacy && !(rate_table->info[rate].rate_flags & RC_LEGACY))
-			continue;
 		if (rate > ath_rc_priv->rate_max_phy)
 			continue;
 
@@ -771,7 +744,7 @@ static void ath_get_rate(void *priv, struct ieee80211_sta *sta, void *priv_sta,
 	struct ieee80211_tx_rate *rates = tx_info->control.rates;
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	__le16 fc = hdr->frame_control;
-	u8 try_per_rate, i = 0, rix, high_rix;
+	u8 try_per_rate, i = 0, rix;
 	int is_probe = 0;
 
 	if (rate_control_send_low(sta, priv_sta, txrc))
@@ -790,9 +763,7 @@ static void ath_get_rate(void *priv, struct ieee80211_sta *sta, void *priv_sta,
 	try_per_rate = 4;
 
 	rate_table = ath_rc_priv->rate_table;
-	rix = ath_rc_get_highest_rix(sc, ath_rc_priv, rate_table,
-				     &is_probe, false);
-	high_rix = rix;
+	rix = ath_rc_get_highest_rix(sc, ath_rc_priv, rate_table, &is_probe);
 
 	/*
 	 * If we're in HT mode and both us and our peer supports LDPC.
@@ -828,7 +799,10 @@ static void ath_get_rate(void *priv, struct ieee80211_sta *sta, void *priv_sta,
 	}
 
 	/* Fill in the other rates for multirate retry */
-	for ( ; i < 3; i++) {
+	for ( ; i < 4; i++) {
+		/* Use twice the number of tries for the last MRR segment. */
+		if (i + 1 == 4)
+			try_per_rate = 8;
 
 		ath_rc_get_lower_rix(rate_table, ath_rc_priv, rix, &rix);
 		/* All other rates in the series have RTS enabled */
@@ -836,24 +810,6 @@ static void ath_get_rate(void *priv, struct ieee80211_sta *sta, void *priv_sta,
 				       try_per_rate, rix, 1);
 	}
 
-	/* Use twice the number of tries for the last MRR segment. */
-	try_per_rate = 8;
-
-	/*
-	 * Use a legacy rate as last retry to ensure that the frame
-	 * is tried in both MCS and legacy rates.
-	 */
-	if ((rates[2].flags & IEEE80211_TX_RC_MCS) &&
-	    (!(tx_info->flags & IEEE80211_TX_CTL_AMPDU) ||
-	    (ath_rc_priv->per[high_rix] > 45)))
-		rix = ath_rc_get_highest_rix(sc, ath_rc_priv, rate_table,
-				&is_probe, true);
-	else
-		ath_rc_get_lower_rix(rate_table, ath_rc_priv, rix, &rix);
-
-	/* All other rates in the series have RTS enabled */
-	ath_rc_rate_set_series(rate_table, &rates[i], txrc,
-			       try_per_rate, rix, 1);
 	/*
 	 * NB:Change rate series to enable aggregation when operating
 	 * at lower MCS rates. When first rate in series is MCS2
@@ -1124,6 +1080,31 @@ static void ath_rc_update_ht(struct ath_softc *sc,
 
 }
 
+static int ath_rc_get_rateindex(const struct ath_rate_table *rate_table,
+				struct ieee80211_tx_rate *rate)
+{
+	int rix = 0, i = 0;
+	static const int mcs_rix_off[] = { 7, 15, 20, 21, 22, 23 };
+
+	if (!(rate->flags & IEEE80211_TX_RC_MCS))
+		return rate->idx;
+
+	while (i < ARRAY_SIZE(mcs_rix_off) && rate->idx > mcs_rix_off[i]) {
+		rix++; i++;
+	}
+
+	rix += rate->idx + rate_table->mcs_start;
+
+	if ((rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH) &&
+	    (rate->flags & IEEE80211_TX_RC_SHORT_GI))
+		rix = rate_table->info[rix].ht_index;
+	else if (rate->flags & IEEE80211_TX_RC_SHORT_GI)
+		rix = rate_table->info[rix].sgi_index;
+	else if (rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+		rix = rate_table->info[rix].cw40index;
+
+	return rix;
+}
 
 static void ath_rc_tx_status(struct ath_softc *sc,
 			     struct ath_rate_priv *ath_rc_priv,
@@ -1199,7 +1180,7 @@ struct ath_rate_table *ath_choose_rate_table(struct ath_softc *sc,
 			return &ar5416_11na_ratetable;
 		return &ar5416_11a_ratetable;
 	default:
-		ath_dbg(common, CONFIG, "Invalid band\n");
+		ath_dbg(common, ATH_DBG_CONFIG, "Invalid band\n");
 		return NULL;
 	}
 }
@@ -1247,7 +1228,7 @@ static void ath_rc_init(struct ath_softc *sc,
 						       ht_mcs,
 						       ath_rc_priv->ht_cap);
 		}
-		hi = max(hi, hthi);
+		hi = A_MAX(hi, hthi);
 	}
 
 	ath_rc_priv->rate_table_size = hi + 1;
@@ -1271,12 +1252,11 @@ static void ath_rc_init(struct ath_softc *sc,
 
 	ath_rc_priv->max_valid_rate = k;
 	ath_rc_sort_validrates(rate_table, ath_rc_priv);
-	ath_rc_priv->rate_max_phy = (k > 4) ?
-					ath_rc_priv->valid_rate_index[k-4] :
-					ath_rc_priv->valid_rate_index[k-1];
+	ath_rc_priv->rate_max_phy = ath_rc_priv->valid_rate_index[k-4];
 	ath_rc_priv->rate_table = rate_table;
 
-	ath_dbg(common, CONFIG, "RC Initialized with capabilities: 0x%x\n",
+	ath_dbg(common, ATH_DBG_CONFIG,
+		"RC Initialized with capabilities: 0x%x\n",
 		ath_rc_priv->ht_cap);
 }
 
@@ -1363,6 +1343,12 @@ static void ath_tx_status(void *priv, struct ieee80211_supported_band *sband,
 
 	if (tx_info->flags & IEEE80211_TX_STAT_TX_FILTERED)
 		return;
+
+	if (!(tx_info->flags & IEEE80211_TX_STAT_AMPDU)) {
+		tx_info->status.ampdu_ack_len =
+			(tx_info->flags & IEEE80211_TX_STAT_ACK ? 1 : 0);
+		tx_info->status.ampdu_len = 1;
+	}
 
 	if (!(tx_info->flags & IEEE80211_TX_STAT_ACK))
 		tx_status = 1;
@@ -1473,7 +1459,7 @@ static void ath_rate_update(void *priv, struct ieee80211_supported_band *sband,
 						   oper_cw40, oper_sgi);
 			ath_rc_init(sc, priv_sta, sband, sta, rate_table);
 
-			ath_dbg(ath9k_hw_common(sc->sc_ah), CONFIG,
+			ath_dbg(ath9k_hw_common(sc->sc_ah), ATH_DBG_CONFIG,
 				"Operating HT Bandwidth changed to: %d\n",
 				sc->hw->conf.channel_type);
 		}
@@ -1500,7 +1486,7 @@ static ssize_t read_file_rcstat(struct file *file, char __user *user_buf,
 	if (rc->rate_table == NULL)
 		return 0;
 
-	max = 80 + rc->rate_table_size * 1024 + 1;
+	max = 80 + rc->rate_table->rate_cnt * 1024 + 1;
 	buf = kmalloc(max, GFP_KERNEL);
 	if (buf == NULL)
 		return -ENOMEM;
@@ -1510,7 +1496,7 @@ static ssize_t read_file_rcstat(struct file *file, char __user *user_buf,
 		       "HT", "MCS", "Rate",
 		       "Success", "Retries", "XRetries", "PER");
 
-	for (i = 0; i < rc->rate_table_size; i++) {
+	for (i = 0; i < rc->rate_table->rate_cnt; i++) {
 		u32 ratekbps = rc->rate_table->info[i].ratekbps;
 		struct ath_rc_stats *stats = &rc->rcstats[i];
 		char mcs[5];

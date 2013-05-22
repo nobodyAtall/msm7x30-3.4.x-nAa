@@ -151,19 +151,12 @@ void ieee80211_set_bitrate_flags(struct wiphy *wiphy)
 			set_mandatory_flags_band(wiphy->bands[band], band);
 }
 
-bool cfg80211_supported_cipher_suite(struct wiphy *wiphy, u32 cipher)
-{
-	int i;
-	for (i = 0; i < wiphy->n_cipher_suites; i++)
-		if (cipher == wiphy->cipher_suites[i])
-			return true;
-	return false;
-}
-
 int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 				   struct key_params *params, int key_idx,
 				   bool pairwise, const u8 *mac_addr)
 {
+	int i;
+
 	if (key_idx > 5)
 		return -EINVAL;
 
@@ -207,6 +200,10 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 		if (params->key_len != WLAN_KEY_LEN_AES_CMAC)
 			return -EINVAL;
 		break;
+	case WLAN_CIPHER_SUITE_SMS4:
+		if (params->key_len != WLAN_KEY_LEN_SMS4)
+			return -EINVAL;
+		break;
 	default:
 		/*
 		 * We don't know anything about this algorithm,
@@ -230,14 +227,32 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 			if (params->seq_len != 6)
 				return -EINVAL;
 			break;
+		case WLAN_CIPHER_SUITE_SMS4:
+			if (params->seq_len != 16)
+				return -EINVAL;
+			break;
 		}
 	}
 
-	if (!cfg80211_supported_cipher_suite(&rdev->wiphy, params->cipher))
+	for (i = 0; i < rdev->wiphy.n_cipher_suites; i++)
+		if (params->cipher == rdev->wiphy.cipher_suites[i])
+			break;
+	if (i == rdev->wiphy.n_cipher_suites)
 		return -EINVAL;
 
 	return 0;
 }
+
+/* See IEEE 802.1H for LLC/SNAP encapsulation/decapsulation */
+/* Ethernet-II snap header (RFC1042 for most EtherTypes) */
+const unsigned char rfc1042_header[] __aligned(2) =
+	{ 0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00 };
+EXPORT_SYMBOL(rfc1042_header);
+
+/* Bridge-Tunnel header (for EtherTypes ETH_P_AARP and ETH_P_IPX) */
+const unsigned char bridge_tunnel_header[] __aligned(2) =
+	{ 0xaa, 0xaa, 0x03, 0x00, 0x00, 0xf8 };
+EXPORT_SYMBOL(bridge_tunnel_header);
 
 unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 {
@@ -385,9 +400,8 @@ int ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
 		}
 		break;
 	case cpu_to_le16(0):
-		if (iftype != NL80211_IFTYPE_ADHOC &&
-		    iftype != NL80211_IFTYPE_STATION)
-				return -1;
+		if (iftype != NL80211_IFTYPE_ADHOC)
+			return -1;
 		break;
 	}
 
@@ -507,9 +521,10 @@ int ieee80211_data_from_8023(struct sk_buff *skb, const u8 *addr,
 		if (head_need)
 			skb_orphan(skb);
 
-		if (pskb_expand_head(skb, head_need, 0, GFP_ATOMIC))
+		if (pskb_expand_head(skb, head_need, 0, GFP_ATOMIC)) {
+			pr_err("failed to reallocate Tx buffer\n");
 			return -ENOMEM;
-
+		}
 		skb->truesize += head_need;
 	}
 
@@ -740,9 +755,9 @@ static void cfg80211_process_wdev_events(struct wireless_dev *wdev)
 				NULL);
 			break;
 		case EVENT_ROAMED:
-			__cfg80211_roamed(wdev, ev->rm.bss, ev->rm.req_ie,
-					  ev->rm.req_ie_len, ev->rm.resp_ie,
-					  ev->rm.resp_ie_len);
+			__cfg80211_roamed(wdev, ev->rm.channel, ev->rm.bssid,
+					  ev->rm.req_ie, ev->rm.req_ie_len,
+					  ev->rm.resp_ie, ev->rm.resp_ie_len);
 			break;
 		case EVENT_DISCONNECTED:
 			__cfg80211_disconnected(wdev->netdev,
@@ -751,9 +766,6 @@ static void cfg80211_process_wdev_events(struct wireless_dev *wdev)
 			break;
 		case EVENT_IBSS_JOINED:
 			__cfg80211_ibss_joined(wdev->netdev, ev->ij.bssid);
-			break;
-		case EVENT_IM_SCAN_RESULT:
-			__cfg80211_send_intermediate_result(wdev->netdev, ev);
 			break;
 		}
 		wdev_unlock(wdev);
@@ -1041,14 +1053,3 @@ int ieee80211_get_ratemask(struct ieee80211_supported_band *sband,
 
 	return 0;
 }
-
-/* See IEEE 802.1H for LLC/SNAP encapsulation/decapsulation */
-/* Ethernet-II snap header (RFC1042 for most EtherTypes) */
-const unsigned char rfc1042_header[] __aligned(2) =
-	{ 0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00 };
-EXPORT_SYMBOL(rfc1042_header);
-
-/* Bridge-Tunnel header (for EtherTypes ETH_P_AARP and ETH_P_IPX) */
-const unsigned char bridge_tunnel_header[] __aligned(2) =
-	{ 0xaa, 0xaa, 0x03, 0x00, 0x00, 0xf8 };
-EXPORT_SYMBOL(bridge_tunnel_header);

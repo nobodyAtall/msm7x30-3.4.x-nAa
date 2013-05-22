@@ -1,30 +1,17 @@
-#ifeq ($(STERICSSON_WLAN_BUILT_IN),y)
+STERICSSON_WLAN_BUILT_IN=y
+ifeq ($(STERICSSON_WLAN_BUILT_IN),y)
 
 EXTRA_CFLAGS +=  \
-        -DCOMPAT_BASE_TREE="\"wl12xx.git\"" \
-        -DCOMPAT_BASE_TREE_VERSION="\"v2.6.39-1250-g40f5df0\"" \
+        -DCOMPAT_BASE_TREE="\"$(shell cat net/compat-wireless/compat_base_tree)\"" \
+        -DCOMPAT_BASE_TREE_VERSION="\"$(shell cat net/compat-wireless/compat_base_tree_version)\"" \
         -DCOMPAT_PROJECT="\"Compat-wireless\"" \
-        -DCOMPAT_VERSION="\"compat-wireless-2011-05-19-2-gfa00a5a\""
+        -DCOMPAT_VERSION="\"$(shell cat net/compat-wireless/compat_version)\""
 
-#obj-y += compat.o \
-#         main.o \
-#         kstrtox.o \
-#         cordic.o \
-#         crc8.o
-#         kfifo.o \
-#         compat_firmware_class.o
-#         compat-3.0.o \
-#         compat-2.6.39.o \
-#         compat-2.6.38.o \
-#         compat-2.6.37.o \
-#         compat-2.6.36.o \
-#         compat-2.6.35.o \
-#         compat-2.6.33.o \
+obj-y += compat.o
 
-
-#else
-#obj-m += compat.o
-#endif
+else
+obj-m += compat.o
+endif
 #compat-objs :=
 
 obj-$(CONFIG_COMPAT_FIRMWARE_CLASS) += compat_firmware_class.o
@@ -50,22 +37,12 @@ compat-$(CONFIG_COMPAT_KERNEL_2_6_29) += compat-2.6.29.o
 compat-$(CONFIG_COMPAT_KERNEL_2_6_32) += compat-2.6.32.o
 compat-$(CONFIG_COMPAT_KERNEL_2_6_33) += compat-2.6.33.o
 compat-$(CONFIG_COMPAT_KERNEL_2_6_35) += compat-2.6.35.o
-compat-$(CONFIG_COMPAT_KERNEL_2_6_36) += compat-2.6.36.o
-
-compat-$(CONFIG_COMPAT_KFIFO) += kfifo.o
+compat-$(CONFIG_COMPAT_KERNEL_2_6_36) += \
+	compat-2.6.36.o \
+	kfifo.o
 
 compat-$(CONFIG_COMPAT_KERNEL_2_6_37) += compat-2.6.37.o
 compat-$(CONFIG_COMPAT_KERNEL_2_6_38) += compat-2.6.38.o
 compat-$(CONFIG_COMPAT_KERNEL_2_6_39) += \
 	compat-2.6.39.o \
 	kstrtox.o
-compat-$(CONFIG_COMPAT_KERNEL_3_0) += compat-3.0.o
-
-compat-$(CONFIG_COMPAT_CORDIC) += cordic.o
-compat-$(CONFIG_COMPAT_CRC8) += crc8.o
-
-ifndef CONFIG_64BIT
-ifndef CONFIG_GENERIC_ATOMIC64
-  compat-y += compat_atomic.o
-endif
-endif

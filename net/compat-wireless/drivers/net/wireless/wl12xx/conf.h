@@ -66,8 +66,7 @@ enum {
 };
 
 enum {
-	CONF_HW_RXTX_RATE_MCS7_SGI = 0,
-	CONF_HW_RXTX_RATE_MCS7,
+	CONF_HW_RXTX_RATE_MCS7 = 0,
 	CONF_HW_RXTX_RATE_MCS6,
 	CONF_HW_RXTX_RATE_MCS5,
 	CONF_HW_RXTX_RATE_MCS4,
@@ -92,10 +91,6 @@ enum {
 	CONF_HW_RXTX_RATE_UNSUPPORTED = 0xff
 };
 
-/* Rates between and including these are MCS rates */
-#define CONF_HW_RXTX_RATE_MCS_MIN CONF_HW_RXTX_RATE_MCS7_SGI
-#define CONF_HW_RXTX_RATE_MCS_MAX CONF_HW_RXTX_RATE_MCS0
-
 enum {
 	CONF_SG_DISABLE = 0,
 	CONF_SG_PROTECTIVE,
@@ -104,75 +99,40 @@ enum {
 
 enum {
 	/*
-	 * Configure the min and max time BT gains the antenna
-	 * in WLAN / BT master basic rate
+	 * PER threshold in PPM of the BT voice
 	 *
-	 * Range: 0 - 255 (ms)
+	 * Range: 0 - 10000000
 	 */
-	CONF_SG_ACL_BT_MASTER_MIN_BR = 0,
-	CONF_SG_ACL_BT_MASTER_MAX_BR,
+	CONF_SG_BT_PER_THRESHOLD = 0,
 
 	/*
-	 * Configure the min and max time BT gains the antenna
-	 * in WLAN / BT slave basic rate
+	 * Number of consequent RX_ACTIVE activities to override BT voice
+	 * frames to ensure WLAN connection
 	 *
-	 * Range: 0 - 255 (ms)
+	 * Range: 0 - 100
 	 */
-	CONF_SG_ACL_BT_SLAVE_MIN_BR,
-	CONF_SG_ACL_BT_SLAVE_MAX_BR,
+	CONF_SG_HV3_MAX_OVERRIDE,
 
 	/*
-	 * Configure the min and max time BT gains the antenna
-	 * in WLAN / BT master EDR
+	 * Defines the PER threshold of the BT voice
 	 *
-	 * Range: 0 - 255 (ms)
+	 * Range: 0 - 65000
 	 */
-	CONF_SG_ACL_BT_MASTER_MIN_EDR,
-	CONF_SG_ACL_BT_MASTER_MAX_EDR,
+	CONF_SG_BT_NFS_SAMPLE_INTERVAL,
 
 	/*
-	 * Configure the min and max time BT gains the antenna
-	 * in WLAN / BT slave EDR
+	 * Defines the load ratio of BT
 	 *
-	 * Range: 0 - 255 (ms)
+	 * Range: 0 - 100 (%)
 	 */
-	CONF_SG_ACL_BT_SLAVE_MIN_EDR,
-	CONF_SG_ACL_BT_SLAVE_MAX_EDR,
+	CONF_SG_BT_LOAD_RATIO,
 
 	/*
-	 * The maximum time WLAN can gain the antenna
-	 * in WLAN PSM / BT master/slave BR
+	 * Defines whether the SG will force WLAN host to enter/exit PSM
 	 *
-	 * Range: 0 - 255 (ms)
+	 * Range: 1 - SG can force, 0 - host handles PSM
 	 */
-	CONF_SG_ACL_WLAN_PS_MASTER_BR,
-	CONF_SG_ACL_WLAN_PS_SLAVE_BR,
-
-	/*
-	 * The maximum time WLAN can gain the antenna
-	 * in WLAN PSM / BT master/slave EDR
-	 *
-	 * Range: 0 - 255 (ms)
-	 */
-	CONF_SG_ACL_WLAN_PS_MASTER_EDR,
-	CONF_SG_ACL_WLAN_PS_SLAVE_EDR,
-
-	/* TODO: explain these values */
-	CONF_SG_ACL_WLAN_ACTIVE_MASTER_MIN_BR,
-	CONF_SG_ACL_WLAN_ACTIVE_MASTER_MAX_BR,
-	CONF_SG_ACL_WLAN_ACTIVE_SLAVE_MIN_BR,
-	CONF_SG_ACL_WLAN_ACTIVE_SLAVE_MAX_BR,
-	CONF_SG_ACL_WLAN_ACTIVE_MASTER_MIN_EDR,
-	CONF_SG_ACL_WLAN_ACTIVE_MASTER_MAX_EDR,
-	CONF_SG_ACL_WLAN_ACTIVE_SLAVE_MIN_EDR,
-	CONF_SG_ACL_WLAN_ACTIVE_SLAVE_MAX_EDR,
-
-	CONF_SG_ACL_ACTIVE_SCAN_WLAN_BR,
-	CONF_SG_ACL_ACTIVE_SCAN_WLAN_EDR,
-	CONF_SG_ACL_PASSIVE_SCAN_BT_BR,
-	CONF_SG_ACL_PASSIVE_SCAN_WLAN_BR,
-	CONF_SG_ACL_PASSIVE_SCAN_BT_EDR,
-	CONF_SG_ACL_PASSIVE_SCAN_WLAN_EDR,
+	CONF_SG_AUTO_PS_MODE,
 
 	/*
 	 * Compensation percentage of probe requests when scan initiated
@@ -191,50 +151,6 @@ enum {
 	CONF_SG_ACTIVE_SCAN_DURATION_FACTOR_HV3,
 
 	/*
-	 * Compensation percentage of WLAN active scan window if initiated
-	 * during BT A2DP
-	 *
-	 * Range: 0 - 1000 (%)
-	 */
-	CONF_SG_ACTIVE_SCAN_DURATION_FACTOR_A2DP,
-
-	/*
-	 * Compensation percentage of WLAN passive scan window if initiated
-	 * during BT A2DP BR
-	 *
-	 * Range: 0 - 1000 (%)
-	 */
-	CONF_SG_PASSIVE_SCAN_DURATION_FACTOR_A2DP_BR,
-
-	/*
-	 * Compensation percentage of WLAN passive scan window if initiated
-	 * during BT A2DP EDR
-	 *
-	 * Range: 0 - 1000 (%)
-	 */
-	CONF_SG_PASSIVE_SCAN_DURATION_FACTOR_A2DP_EDR,
-
-	/*
-	 * Compensation percentage of WLAN passive scan window if initiated
-	 * during BT voice
-	 *
-	 * Range: 0 - 1000 (%)
-	 */
-	CONF_SG_PASSIVE_SCAN_DURATION_FACTOR_HV3,
-
-	/* TODO: explain these values */
-	CONF_SG_CONSECUTIVE_HV3_IN_PASSIVE_SCAN,
-	CONF_SG_BCN_HV3_COLLISION_THRESH_IN_PASSIVE_SCAN,
-	CONF_SG_TX_RX_PROTECTION_BWIDTH_IN_PASSIVE_SCAN,
-
-	/*
-	 * Defines whether the SG will force WLAN host to enter/exit PSM
-	 *
-	 * Range: 1 - SG can force, 0 - host handles PSM
-	 */
-	CONF_SG_STA_FORCE_PS_IN_BT_SCO,
-
-	/*
 	 * Defines antenna configuration (single/dual antenna)
 	 *
 	 * Range: 0 - single antenna, 1 - dual antenna
@@ -242,7 +158,7 @@ enum {
 	CONF_SG_ANTENNA_CONFIGURATION,
 
 	/*
-	 * The threshold (percent) of max consecutive beacon misses before
+	 * The threshold (percent) of max consequtive beacon misses before
 	 * increasing priority of beacon reception.
 	 *
 	 * Range: 0 - 100 (%)
@@ -250,11 +166,87 @@ enum {
 	CONF_SG_BEACON_MISS_PERCENT,
 
 	/*
-	 * Protection time of the DHCP procedure.
+	 * The rate threshold below which receiving a data frame from the AP
+	 * will increase the priority of the data frame above BT traffic.
 	 *
-	 * Range: 0 - 100000 (ms)
+	 * Range: 0,2, 5(=5.5), 6, 9, 11, 12, 18, 24, 36, 48, 54
 	 */
-	CONF_SG_DHCP_TIME,
+	CONF_SG_RATE_ADAPT_THRESH,
+
+	/*
+	 * Not used currently.
+	 *
+	 * Range: 0
+	 */
+	CONF_SG_RATE_ADAPT_SNR,
+
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN PSM / BT master basic rate
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_BT_ACL_MASTER_MIN_BR,
+	CONF_SG_WLAN_PS_BT_ACL_MASTER_MAX_BR,
+
+	/*
+	 * The time after it expires no new WLAN trigger frame is trasmitted
+	 * in WLAN PSM / BT master basic rate
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_MAX_BT_ACL_MASTER_BR,
+
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN PSM / BT slave basic rate
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_BT_ACL_SLAVE_MIN_BR,
+	CONF_SG_WLAN_PS_BT_ACL_SLAVE_MAX_BR,
+
+	/*
+	 * The time after it expires no new WLAN trigger frame is trasmitted
+	 * in WLAN PSM / BT slave basic rate
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_MAX_BT_ACL_SLAVE_BR,
+
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN PSM / BT master EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_BT_ACL_MASTER_MIN_EDR,
+	CONF_SG_WLAN_PS_BT_ACL_MASTER_MAX_EDR,
+
+	/*
+	 * The time after it expires no new WLAN trigger frame is trasmitted
+	 * in WLAN PSM / BT master EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_MAX_BT_ACL_MASTER_EDR,
+
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN PSM / BT slave EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_BT_ACL_SLAVE_MIN_EDR,
+	CONF_SG_WLAN_PS_BT_ACL_SLAVE_MAX_EDR,
+
+	/*
+	 * The time after it expires no new WLAN trigger frame is trasmitted
+	 * in WLAN PSM / BT slave EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_PS_MAX_BT_ACL_SLAVE_EDR,
 
 	/*
 	 * RX guard time before the beginning of a new BT voice frame during
@@ -281,16 +273,6 @@ enum {
 	 */
 	CONF_SG_ADAPTIVE_RXT_TXT,
 
-	/* TODO: explain this value */
-	CONF_SG_GENERAL_USAGE_BIT_MAP,
-
-	/*
-	 * Number of consecutive BT voice frames not interrupted by WLAN
-	 *
-	 * Range: 0 - 100
-	 */
-	CONF_SG_HV3_MAX_SERVED,
-
 	/*
 	 * The used WLAN legacy service period during active BT ACL link
 	 *
@@ -305,39 +287,152 @@ enum {
 	 */
 	CONF_SG_UPSD_TIMEOUT,
 
-	CONF_SG_CONSECUTIVE_CTS_THRESHOLD,
-	CONF_SG_STA_RX_WINDOW_AFTER_DTIM,
-	CONF_SG_STA_CONNECTION_PROTECTION_TIME,
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN Active / BT master EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_ACTIVE_BT_ACL_MASTER_MIN_EDR,
+	CONF_SG_WLAN_ACTIVE_BT_ACL_MASTER_MAX_EDR,
 
-	/* AP params */
-	CONF_AP_BEACON_MISS_TX,
-	CONF_AP_RX_WINDOW_AFTER_BEACON,
-	CONF_AP_BEACON_WINDOW_INTERVAL,
-	CONF_AP_CONNECTION_PROTECTION_TIME,
-	CONF_AP_BT_ACL_VAL_BT_SERVE_TIME,
-	CONF_AP_BT_ACL_VAL_WL_SERVE_TIME,
+	/*
+	 * The maximum time WLAN can gain the antenna for
+	 * in WLAN Active / BT master EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_ACTIVE_MAX_BT_ACL_MASTER_EDR,
 
-	/* CTS Diluting params */
-	CONF_SG_CTS_DILUTED_BAD_RX_PACKETS_TH,
-	CONF_SG_CTS_CHOP_IN_DUAL_ANT_SCO_MASTER,
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN Active / BT slave EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_ACTIVE_BT_ACL_SLAVE_MIN_EDR,
+	CONF_SG_WLAN_ACTIVE_BT_ACL_SLAVE_MAX_EDR,
 
+	/*
+	 * The maximum time WLAN can gain the antenna for
+	 * in WLAN Active / BT slave EDR
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_ACTIVE_MAX_BT_ACL_SLAVE_EDR,
+
+	/*
+	 * Configure the min and max time BT gains the antenna
+	 * in WLAN Active / BT basic rate
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_ACTIVE_BT_ACL_MIN_BR,
+	CONF_SG_WLAN_ACTIVE_BT_ACL_MAX_BR,
+
+	/*
+	 * The maximum time WLAN can gain the antenna for
+	 * in WLAN Active / BT basic rate
+	 *
+	 * Range: 0 - 255 (ms)
+	 */
+	CONF_SG_WLAN_ACTIVE_MAX_BT_ACL_BR,
+
+	/*
+	 * Compensation percentage of WLAN passive scan window if initiated
+	 * during BT voice
+	 *
+	 * Range: 0 - 1000 (%)
+	 */
+	CONF_SG_PASSIVE_SCAN_DURATION_FACTOR_HV3,
+
+	/*
+	 * Compensation percentage of WLAN passive scan window if initiated
+	 * during BT A2DP
+	 *
+	 * Range: 0 - 1000 (%)
+	 */
+	CONF_SG_PASSIVE_SCAN_DURATION_FACTOR_A2DP,
+
+	/*
+	 * Fixed time ensured for BT traffic to gain the antenna during WLAN
+	 * passive scan.
+	 *
+	 * Range: 0 - 1000 ms
+	 */
+	CONF_SG_PASSIVE_SCAN_A2DP_BT_TIME,
+
+	/*
+	 * Fixed time ensured for WLAN traffic to gain the antenna during WLAN
+	 * passive scan.
+	 *
+	 * Range: 0 - 1000 ms
+	 */
+	CONF_SG_PASSIVE_SCAN_A2DP_WLAN_TIME,
+
+	/*
+	 * Number of consequent BT voice frames not interrupted by WLAN
+	 *
+	 * Range: 0 - 100
+	 */
+	CONF_SG_HV3_MAX_SERVED,
+
+	/*
+	 * Protection time of the DHCP procedure.
+	 *
+	 * Range: 0 - 100000 (ms)
+	 */
+	CONF_SG_DHCP_TIME,
+
+	/*
+	 * Compensation percentage of WLAN active scan window if initiated
+	 * during BT A2DP
+	 *
+	 * Range: 0 - 1000 (%)
+	 */
+	CONF_SG_ACTIVE_SCAN_DURATION_FACTOR_A2DP,
 	CONF_SG_TEMP_PARAM_1,
 	CONF_SG_TEMP_PARAM_2,
 	CONF_SG_TEMP_PARAM_3,
 	CONF_SG_TEMP_PARAM_4,
 	CONF_SG_TEMP_PARAM_5,
+
+	/*
+	 * AP beacon miss
+	 *
+	 * Range: 0 - 255
+	 */
+	CONF_SG_AP_BEACON_MISS_TX,
+
+	/*
+	 * AP RX window length
+	 *
+	 * Range: 0 - 50
+	 */
+	CONF_SG_RX_WINDOW_LENGTH,
+
+	/*
+	 * AP connection protection time
+	 *
+	 * Range: 0 - 5000
+	 */
+	CONF_SG_AP_CONNECTION_PROTECTION_TIME,
+
 	CONF_SG_TEMP_PARAM_6,
 	CONF_SG_TEMP_PARAM_7,
 	CONF_SG_TEMP_PARAM_8,
 	CONF_SG_TEMP_PARAM_9,
 	CONF_SG_TEMP_PARAM_10,
 
-	CONF_SG_PARAMS_MAX,
+	CONF_SG_STA_PARAMS_MAX = CONF_SG_TEMP_PARAM_5 + 1,
+	CONF_SG_AP_PARAMS_MAX = CONF_SG_TEMP_PARAM_10 + 1,
+
 	CONF_SG_PARAMS_ALL = 0xff
 };
 
 struct conf_sg_settings {
-	u32 params[CONF_SG_PARAMS_MAX];
+	u32 sta_params[CONF_SG_STA_PARAMS_MAX];
+	u32 ap_params[CONF_SG_AP_PARAMS_MAX];
 	u8 state;
 };
 
@@ -425,15 +520,12 @@ struct conf_rx_settings {
 	u8 queue_type;
 };
 
-#define CONF_TX_MAX_RATE_CLASSES       10
+#define CONF_TX_MAX_RATE_CLASSES       8
 
 #define CONF_TX_RATE_MASK_UNSPECIFIED  0
 #define CONF_TX_RATE_MASK_BASIC        (CONF_HW_BIT_RATE_1MBPS | \
 					CONF_HW_BIT_RATE_2MBPS)
 #define CONF_TX_RATE_RETRY_LIMIT       10
-
-/* basic rates for p2p operations (probe req/resp, etc.) */
-#define CONF_TX_RATE_MASK_BASIC_P2P    CONF_HW_BIT_RATE_6MBPS
 
 /*
  * Rates supported for data packets when operating as AP. Note the absence
@@ -448,20 +540,11 @@ struct conf_rx_settings {
 	CONF_HW_BIT_RATE_36MBPS | CONF_HW_BIT_RATE_48MBPS |      \
 	CONF_HW_BIT_RATE_54MBPS)
 
-#define CONF_TX_CCK_RATES  (CONF_HW_BIT_RATE_1MBPS |		\
-	CONF_HW_BIT_RATE_2MBPS | CONF_HW_BIT_RATE_5_5MBPS |	\
-	CONF_HW_BIT_RATE_11MBPS)
-
 #define CONF_TX_OFDM_RATES (CONF_HW_BIT_RATE_6MBPS |             \
 	CONF_HW_BIT_RATE_12MBPS | CONF_HW_BIT_RATE_24MBPS |      \
 	CONF_HW_BIT_RATE_36MBPS | CONF_HW_BIT_RATE_48MBPS |      \
 	CONF_HW_BIT_RATE_54MBPS)
 
-#define CONF_TX_MCS_RATES (CONF_HW_BIT_RATE_MCS_0 |              \
-	CONF_HW_BIT_RATE_MCS_1 | CONF_HW_BIT_RATE_MCS_2 |        \
-	CONF_HW_BIT_RATE_MCS_3 | CONF_HW_BIT_RATE_MCS_4 |        \
-	CONF_HW_BIT_RATE_MCS_5 | CONF_HW_BIT_RATE_MCS_6 |        \
-	CONF_HW_BIT_RATE_MCS_7)
 
 /*
  * Default rates for management traffic when operating in AP mode. This
@@ -470,10 +553,12 @@ struct conf_rx_settings {
 #define CONF_TX_AP_DEFAULT_MGMT_RATES  (CONF_HW_BIT_RATE_1MBPS | \
 	CONF_HW_BIT_RATE_2MBPS | CONF_HW_BIT_RATE_5_5MBPS)
 
-/* default rates for working as IBSS (11b and OFDM) */
+/*
+ * Default rates for working as IBSS. use 11b rates
+ */
 #define CONF_TX_IBSS_DEFAULT_RATES  (CONF_HW_BIT_RATE_1MBPS |       \
 		CONF_HW_BIT_RATE_2MBPS | CONF_HW_BIT_RATE_5_5MBPS | \
-		CONF_HW_BIT_RATE_11MBPS | CONF_TX_OFDM_RATES);
+		CONF_HW_BIT_RATE_11MBPS);
 
 struct conf_tx_rate_class {
 
@@ -532,7 +617,7 @@ enum conf_tx_ac {
 	CONF_TX_AC_VI = 2,         /* video */
 	CONF_TX_AC_VO = 3,         /* voice */
 	CONF_TX_AC_CTS2SELF = 4,   /* fictitious AC, follows AC_VO */
-	CONF_TX_AC_ANY_TID = 0xff
+	CONF_TX_AC_ANY_TID = 0x1f
 };
 
 struct conf_tx_ac_category {
@@ -575,9 +660,6 @@ struct conf_tx_ac_category {
 };
 
 #define CONF_TX_MAX_TID_COUNT 8
-
-/* Allow TX BA on all TIDs but 6,7. These are currently reserved in the FW */
-#define CONF_TX_BA_ENABLED_TID_BITMAP 0x3F
 
 enum {
 	CONF_CHANNEL_TYPE_DCF = 0,   /* DC/LEGACY*/
@@ -631,16 +713,8 @@ struct conf_tx_settings {
 	/*
 	 * AP-mode - allow this number of TX retries to a station before an
 	 * event is triggered from FW.
-	 * In AP-mode the hlids of unreachable stations are given in the
-	 * "sta_tx_retry_exceeded" member in the event mailbox.
 	 */
-	u8 max_tx_retries;
-
-	/*
-	 * AP-mode - after this number of seconds a connected station is
-	 * considered inactive.
-	 */
-	u16 ap_aging_period;
+	u16 ap_max_tx_retries;
 
 	/*
 	 * Configuration for TID parameters.
@@ -689,9 +763,6 @@ struct conf_tx_settings {
 	 */
 	u8 tmpl_short_retry_limit;
 	u8 tmpl_long_retry_limit;
-
-	/* Time in ms for Tx watchdog timer to expire */
-	u32 tx_watchdog_timeout;
 };
 
 enum {
@@ -821,19 +892,6 @@ struct conf_conn_settings {
 	u8 listen_interval;
 
 	/*
-	 * Firmware wakeup conditions during suspend
-	 * Range: CONF_WAKE_UP_EVENT_*
-	 */
-	u8 suspend_wake_up_event;
-
-	/*
-	 * Listen interval during suspend.
-	 * Currently will be in DTIMs (1-10)
-	 *
-	 */
-	u8 suspend_listen_interval;
-
-	/*
 	 * Enable or disable the beacon filtering.
 	 *
 	 * Range: CONF_BCN_FILT_MODE_*
@@ -847,7 +905,7 @@ struct conf_conn_settings {
 	struct conf_bcn_filt_rule bcn_filt_ie[CONF_MAX_BCN_FILT_IE_COUNT];
 
 	/*
-	 * The number of consecutive beacons to lose, before the firmware
+	 * The number of consequtive beacons to lose, before the firmware
 	 * becomes out of synch.
 	 *
 	 * Range: u32
@@ -862,22 +920,6 @@ struct conf_conn_settings {
 	 * Range: u32
 	 */
 	u32 bss_lose_timeout;
-
-	/*
-	 * Max time (in msec) between beacon loss events in which they are still
-	 * considered consecutive (and a new message won't be generated)
-	 *
-	 * Range: u32
-	 */
-	 u32 cons_bcn_loss_time;
-
-	/*
-	 * Max handling time (in msec) for beacon loss events, before a connection
-	 * loss event will be sent
-	 *
-	 * Range u32
-	 */
-	 u32 max_bcn_loss_time;
 
 	/*
 	 * Beacon receive timeout.
@@ -901,11 +943,18 @@ struct conf_conn_settings {
 	u8 rx_broadcast_in_ps;
 
 	/*
-	 * Consecutive PS Poll failures before sending event to driver
+	 * Consequtive PS Poll failures before sending event to driver
 	 *
 	 * Range: u8
 	 */
 	u8 ps_poll_threshold;
+
+	/*
+	 * PS Poll failure recovery ACTIVE period length
+	 *
+	 * Range: u32 (ms)
+	 */
+	u32 ps_poll_recovery_period;
 
 	/*
 	 * Configuration of signal average weights.
@@ -955,16 +1004,12 @@ struct conf_conn_settings {
 	u8 psm_entry_nullfunc_retries;
 
 	/*
-	 * Specifies the dynamic PS timeout in ms that will be used
-	 * by the FW when in AUTO_PS mode
+	 * Specifies the time to linger in active mode after successfully
+	 * transmitting the PSM entry null-func frame.
+	 *
+	 * Range 0 - 255 TU's
 	 */
-	u16 dynamic_ps_timeout;
-
-	/*
-	 * Specifies whether dynamic PS should be disabled and PSM forced.
-	 * This is required for certain WiFi certification tests.
-	 */
-	u8 forced_ps;
+	u8 psm_entry_hangover_period;
 
 	/*
 	 *
@@ -981,13 +1026,6 @@ struct conf_conn_settings {
 	 * Range: u16
 	 */
 	u8 max_listen_interval;
-
-	/*
-	 * Specifies the timeout in which the host will allow the chip to go
-	 * into ELP. Mainly needed for TX traffic to prevent the host from
-	 * interrogating the FW status for each packets.
-	 */
-	u16 elp_timeout;
 };
 
 enum {
@@ -1087,24 +1125,6 @@ struct conf_scan_settings {
 	u32 max_dwell_time_active;
 
 	/*
-	 * The minimum time to wait on each channel for active scans
-	 * when there's a concurrent active interface. This should
-	 * lower than min_dwell_time_active usually in order to avoid
-	 * interfering with possible voip traffic on another interface.
-	 *
-	 * Range: u32 tu/1000
-	 */
-	u32 min_dwell_time_active_conc;
-
-	/*
-	 * The maximum time to wait on each channel for active scans
-	 * See explanation about min_dwell_time_active_conc
-	 *
-	 * Range: u32 tu/1000
-	 */
-	u32 max_dwell_time_active_conc;
-
-	/*
 	 * The minimum time to wait on each channel for passive scans
 	 *
 	 * Range: u32 tu/1000
@@ -1125,43 +1145,19 @@ struct conf_scan_settings {
 	 */
 	u16 num_probe_reqs;
 
-	/*
-	 * Scan trigger (split scan) timeout. The FW will split the scan
-	 * operation into slices of the given time and allow the FW to schedule
-	 * other tasks in between.
-	 *
-	 * Range: u32 Microsecs
-	 */
-	u32 split_scan_timeout;
 };
 
 struct conf_sched_scan_settings {
-	/*
-	 * The base time to wait on the channel for active scans (in TU/1000).
-	 * The minimum dwell time is calculated according to this:
-	 * min_dwell_time = base + num_of_probes_to_be_sent * delta_per_probe
-	 * The maximum dwell time is calculated according to this:
-	 * max_dwell_time = min_dwell_time + max_dwell_time_delta
-	 */
-	u32 base_dwell_time;
+	/* minimum time to wait on the channel for active scans (in TUs) */
+	u16 min_dwell_time_active;
 
-	/*
-	 * The delta between the min dwell time and max dwell time for
-	 * active scans (in TU/1000s). The max dwell time is used by the FW once
-	 * traffic is detected on the channel.
-	 */
-	u32 max_dwell_time_delta;
+	/* maximum time to wait on the channel for active scans (in TUs) */
+	u16 max_dwell_time_active;
 
-	/* Delta added to min dwell time per each probe in 2.4 GHz (TU/1000) */
-	u32 dwell_time_delta_per_probe;
-
-	/* Delta added to min dwell time per each probe in 5 GHz (TU/1000) */
-	u32 dwell_time_delta_per_probe_5;
-
-	/* time to wait on the channel for passive scans (in TU/1000) */
+	/* time to wait on the channel for passive scans (in TUs) */
 	u32 dwell_time_passive;
 
-	/* time to wait on the channel for DFS scans (in TU/1000) */
+	/* time to wait on the channel for DFS scans (in TUs) */
 	u32 dwell_time_dfs;
 
 	/* number of probe requests to send on each channel in active scans */
@@ -1195,12 +1191,8 @@ struct conf_rf_settings {
 };
 
 struct conf_ht_setting {
-	u8 rx_ba_win_size;
-	u8 tx_ba_win_size;
+	u16 tx_ba_win_size;
 	u16 inactivity_timeout;
-
-	/* bitmap of enabled TIDs for TX BA sessions */
-	u8 tx_ba_tid_bitmap;
 };
 
 struct conf_memory_settings {
@@ -1256,118 +1248,6 @@ struct conf_fm_coex {
 	u8 swallow_clk_diff;
 };
 
-struct conf_rx_streaming_settings {
-	/*
-	 * RX Streaming duration (in msec) from last tx/rx
-	 *
-	 * Range: u32
-	 */
-	u32 duration;
-
-	/*
-	 * Bitmap of tids to be polled during RX streaming.
-	 * (Note: it doesn't look like it really matters)
-	 *
-	 * Range: 0x1-0xff
-	 */
-	u8 queues;
-
-	/*
-	 * RX Streaming interval.
-	 * (Note:this value is also used as the rx streaming timeout)
-	 * Range: 0 (disabled), 10 - 100
-	 */
-	u8 interval;
-
-	/*
-	 * enable rx streaming also when there is no coex activity
-	 */
-	u8 always;
-};
-
-#define CONF_FWLOG_MIN_MEM_BLOCKS 	2
-#define CONF_FWLOG_MAX_MEM_BLOCKS	16
-
-struct conf_fwlog {
-	/* Continuous or on-demand */
-	u8 mode;
-
-	/*
-	 * Number of memory blocks dedicated for the FW logger
-	 *
-	 * Range: 2-16, or 0 to disable the FW logger
-	 */
-	u8 mem_blocks;
-
-	/* Minimum log level threshold */
-	u8 severity;
-
-	/* Include/exclude timestamps from the log messages */
-	u8 timestamp;
-
-	/* See enum wl1271_fwlogger_output */
-	u8 output;
-
-	/* Regulates the frequency of log messages */
-	u8 threshold;
-};
-
-enum core_dump_mem_area_enum {
-	CONF_MEM_CODE      = 0,
-	CONF_MEM_DATA      = 1,
-	CONF_MEM_PACKET	   = 2,
-	CONF_MEM_REGISTERS = 3,
-
-	CONF_MEM_LAST,
-};
-
-struct mem_partition {
-	u32 size;
-	u32 start;
-};
-
-struct conf_core_dump {
-	/* enable core dump to sysfs */
-	u8 enable;
-
-	/* FW memory areas to dump */
-	struct mem_partition mem_wl127x[CONF_MEM_LAST];
-	struct mem_partition mem_wl128x[CONF_MEM_LAST];
-};
-
-#define ACX_RATE_MGMT_NUM_OF_RATES 13
-struct conf_rate_policy_settings {
-	u16 rate_retry_score;
-	u16 per_add;
-	u16 per_th1;
-	u16 per_th2;
-	u16 max_per;
-	u8 inverse_curiosity_factor;
-	u8 tx_fail_low_th;
-	u8 tx_fail_high_th;
-	u8 per_alpha_shift;
-	u8 per_add_shift;
-	u8 per_beta1_shift;
-	u8 per_beta2_shift;
-	u8 rate_check_up;
-	u8 rate_check_down;
-	u8 rate_retry_policy[ACX_RATE_MGMT_NUM_OF_RATES];
-};
-
-struct conf_hangover_settings {
-	u32 recover_time;
-	u8 hangover_period;
-	u8 dynamic_mode;
-	u8 early_termination_mode;
-	u8 max_period;
-	u8 min_period;
-	u8 increase_delta;
-	u8 decrease_delta;
-	u8 quiet_time;
-	u8 increase_time;
-	u8 window_size;
-};
-
 struct conf_drv_settings {
 	struct conf_sg_settings sg;
 	struct conf_rx_settings rx;
@@ -1383,11 +1263,6 @@ struct conf_drv_settings {
 	struct conf_memory_settings mem_wl127x;
 	struct conf_memory_settings mem_wl128x;
 	struct conf_fm_coex fm_coex;
-	struct conf_rx_streaming_settings rx_streaming;
-	struct conf_fwlog fwlog;
-	struct conf_core_dump core_dump;
-	struct conf_rate_policy_settings rate;
-	struct conf_hangover_settings hangover;
 	u8 hci_io_ds;
 };
 

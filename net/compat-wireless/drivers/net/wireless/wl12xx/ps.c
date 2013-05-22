@@ -25,7 +25,6 @@
 #include "ps.h"
 #include "io.h"
 #include "tx.h"
-#include "debug.h"
 
 #define WL1271_WAKEUP_TIMEOUT 500
 
@@ -33,8 +32,6 @@ void wl1271_elp_work(struct work_struct *work)
 {
 	struct delayed_work *dwork;
 	struct wl1271 *wl;
-	struct wl12xx_vif *wlvif;
-	int ret;
 
 	dwork = container_of(work, struct delayed_work, work);
 	wl = container_of(dwork, struct wl1271, elp_work);
@@ -43,65 +40,41 @@ void wl1271_elp_work(struct work_struct *work)
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state != WLCORE_STATE_ON))
+	if (unlikely(wl->state == WL1271_STATE_OFF))
 		goto out;
 
 	/* our work might have been already cancelled */
 	if (unlikely(!test_bit(WL1271_FLAG_ELP_REQUESTED, &wl->flags)))
 		goto out;
 
-	if (test_bit(WL1271_FLAG_IN_ELP, &wl->flags))
+	if (test_bit(WL1271_FLAG_IN_ELP, &wl->flags) ||
+	    (!test_bit(WL1271_FLAG_PSM, &wl->flags) &&
+	     !test_bit(WL1271_FLAG_IDLE, &wl->flags)))
 		goto out;
-
-	wl12xx_for_each_wlvif(wl, wlvif) {
-		if (wlvif->bss_type == BSS_TYPE_AP_BSS)
-			goto out;
-
-		if (!test_bit(WLVIF_FLAG_IN_PS, &wlvif->flags) &&
-		    test_bit(WLVIF_FLAG_IN_USE, &wlvif->flags))
-			goto out;
-	}
 
 	wl1271_debug(DEBUG_PSM, "chip to elp");
-	ret = wl1271_raw_write32(wl, HW_ACCESS_ELP_CTRL_REG_ADDR,
-				 ELPCTRL_SLEEP);
-	if (ret < 0) {
-		wl12xx_queue_recovery_work(wl);
-		goto out;
-	}
-
+	wl1271_raw_write32(wl, HW_ACCESS_ELP_CTRL_REG_ADDR, ELPCTRL_SLEEP);
 	set_bit(WL1271_FLAG_IN_ELP, &wl->flags);
 
 out:
 	mutex_unlock(&wl->mutex);
 }
 
+#define ELP_ENTRY_DELAY  5
+
 /* Routines to toggle sleep mode while in ELP */
 void wl1271_ps_elp_sleep(struct wl1271 *wl)
 {
-	struct wl12xx_vif *wlvif;
-	u32 timeout;
-
-	/* We do not enter elp sleep in PLT mode */
-	if (wl->plt)
-		return;
-
 	/* we shouldn't get consecutive sleep requests */
 	if (WARN_ON(test_and_set_bit(WL1271_FLAG_ELP_REQUESTED, &wl->flags)))
 		return;
 
-	wl12xx_for_each_wlvif(wl, wlvif) {
-		if (wlvif->bss_type == BSS_TYPE_AP_BSS)
-			return;
+	if (!test_bit(WL1271_FLAG_PSM, &wl->flags) &&
+	    !test_bit(WL1271_FLAG_IDLE, &wl->flags))
+		return;
 
-		if (!test_bit(WLVIF_FLAG_IN_PS, &wlvif->flags) &&
-		    test_bit(WLVIF_FLAG_IN_USE, &wlvif->flags))
-			return;
-	}
-
-	timeout = wl->conf.conn.elp_timeout;
 	ieee80211_queue_delayed_work(wl->hw, &wl->elp_work,
-				     msecs_to_jiffies(timeout));
+				     msecs_to_jiffies(ELP_ENTRY_DELAY));
 }
 
 int wl1271_ps_elp_wakeup(struct wl1271 *wl)
@@ -125,10 +98,6 @@ int wl1271_ps_elp_wakeup(struct wl1271 *wl)
 	if (!test_bit(WL1271_FLAG_IN_ELP, &wl->flags))
 		return 0;
 
-	/* If we have SDIO error - don't try to wakeup */
-	if (test_bit(WL1271_FLAG_IO_FAILED, &wl->flags))
-		return -EIO;
-
 	wl1271_debug(DEBUG_PSM, "waking up chip from elp");
 
 	/*
@@ -142,19 +111,14 @@ int wl1271_ps_elp_wakeup(struct wl1271 *wl)
 		wl->elp_compl = &compl;
 	spin_unlock_irqrestore(&wl->wl_lock, flags);
 
-	ret = wl1271_raw_write32(wl, HW_ACCESS_ELP_CTRL_REG_ADDR,
-				 ELPCTRL_WAKE_UP);
-	if (ret < 0) {
-		wl12xx_queue_recovery_work(wl);
-		goto err;
-	}
+	wl1271_raw_write32(wl, HW_ACCESS_ELP_CTRL_REG_ADDR, ELPCTRL_WAKE_UP);
 
 	if (!pending) {
 		ret = wait_for_completion_timeout(
 			&compl, msecs_to_jiffies(WL1271_WAKEUP_TIMEOUT));
 		if (ret == 0) {
 			wl1271_error("ELP wakeup timeout!");
-			wl12xx_queue_recovery_work(wl);
+			ieee80211_queue_work(wl->hw, &wl->recovery_work);
 			ret = -ETIMEDOUT;
 			goto err;
 		} else if (ret < 0) {
@@ -179,63 +143,47 @@ out:
 	return 0;
 }
 
-int wl1271_ps_set_mode(struct wl1271 *wl, struct wl12xx_vif *wlvif,
-		       enum wl1271_cmd_ps_mode mode)
+int wl1271_ps_set_mode(struct wl1271 *wl, enum wl1271_cmd_ps_mode mode,
+		       u32 rates, bool send)
 {
 	int ret;
-	u16 timeout = wl->conf.conn.dynamic_ps_timeout;
 
 	switch (mode) {
-	case STATION_AUTO_PS_MODE:
 	case STATION_POWER_SAVE_MODE:
-		wl1271_debug(DEBUG_PSM, "entering psm (mode=%d,timeout=%u)",
-			     mode, timeout);
+		wl1271_debug(DEBUG_PSM, "entering psm");
 
-		ret = wl1271_acx_wake_up_conditions(wl, wlvif,
-					    wl->conf.conn.wake_up_event,
-					    wl->conf.conn.listen_interval);
+		ret = wl1271_acx_wake_up_conditions(wl);
 		if (ret < 0) {
 			wl1271_error("couldn't set wake up conditions");
 			return ret;
 		}
 
-		ret = wl1271_cmd_ps_mode(wl, wlvif, mode, timeout);
+		ret = wl1271_cmd_ps_mode(wl, STATION_POWER_SAVE_MODE);
 		if (ret < 0)
 			return ret;
 
-		set_bit(WLVIF_FLAG_IN_PS, &wlvif->flags);
-
-		/*
-		 * enable beacon early termination.
-		 * Not relevant for 5GHz and for high rates.
-		 */
-		if ((wlvif->band == IEEE80211_BAND_2GHZ) &&
-		    (wlvif->basic_rate < CONF_HW_BIT_RATE_9MBPS)) {
-			ret = wl1271_acx_bet_enable(wl, wlvif, true);
-			if (ret < 0)
-				return ret;
-		}
+		set_bit(WL1271_FLAG_PSM, &wl->flags);
 		break;
 	case STATION_ACTIVE_MODE:
+	default:
 		wl1271_debug(DEBUG_PSM, "leaving psm");
 
 		/* disable beacon early termination */
-		if ((wlvif->band == IEEE80211_BAND_2GHZ) &&
-		    (wlvif->basic_rate < CONF_HW_BIT_RATE_9MBPS)) {
-			ret = wl1271_acx_bet_enable(wl, wlvif, false);
-			if (ret < 0)
-				return ret;
-		}
-
-		ret = wl1271_cmd_ps_mode(wl, wlvif, mode, 0);
+		ret = wl1271_acx_bet_enable(wl, false);
 		if (ret < 0)
 			return ret;
 
-		clear_bit(WLVIF_FLAG_IN_PS, &wlvif->flags);
+		/* disable beacon filtering */
+		ret = wl1271_acx_beacon_filter_opt(wl, false);
+		if (ret < 0)
+			return ret;
+
+		ret = wl1271_cmd_ps_mode(wl, STATION_ACTIVE_MODE);
+		if (ret < 0)
+			return ret;
+
+		clear_bit(WL1271_FLAG_PSM, &wl->flags);
 		break;
-	default:
-		wl1271_warning("trying to set ps to unsupported mode %d", mode);
-		ret = -EINVAL;
 	}
 
 	return ret;
@@ -243,51 +191,42 @@ int wl1271_ps_set_mode(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 
 static void wl1271_ps_filter_frames(struct wl1271 *wl, u8 hlid)
 {
-	int i;
+	int i, filtered = 0;
 	struct sk_buff *skb;
 	struct ieee80211_tx_info *info;
 	unsigned long flags;
-	int filtered[NUM_TX_QUEUES];
 
-	/* filter all frames currently in the low level queues for this hlid */
+	/* filter all frames currently the low level queus for this hlid */
 	for (i = 0; i < NUM_TX_QUEUES; i++) {
-		filtered[i] = 0;
 		while ((skb = skb_dequeue(&wl->links[hlid].tx_queue[i]))) {
-			filtered[i]++;
-
-			if (WARN_ON(wl12xx_is_dummy_packet(wl, skb)))
-				continue;
-
 			info = IEEE80211_SKB_CB(skb);
 			info->flags |= IEEE80211_TX_STAT_TX_FILTERED;
 			info->status.rates[0].idx = -1;
-			ieee80211_tx_status_ni(wl->hw, skb);
+			ieee80211_tx_status(wl->hw, skb);
+			filtered++;
 		}
 	}
 
 	spin_lock_irqsave(&wl->wl_lock, flags);
-	for (i = 0; i < NUM_TX_QUEUES; i++)
-		wl->tx_queue_count[i] -= filtered[i];
+	wl->tx_queue_count -= filtered;
 	spin_unlock_irqrestore(&wl->wl_lock, flags);
 
 	wl1271_handle_tx_low_watermark(wl);
 }
 
-void wl12xx_ps_link_start(struct wl1271 *wl, struct wl12xx_vif *wlvif,
-			  u8 hlid, bool clean_queues)
+void wl1271_ps_link_start(struct wl1271 *wl, u8 hlid, bool clean_queues)
 {
 	struct ieee80211_sta *sta;
-	struct ieee80211_vif *vif = wl12xx_wlvif_to_vif(wlvif);
 
 	if (test_bit(hlid, &wl->ap_ps_map))
 		return;
 
-	wl1271_debug(DEBUG_PSM, "start mac80211 PSM on hlid %d pkts %d "
-		     "clean_queues %d", hlid, wl->links[hlid].allocated_pkts,
+	wl1271_debug(DEBUG_PSM, "start mac80211 PSM on hlid %d blks %d "
+		     "clean_queues %d", hlid, wl->links[hlid].allocated_blks,
 		     clean_queues);
 
 	rcu_read_lock();
-	sta = ieee80211_find_sta(vif, wl->links[hlid].addr);
+	sta = ieee80211_find_sta(wl->vif, wl->links[hlid].addr);
 	if (!sta) {
 		wl1271_error("could not find sta %pM for starting ps",
 			     wl->links[hlid].addr);
@@ -305,10 +244,9 @@ void wl12xx_ps_link_start(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 	__set_bit(hlid, &wl->ap_ps_map);
 }
 
-void wl12xx_ps_link_end(struct wl1271 *wl, struct wl12xx_vif *wlvif, u8 hlid)
+void wl1271_ps_link_end(struct wl1271 *wl, u8 hlid)
 {
 	struct ieee80211_sta *sta;
-	struct ieee80211_vif *vif = wl12xx_wlvif_to_vif(wlvif);
 
 	if (!test_bit(hlid, &wl->ap_ps_map))
 		return;
@@ -318,7 +256,7 @@ void wl12xx_ps_link_end(struct wl1271 *wl, struct wl12xx_vif *wlvif, u8 hlid)
 	__clear_bit(hlid, &wl->ap_ps_map);
 
 	rcu_read_lock();
-	sta = ieee80211_find_sta(vif, wl->links[hlid].addr);
+	sta = ieee80211_find_sta(wl->vif, wl->links[hlid].addr);
 	if (!sta) {
 		wl1271_error("could not find sta %pM for ending ps",
 			     wl->links[hlid].addr);

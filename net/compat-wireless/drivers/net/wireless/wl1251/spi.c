@@ -19,7 +19,6 @@
  *
  */
 
-#include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -322,6 +321,7 @@ static int __devexit wl1251_spi_remove(struct spi_device *spi)
 static struct spi_driver wl1251_spi_driver = {
 	.driver = {
 		.name		= DRIVER_NAME,
+		.bus		= &spi_bus_type,
 		.owner		= THIS_MODULE,
 	},
 

@@ -7,14 +7,11 @@
  *  the Free Software Foundation; either version 2 of the License, or (at
  *  your option) any later version.
  */
-#undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/hardirq.h>
 #include <linux/slab.h>
 
 #include <linux/etherdevice.h>
-#include <linux/module.h>
 #include "libertas_tf.h"
 
 #define DRIVER_RELEASE_VERSION "004.p0"
@@ -420,20 +417,36 @@ static int lbtf_op_config(struct ieee80211_hw *hw, u32 changed)
 }
 
 static u64 lbtf_op_prepare_multicast(struct ieee80211_hw *hw,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 				     struct netdev_hw_addr_list *mc_list)
+#else
+				     int mc_count, struct dev_addr_list *ha)
+#endif
 {
 	struct lbtf_private *priv = hw->priv;
 	int i;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	struct netdev_hw_addr *ha;
 	int mc_count = netdev_hw_addr_list_count(mc_list);
+#endif
 
 	if (!mc_count || mc_count > MRVDRV_MAX_MULTICAST_LIST_SIZE)
 		return mc_count;
 
 	priv->nr_of_multicastmacaddr = mc_count;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35))
 	i = 0;
 	netdev_hw_addr_list_for_each(ha, mc_list)
 		memcpy(&priv->multicastlist[i++], ha->addr, ETH_ALEN);
+#else
+	for (i = 0; i < mc_count; i++) {
+		if (!ha)
+			break;
+		memcpy(&priv->multicastlist[i], ha->da_addr,
+				ETH_ALEN);
+		ha = ha->next;
+	}
+#endif
 
 	return mc_count;
 }
@@ -588,7 +601,7 @@ int lbtf_rx(struct lbtf_private *priv, struct sk_buff *skb)
 	need_padding ^= ieee80211_has_a4(hdr->frame_control);
 	need_padding ^= ieee80211_is_data_qos(hdr->frame_control) &&
 			(*ieee80211_get_qos_ctl(hdr) &
-			 IEEE80211_QOS_CTL_A_MSDU_PRESENT);
+			 IEEE80211_QOS_CONTROL_A_MSDU_PRESENT);
 
 	if (need_padding) {
 		memmove(skb->data + 2, skb->data, skb->len);
