@@ -53,13 +53,13 @@ struct as3676_platform_data as3676_platform_data = {
 		.name = "button-backlight-rgb1",
 		.on_charge_pump = 0,
 		.max_current_uA = 500,
-		.startup_current_uA = 4000,
+		.startup_current_uA = 500,
 	},
 	.leds[5] = {
 		.name = "button-backlight-rgb2",
 		.on_charge_pump = 0,
 		.max_current_uA = 500,
-		.startup_current_uA = 4000,
+		.startup_current_uA = 500,
 	},
 	.leds[6] = {
 		.name = "red",
