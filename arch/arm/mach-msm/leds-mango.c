@@ -77,24 +77,28 @@ struct as3676_platform_data as3676_platform_data = {
 		.max_current_uA = 5000,
 	},
 	.leds[9] = {
-		.name = "led_10-not-connected",
+		.name = "keyboard-backlight-rgb1",
 		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.max_current_uA = 5000,
+		.startup_current_uA = 5000,
 	},
 	.leds[10] = {
-		.name = "led_11-not-connected",
+		.name = "keyboard-backlight-rgb2",
 		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.max_current_uA = 5000,
+		.startup_current_uA = 5000,
 	},
 	.leds[11] = {
-		.name = "led_12-not-connected",
+		.name = "keyboard-backlight-rgb3",
 		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.max_current_uA = 5000,
+		.startup_current_uA = 5000,
 	},
 	.leds[12] = {
-		.name = "led_13-not-connected",
+		.name = "keyboard-backlight-rgb4",
 		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.max_current_uA = 5000,
+		.startup_current_uA = 5000,
 	},
 };
 
