@@ -1637,55 +1637,12 @@ static int __init buses_init(void)
 
 #define TIMPANI_RESET_GPIO	1
 
-struct bahama_config_register{
-	u8 reg;
-	u8 value;
-	u8 mask;
-};
-
-enum version{
-	VER_1_0,
-	VER_2_0,
-	VER_UNSUPPORTED = 0xFF
-};
-
 static struct regulator *vreg_marimba_1;
 static struct regulator *vreg_marimba_2;
-static struct regulator *vreg_bahama;
 
 static struct msm_gpio timpani_reset_gpio_cfg[] = {
 { GPIO_CFG(TIMPANI_RESET_GPIO, 0, GPIO_CFG_OUTPUT,
 	GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "timpani_reset"} };
-
-static u8 read_bahama_ver(void)
-{
-	int rc;
-	struct marimba config = { .mod_id = SLAVE_ID_BAHAMA };
-	u8 bahama_version;
-
-	rc = marimba_read_bit_mask(&config, 0x00,  &bahama_version, 1, 0x1F);
-	if (rc < 0) {
-		printk(KERN_ERR
-			 "%s: version read failed: %d\n",
-			__func__, rc);
-			return rc;
-	} else {
-		printk(KERN_INFO
-		"%s: version read got: 0x%x\n",
-		__func__, bahama_version);
-	}
-
-	switch (bahama_version) {
-	case 0x08: /* varient of bahama v1 */
-	case 0x10:
-	case 0x00:
-		return VER_1_0;
-	case 0x09: /* variant of bahama v2 */
-		return VER_2_0;
-	default:
-		return VER_UNSUPPORTED;
-	}
-}
 
 static int config_timpani_reset(void)
 {
@@ -1759,72 +1716,6 @@ static void msm_timpani_shutdown_power(void)
 
 	msm_gpios_free(timpani_reset_gpio_cfg,
 				   ARRAY_SIZE(timpani_reset_gpio_cfg));
-};
-
-static unsigned int msm_bahama_core_config(int type)
-{
-	int rc = 0;
-
-	if (type == BAHAMA_ID) {
-
-		int i;
-		struct marimba config = { .mod_id = SLAVE_ID_BAHAMA };
-
-		const struct bahama_config_register v20_init[] = {
-			/* reg, value, mask */
-			{ 0xF4, 0x84, 0xFF }, /* AREG */
-			{ 0xF0, 0x04, 0xFF } /* DREG */
-		};
-
-		if (read_bahama_ver() == VER_2_0) {
-			for (i = 0; i < ARRAY_SIZE(v20_init); i++) {
-				u8 value = v20_init[i].value;
-				rc = marimba_write_bit_mask(&config,
-					v20_init[i].reg,
-					&value,
-					sizeof(v20_init[i].value),
-					v20_init[i].mask);
-				if (rc < 0) {
-					printk(KERN_ERR
-						"%s: reg %d write failed: %d\n",
-						__func__, v20_init[i].reg, rc);
-					return rc;
-				}
-				printk(KERN_INFO "%s: reg 0x%02x value 0x%02x"
-					" mask 0x%02x\n",
-					__func__, v20_init[i].reg,
-					v20_init[i].value, v20_init[i].mask);
-			}
-		}
-	}
-	printk(KERN_INFO "core type: %d\n", type);
-
-	return rc;
-}
-
-static unsigned int msm_bahama_setup_power(void)
-{
-	int rc = regulator_enable(vreg_bahama);
-
-	if (rc)
-		pr_err("%s: regulator_enable failed (%d)\n", __func__, rc);
-
-	return rc;
-};
-
-static unsigned int msm_bahama_shutdown_power(int value)
-{
-	int rc = 0;
-
-	if (value != BAHAMA_ID) {
-		rc = regulator_disable(vreg_bahama);
-
-		if (rc)
-			pr_err("%s: regulator_disable failed (%d)\n",
-					__func__, rc);
-	}
-
-	return rc;
 };
 
 static struct msm_gpio marimba_svlte_config_clock[] = {
@@ -1904,162 +1795,6 @@ static void msm_marimba_shutdown_power(void)
 		pr_err("%s: regulator_disable failed (%d)\n", __func__, rc);
 };
 
-static int bahama_present(void)
-{
-	int id;
-	switch (id = adie_get_detected_connectivity_type()) {
-	case BAHAMA_ID:
-		return 1;
-
-	case MARIMBA_ID:
-		return 0;
-
-	case TIMPANI_ID:
-	default:
-	printk(KERN_ERR "%s: unexpected adie connectivity type: %d\n",
-			__func__, id);
-	return -ENODEV;
-	}
-}
-
-struct regulator *fm_regulator;
-static int fm_radio_setup(struct marimba_fm_platform_data *pdata)
-{
-	int rc, voltage;
-	uint32_t irqcfg;
-	const char *id = "FMPW";
-
-	int bahama_not_marimba = bahama_present();
-
-	if (bahama_not_marimba < 0) {
-		pr_warn("%s: bahama_present: %d\n",
-				__func__, bahama_not_marimba);
-		rc = -ENODEV;
-		goto out;
-	}
-	if (bahama_not_marimba) {
-		fm_regulator = regulator_get(NULL, "s3");
-		voltage = 1800000;
-	} else {
-		fm_regulator = regulator_get(NULL, "s2");
-		voltage = 1300000;
-	}
-
-	if (IS_ERR(fm_regulator)) {
-		rc = PTR_ERR(fm_regulator);
-		pr_err("%s: regulator_get failed (%d)\n", __func__, rc);
-		goto out;
-	}
-
-	rc = regulator_set_voltage(fm_regulator, voltage, voltage);
-
-	if (rc) {
-		pr_err("%s: regulator_set_voltage failed (%d)\n", __func__, rc);
-		goto regulator_free;
-	}
-
-	rc = regulator_enable(fm_regulator);
-
-	if (rc) {
-		pr_err("%s: regulator_enable failed (%d)\n", __func__, rc);
-		goto regulator_free;
-	}
-
-	rc = pmapp_clock_vote(id, PMAPP_CLOCK_ID_DO, PMAPP_CLOCK_VOTE_ON);
-
-	if (rc < 0) {
-		pr_err("%s: clock vote failed (%d)\n", __func__, rc);
-		goto regulator_disable;
-	}
-
-	/*Request the Clock Using GPIO34/AP2MDM_MRMBCK_EN in case
-	of svlte*/
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa()) {
-		rc = marimba_gpio_config(1);
-		if (rc < 0) {
-			pr_err("%s: clock enable for svlte : %d\n",
-					__func__, rc);
-			goto clock_devote;
-		}
-	}
-	irqcfg = GPIO_CFG(147, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL,
-					GPIO_CFG_2MA);
-	rc = gpio_tlmm_config(irqcfg, GPIO_CFG_ENABLE);
-	if (rc) {
-		pr_err("%s: gpio_tlmm_config(%#x)=%d\n", __func__, irqcfg, rc);
-		rc = -EIO;
-		goto gpio_deconfig;
-
-	}
-	return 0;
-
-gpio_deconfig:
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa())
-		marimba_gpio_config(0);
-clock_devote:
-	pmapp_clock_vote(id, PMAPP_CLOCK_ID_DO, PMAPP_CLOCK_VOTE_OFF);
-regulator_disable:
-	regulator_disable(fm_regulator);
-regulator_free:
-	regulator_put(fm_regulator);
-	fm_regulator = NULL;
-out:
-	return rc;
-};
-
-static void fm_radio_shutdown(struct marimba_fm_platform_data *pdata)
-{
-	int rc;
-	const char *id = "FMPW";
-	uint32_t irqcfg = GPIO_CFG(147, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
-					GPIO_CFG_2MA);
-
-	int bahama_not_marimba = bahama_present();
-	if (bahama_not_marimba == -1) {
-		pr_warn("%s: bahama_present: %d\n",
-				__func__, bahama_not_marimba);
-		return;
-	}
-
-	rc = gpio_tlmm_config(irqcfg, GPIO_CFG_ENABLE);
-	if (rc) {
-		pr_err("%s: gpio_tlmm_config(%#x)=%d\n", __func__, irqcfg, rc);
-	}
-	if (!IS_ERR_OR_NULL(fm_regulator)) {
-		rc = regulator_disable(fm_regulator);
-
-		if (rc)
-			pr_err("%s: return val: %d\n", __func__, rc);
-
-		regulator_put(fm_regulator);
-		fm_regulator = NULL;
-	}
-	rc = pmapp_clock_vote(id, PMAPP_CLOCK_ID_DO,
-					  PMAPP_CLOCK_VOTE_OFF);
-	if (rc < 0)
-		pr_err("%s: clock_vote return val: %d\n", __func__, rc);
-
-	/*Disable the Clock Using GPIO34/AP2MDM_MRMBCK_EN in case
-	of svlte*/
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa()) {
-		rc = marimba_gpio_config(0);
-		if (rc < 0)
-			pr_err("%s: clock disable for svlte : %d\n",
-					__func__, rc);
-	}
-}
-
-static struct marimba_fm_platform_data marimba_fm_pdata = {
-	.fm_setup =  fm_radio_setup,
-	.fm_shutdown = fm_radio_shutdown,
-	.irq = MSM_GPIO_TO_INT(147),
-	.vreg_s2 = NULL,
-	.vreg_xo_out = NULL,
-	.is_fm_soc_i2s_master = false,
-	.config_i2s_gpio = NULL,
-};
-
-
 /* Slave id address for FM/CDC/QMEMBIST
  * Values can be programmed using Marimba slave id 0
  * should there be a conflict with other I2C devices
@@ -2067,9 +1802,6 @@ static struct marimba_fm_platform_data marimba_fm_pdata = {
 #define MARIMBA_SLAVE_ID_FM_ADDR	0x2A
 #define MARIMBA_SLAVE_ID_CDC_ADDR	0x77
 #define MARIMBA_SLAVE_ID_QMEMBIST_ADDR	0X66
-
-#define BAHAMA_SLAVE_ID_FM_ADDR         0x2A
-#define BAHAMA_SLAVE_ID_QMEMBIST_ADDR   0x7B
 
 static const char *tsadc_id = "MADC";
 
@@ -2289,15 +2021,9 @@ static struct marimba_platform_data marimba_pdata = {
 	.slave_id[MARIMBA_SLAVE_ID_FM]       = MARIMBA_SLAVE_ID_FM_ADDR,
 	.slave_id[MARIMBA_SLAVE_ID_CDC]	     = MARIMBA_SLAVE_ID_CDC_ADDR,
 	.slave_id[MARIMBA_SLAVE_ID_QMEMBIST] = MARIMBA_SLAVE_ID_QMEMBIST_ADDR,
-	.slave_id[SLAVE_ID_BAHAMA_FM]        = BAHAMA_SLAVE_ID_FM_ADDR,
-	.slave_id[SLAVE_ID_BAHAMA_QMEMBIST]  = BAHAMA_SLAVE_ID_QMEMBIST_ADDR,
 	.marimba_setup = msm_marimba_setup_power,
 	.marimba_shutdown = msm_marimba_shutdown_power,
-	.bahama_setup = msm_bahama_setup_power,
-	.bahama_shutdown = msm_bahama_shutdown_power,
 	.marimba_gpio_config = msm_marimba_gpio_config_svlte,
-	.bahama_core_config = msm_bahama_core_config,
-	.fm = &marimba_fm_pdata,
 	.codec = &mariba_codec_pdata,
 	.tsadc_ssbi_adap = MARIMBA_SSBI_ADAP,
 };
@@ -2337,7 +2063,6 @@ static void __init msm7x30_init_marimba(void)
 
 	vreg_marimba_1 = regs[0].consumer;
 	vreg_marimba_2 = regs[1].consumer;
-	vreg_bahama    = regs[2].consumer;
 }
 
 static struct marimba_codec_platform_data timpani_codec_pdata = {
