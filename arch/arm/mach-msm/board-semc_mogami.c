@@ -163,8 +163,10 @@
 #include <mach/sdio_al.h>
 #include "smd_private.h"
 
+#ifdef CONFIG_LEDS_AS3676
 #include <linux/leds-as3676.h>
 #include "board-semc_mogami-leds.h"
+#endif
 #include "board-semc_mogami-touch.h"
 #include <mach/semc_rpc_server_handset.h>
 #include <linux/i2c/bq24185_charger.h>
@@ -3955,10 +3957,13 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		I2C_BOARD_INFO("adv7520", ADV7520_I2C_ADDR),
 		.platform_data = &adv7520_hdmi_data,
 	},
+#ifdef CONFIG_LEDS_AS3676
 	{
+		/* Config-spec is 8-bit = 0x80, src-code need 7-bit => 0x40 */
 		I2C_BOARD_INFO("as3676", 0x80 >> 1),
 		.platform_data = &as3676_platform_data,
 	},
+#endif
 	{
 		I2C_BOARD_INFO(BQ27520_NAME, 0xAA >> 1),
 		.irq = MSM_GPIO_TO_INT(GPIO_BQ27520_SOC_INT),
