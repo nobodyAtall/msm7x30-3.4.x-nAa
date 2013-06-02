@@ -1,4 +1,4 @@
-/* /kernel/arch/arm/mach-msm/touch-iyohan.c
+/* /kernel/arch/arm/mach-msm/touch-iyokan.c
  *
  * Copyright (C) [2010-2011] Sony Ericsson Mobile Communications AB.
  *
