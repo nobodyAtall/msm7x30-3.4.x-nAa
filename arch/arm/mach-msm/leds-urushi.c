@@ -76,14 +76,14 @@ struct as3676_platform_data as3676_platform_data = {
 		.max_current_uA = 3000,
 	},
 	.leds[9] = {
-		.name = "led_10-not-connected",
-		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.name = "torch-rgb1",
+		.on_charge_pump = 1,
+		.max_current_uA = 30000,
 	},
 	.leds[10] = {
-		.name = "led_11-not-connected",
-		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.name = "torch-rgb2",
+		.on_charge_pump = 1,
+		.max_current_uA = 30000,
 	},
 	.leds[11] = {
 		.name = "led_12-not-connected",
