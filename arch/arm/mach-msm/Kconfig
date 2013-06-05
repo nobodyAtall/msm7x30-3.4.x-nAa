@@ -722,6 +722,7 @@ config MACH_SEMC_URUSHI
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
 	select FB_MSM_HDPI
+	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
 	bool "SonyEricsson Urushi"
@@ -732,6 +733,7 @@ config MACH_SEMC_ANZU
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
 	select FB_MSM_HDPI
+	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
 	bool "SonyEricsson Anzu"
@@ -742,6 +744,7 @@ config MACH_SEMC_IYOKAN
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
 	select FB_MSM_HDPI
+	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
 	bool "SonyEricsson Iyokan"
@@ -752,6 +755,7 @@ config MACH_SEMC_HALLON
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
 	select FB_MSM_HDPI
+	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
 	bool "SonyEricsson Hallon"
@@ -2342,6 +2346,12 @@ config MOGAMI_BLUEDROID
 	default m
 	help
 	  Mogami BlueDroid support using TI ST stack.
+
+config SEMC_CAMERA_8MP
+	bool "Increased PMEP_ADSP for 8MP sensors"
+	default n
+	help
+	  Increased PMEP_ADSP for phones with 8MP sensors.
 
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
