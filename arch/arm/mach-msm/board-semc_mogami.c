@@ -71,7 +71,9 @@
 #include <mach/msm_tsif.h>
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
+#ifdef CONFIG_SENSORS_AKM8975
 #include <linux/i2c/akm8975.h>
+#endif
 #include <linux/cyttsp-qc.h>
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
 #include <linux/spi/cy8ctma300_touch.h>
@@ -123,7 +125,9 @@
 
 #define NOVATEK_GPIO_RESET              (157)
 
+#ifdef CONFIG_SENSORS_AKM8975
 #define AKM8975_GPIO			(92)
+#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 #define BMA150_GPIO			(51)
 #endif
@@ -159,8 +163,10 @@
 #include <mach/sdio_al.h>
 #include "smd_private.h"
 
+#ifdef CONFIG_LEDS_AS3676
 #include <linux/leds-as3676.h>
 #include "board-semc_mogami-leds.h"
+#endif
 #include "board-semc_mogami-touch.h"
 #include <mach/semc_rpc_server_handset.h>
 #include <linux/i2c/bq24185_charger.h>
@@ -214,7 +220,11 @@
 
 #define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE, 4096)
 
+#ifdef CONFIG_SEMC_CAMERA_8MP
+#define MSM_PMEM_ADSP_SIZE      0x2500000
+#else
 #define MSM_PMEM_ADSP_SIZE      0x1C00000
+#endif
 #define MSM_FLUID_PMEM_ADSP_SIZE	0x2800000
 #define PMEM_KERNEL_EBI0_SIZE   0x600000
 
@@ -3910,6 +3920,7 @@ static struct apds9702_platform_data apds9702_pdata = {
 };
 #endif
 
+#ifdef CONFIG_SENSORS_AKM8975
 static struct msm_gpio akm8975_gpio_config_data[] = {
 	{ GPIO_CFG(AKM8975_GPIO, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN,
 		GPIO_CFG_2MA), "akm8975_drdy_irq" },
@@ -3932,6 +3943,7 @@ static struct akm8975_platform_data akm8975_platform_data = {
 	.setup = akm8975_gpio_setup,
 	.shutdown = akm8975_gpio_shutdown,
 };
+#endif
 
 static struct i2c_board_info msm_i2c_board_info[] = {
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD_I2C
@@ -3949,10 +3961,13 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		I2C_BOARD_INFO("adv7520", ADV7520_I2C_ADDR),
 		.platform_data = &adv7520_hdmi_data,
 	},
+#ifdef CONFIG_LEDS_AS3676
 	{
+		/* Config-spec is 8-bit = 0x80, src-code need 7-bit => 0x40 */
 		I2C_BOARD_INFO("as3676", 0x80 >> 1),
 		.platform_data = &as3676_platform_data,
 	},
+#endif
 	{
 		I2C_BOARD_INFO(BQ27520_NAME, 0xAA >> 1),
 		.irq = MSM_GPIO_TO_INT(GPIO_BQ27520_SOC_INT),
@@ -3999,11 +4014,13 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.type = "sii9024a"
 	},
 #endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
+#ifdef CONFIG_SENSORS_AKM8975
 	{
 		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x18 >> 1),
 		.irq = MSM_GPIO_TO_INT(AKM8975_GPIO),
 		.platform_data = &akm8975_platform_data,
 	},
+#endif
 #ifdef CONFIG_LM3560
 	{
 		I2C_BOARD_INFO("lm3560", 0xA6 >> 1),

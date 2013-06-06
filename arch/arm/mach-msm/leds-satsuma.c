@@ -30,8 +30,8 @@ struct as3676_platform_data as3676_platform_data = {
 	.leds[0] = {
 		.name = "lcd-backlight",
 		.on_charge_pump = 0,
-		.max_current_uA = 20000,
-		.startup_current_uA = 4000,
+		.max_current_uA = 21000,
+		.startup_current_uA = 21000,
 		.use_dls = true,
 	},
 	.leds[1] = {
@@ -53,7 +53,7 @@ struct as3676_platform_data as3676_platform_data = {
 		.name = "button-backlight",
 		.on_charge_pump = 0,
 		.max_current_uA = 500,
-		.startup_current_uA = 4000,
+		.startup_current_uA = 500,
 	},
 	.leds[5] = {
 		.name = "led_6-not-connected",
@@ -63,17 +63,17 @@ struct as3676_platform_data as3676_platform_data = {
 	.leds[6] = {
 		.name = "red",
 		.on_charge_pump = 1,
-		.max_current_uA = 3000,
+		.max_current_uA = 6450,
 	},
 	.leds[7] = {
 		.name = "green",
 		.on_charge_pump = 1,
-		.max_current_uA = 4500,
+		.max_current_uA = 7950,
 	},
 	.leds[8] = {
 		.name = "blue",
 		.on_charge_pump = 1,
-		.max_current_uA = 3000,
+		.max_current_uA = 4500,
 	},
 	.leds[9] = {
 		.name = "led_10-not-connected",

@@ -31,13 +31,14 @@ struct as3676_platform_data as3676_platform_data = {
 		.name = "lcd-backlight",
 		.on_charge_pump = 0,
 		.max_current_uA = 20000,
-		.startup_current_uA = 4000,
+		.startup_current_uA = 20000,
 		.use_dls = false,
 	},
 	.leds[1] = {
 		.name = "led_2-not-connected",
 		.on_charge_pump = 0,
 		.max_current_uA = 0,
+		.use_dls = true,
 	},
 	.leds[2] = {
 		.name = "led_3-not-connected",
@@ -75,14 +76,14 @@ struct as3676_platform_data as3676_platform_data = {
 		.max_current_uA = 3000,
 	},
 	.leds[9] = {
-		.name = "led_10-not-connected",
-		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.name = "torch-rgb1",
+		.on_charge_pump = 1,
+		.max_current_uA = 30000,
 	},
 	.leds[10] = {
-		.name = "led_11-not-connected",
-		.on_charge_pump = 0,
-		.max_current_uA = 0,
+		.name = "torch-rgb2",
+		.on_charge_pump = 1,
+		.max_current_uA = 30000,
 	},
 	.leds[11] = {
 		.name = "led_12-not-connected",

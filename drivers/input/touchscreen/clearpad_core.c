@@ -493,7 +493,7 @@ static int synaptics_clearpad_initialize(struct synaptics_clearpad *this)
 			 2000 + info->date[0], info->date[1], info->date[2],
 			 ((int)info->tester_id[0] << 8) + info->tester_id[1],
 			 ((int)info->serial_number[0] << 8)
-			 + info->serial_number[10],
+			 + info->serial_number[1],
 			 make_string(info->product_id, HEADER_PRODUCT_ID_SIZE));
 	}
 
