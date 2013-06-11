@@ -681,23 +681,16 @@ config MACH_SEMC_MOGAMI
        help
          Support for the SonyEricsson Mogami CDB (development board).
 
-config MACH_SEMC_SMULTRON
+config MACH_SEMC_ANZU
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
+	select FB_MSM_HDPI
+	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
-	bool "SonyEricsson Smultron"
+	bool "SonyEricsson Anzu"
 	help
-	  Support for the SonyEricsson Smultron devices.
-	  
-config MACH_SEMC_MANGO
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
-	select SUPPORT_ALIEN_USB_CHARGER
-	default n
-	bool "SonyEricsson Mango"
-	help
-	  Support for the SonyEricsson Mango devices.
+	  Support for the SonyEricsson Anzu devices.
 
 config MACH_SEMC_COCONUT
 	depends on ARCH_MSM7X30
@@ -718,27 +711,16 @@ config MACH_SEMC_HAIDA
 	help
 	  Support for the SonyEricsson Haida devices.
 
-config MACH_SEMC_URUSHI
+config MACH_SEMC_HALLON
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
 	select FB_MSM_HDPI
 	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
 	default y
-	bool "SonyEricsson Urushi"
+	bool "SonyEricsson Hallon"
 	help
-	  Support for the SonyEricsson Urushi devices.
-
-config MACH_SEMC_ANZU
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
-	select FB_MSM_HDPI
-	select SEMC_CAMERA_8MP
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
-	bool "SonyEricsson Anzu"
-	help
-	  Support for the SonyEricsson Anzu devices.
+	  Support for the SonyEricsson Hallon devices.
 
 config MACH_SEMC_IYOKAN
 	depends on ARCH_MSM7X30
@@ -751,16 +733,14 @@ config MACH_SEMC_IYOKAN
 	help
 	  Support for the SonyEricsson Iyokan devices.
 
-config MACH_SEMC_HALLON
+config MACH_SEMC_MANGO
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
-	select FB_MSM_HDPI
-	select SEMC_CAMERA_8MP
 	select SUPPORT_ALIEN_USB_CHARGER
-	default y
-	bool "SonyEricsson Hallon"
+	default n
+	bool "SonyEricsson Mango"
 	help
-	  Support for the SonyEricsson Hallon devices.
+	  Support for the SonyEricsson Mango devices.
 
 config MACH_SEMC_SATSUMA
 	depends on ARCH_MSM7X30
@@ -770,6 +750,26 @@ config MACH_SEMC_SATSUMA
 	bool "SonyEricsson Satsuma"
 	help
 	  Support for the SonyEricsson Satsuma devices.
+
+config MACH_SEMC_SMULTRON
+	depends on ARCH_MSM7X30
+	depends on !MSM_STACKED_MEMORY
+	select SUPPORT_ALIEN_USB_CHARGER
+	default y
+	bool "SonyEricsson Smultron"
+	help
+	  Support for the SonyEricsson Smultron devices.
+
+config MACH_SEMC_URUSHI
+	depends on ARCH_MSM7X30
+	depends on !MSM_STACKED_MEMORY
+	select FB_MSM_HDPI
+	select SEMC_CAMERA_8MP
+	select SUPPORT_ALIEN_USB_CHARGER
+	default y
+	bool "SonyEricsson Urushi"
+	help
+	  Support for the SonyEricsson Urushi devices.
 
 config MACH_SAPPHIRE
 	depends on ARCH_MSM7X01A
@@ -2336,16 +2336,6 @@ config MMC_MSM_SDC4_LOW_DRIVE_STRENGTH
 	default n
 	help
 	  Enable to configure the low drive strength for SDC4.
-
-config MOGAMI_BLUEDROID
-	tristate "Mogami BlueDroid module"
-	select BT_WILINK
-	select TI_ST
-	select ST_HCI
-	select UHID
-	default m
-	help
-	  Mogami BlueDroid support using TI ST stack.
 
 config SEMC_CAMERA_8MP
 	bool "Increased PMEP_ADSP for 8MP sensors"
