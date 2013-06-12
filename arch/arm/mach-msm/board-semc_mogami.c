@@ -82,7 +82,9 @@
 #define LM356X_HW_RESET_GPIO 2
 #endif
 
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 #include <mach/mddi_novatek_fwvga.h>
+#endif
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD)
 #include <linux/mddi_sony_s6d05a1_hvga.h>
 #endif
@@ -107,7 +109,9 @@
 #define GPIO_MSM_MDDI_XRES		(157)
 #endif
 
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 #define NOVATEK_GPIO_RESET              (157)
+#endif
 
 #ifdef CONFIG_SENSORS_AKM8975
 #define AKM8975_GPIO			(92)
@@ -653,6 +657,7 @@ static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
 };
 #endif
 
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 static const struct panel_id *novatek_panels[] = {
 #ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS040T8LX01
 	&novatek_panel_id_sharp_ls040t8lx01_rev_c,
@@ -688,6 +693,7 @@ static const struct panel_id *novatek_panels[] = {
 struct novatek_i2c_pdata novatek_i2c_pdata = {
 	.panels = novatek_panels,
 };
+#endif
 
 #ifdef CONFIG_INPUT_BMA150_NG
 static int bma150_gpio_setup(bool request)
@@ -705,11 +711,13 @@ struct bma150_platform_data bma150_ng_platform_data = {
 #endif
 
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 	{
 		I2C_BOARD_INFO(MDDI_NOVATEK_I2C_NAME, 0x98 >> 1),
 		.type = MDDI_NOVATEK_I2C_NAME,
 		.platform_data = &novatek_i2c_pdata,
 	},
+#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 	{
 		I2C_BOARD_INFO("bma150", 0x70 >> 1),
@@ -1721,6 +1729,7 @@ static struct platform_device android_usb_device = {
 };
 #endif
 
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 static int novatek_reset(void)
 {
 	msleep(10);
@@ -1745,6 +1754,7 @@ static struct platform_device novatek_device = {
 		.platform_data = &novatek_platform_data,
 	}
 };
+#endif
 
 #ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
 static struct msm_gpio sii9024_gpio_config_data_enable[] = {
@@ -3972,7 +3982,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 	&simple_remote_pf_device,
 #endif
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 	&novatek_device,
+#endif
 	&battery_chargalg_platform_device,
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD)
 	&mddi_sony_hvga_display_device,
