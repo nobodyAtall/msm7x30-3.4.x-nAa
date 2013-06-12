@@ -60,7 +60,6 @@
 #include <mach/qdsp5v2/aux_pcm.h>
 #include <mach/qdsp5v2/mi2s.h>
 #include <mach/qdsp5v2/audio_dev_ctl.h>
-#include <mach/msm_battery.h>
 #include <mach/rpc_server_handset.h>
 #include <mach/msm_tsif.h>
 #include <mach/socinfo.h>
@@ -4185,19 +4184,6 @@ static void __init msm_fb_add_devices(void)
 #endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 }
 
-static struct msm_psy_batt_pdata msm_psy_batt_data = {
-	.voltage_min_design 	= 2800,
-	.voltage_max_design	= 4300,
-	.avail_chg_sources   	= AC_CHG | USB_CHG ,
-	.batt_technology        = POWER_SUPPLY_TECHNOLOGY_LION,
-};
-
-static struct platform_device msm_batt_device = {
-	.name 		    = "msm-battery",
-	.id		    = -1,
-	.dev.platform_data  = &msm_psy_batt_data,
-};
-
 static char *msm_adc_surf_device_names[] = {
 	"XO_ADC",
 };
@@ -4399,7 +4385,6 @@ static struct platform_device *devices[] __initdata = {
 	&qcedev_device,
 #endif
 
-	&msm_batt_device,
 	&msm_adc_device,
 	&msm_ebi0_thermal,
 	&msm_ebi1_thermal,
