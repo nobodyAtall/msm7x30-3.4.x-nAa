@@ -219,7 +219,6 @@
 #else
 #define MSM_PMEM_ADSP_SIZE      0x1C00000
 #endif
-#define MSM_FLUID_PMEM_ADSP_SIZE	0x2800000
 #define PMEM_KERNEL_EBI0_SIZE   0x600000
 
 #define PMIC_GPIO_INT		27
@@ -245,7 +244,6 @@
 #define PM8058_MPP_BASE			   PM8058_GPIO_PM_TO_SYS(PM8058_GPIOS)
 #define PM8058_MPP_PM_TO_SYS(pm_gpio)	   (pm_gpio + PM8058_MPP_BASE)
 
-#define PMIC_GPIO_FLASH_BOOST_ENABLE	15	/* PMIC GPIO Number 16 */
 #define PMIC_GPIO_HAP_ENABLE   16  /* PMIC GPIO Number 17 */
 
 #define PMIC_GPIO_WLAN_EXT_POR  22 /* PMIC GPIO NUMBER 23 */
@@ -501,19 +499,6 @@ static int pm8058_gpios_init(void)
 		},
 	};
 
-	struct pm8xxx_gpio_init_info sdc4_en = {
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_EN_N),
-		{
-			.direction      = PM_GPIO_DIR_OUT,
-			.pull           = PM_GPIO_PULL_NO,
-			.vin_sel        = PM8058_GPIO_VIN_L5,
-			.function       = PM_GPIO_FUNC_NORMAL,
-			.inv_int_pol    = 0,
-			.out_strength   = PM_GPIO_STRENGTH_LOW,
-			.output_value   = 0,
-		},
-	};
-
 	struct pm8xxx_gpio_init_info sdc4_pwr_en = {
 		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_PWR_EN_N),
 		{
@@ -527,20 +512,6 @@ static int pm8058_gpios_init(void)
 		},
 	};
 
-	struct pm8xxx_gpio_init_info haptics_enable = {
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HAP_ENABLE),
-		{
-			.direction      = PM_GPIO_DIR_OUT,
-			.pull           = PM_GPIO_PULL_NO,
-			.out_strength   = PM_GPIO_STRENGTH_HIGH,
-			.function       = PM_GPIO_FUNC_NORMAL,
-			.inv_int_pol    = 0,
-			.vin_sel        = 2,
-			.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-			.output_value   = 0,
-		},
-	};
-
 	struct pm8xxx_gpio_init_info hdmi_5V_en = {
 		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_HDMI_5V_EN_V3),
 		{
@@ -550,19 +521,6 @@ static int pm8058_gpios_init(void)
 			.function       = PM_GPIO_FUNC_NORMAL,
 			.out_strength   = PM_GPIO_STRENGTH_LOW,
 			.output_value   = 0,
-		},
-	};
-
-	struct pm8xxx_gpio_init_info flash_boost_enable = {
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_FLASH_BOOST_ENABLE),
-		{
-			.direction      = PM_GPIO_DIR_OUT,
-			.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-			.output_value   = 0,
-			.pull           = PM_GPIO_PULL_NO,
-			.vin_sel        = PM8058_GPIO_VIN_S3,
-			.out_strength   = PM_GPIO_STRENGTH_HIGH,
-			.function        = PM_GPIO_FUNC_2,
 		},
 	};
 
@@ -590,9 +548,6 @@ static int pm8058_gpios_init(void)
 		},
 	};
 
-	if (machine_is_msm7x30_fluid())
-		sdcc_det.config.inv_int_pol = 1;
-
 	rc = pm8xxx_gpio_config(sdcc_det.gpio, &sdcc_det.config);
 	if (rc) {
 		pr_err("%s PMIC_GPIO_SD_DET config failed\n", __func__);
@@ -605,11 +560,7 @@ static int pm8058_gpios_init(void)
 		return rc;
 	}
 
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa() ||
-						machine_is_msm7x30_fluid())
-		hdmi_5V_en.gpio = PMIC_GPIO_HDMI_5V_EN_V2;
-	else
-		hdmi_5V_en.gpio = PMIC_GPIO_HDMI_5V_EN_V3;
+	hdmi_5V_en.gpio = PMIC_GPIO_HDMI_5V_EN_V3;
 
 	hdmi_5V_en.gpio = PM8058_GPIO_PM_TO_SYS(hdmi_5V_en.gpio);
 
@@ -626,54 +577,17 @@ static int pm8058_gpios_init(void)
 		return rc;
 	}
 
-	if (machine_is_msm7x30_fluid()) {
-		/* Haptics gpio */
-		rc = pm8xxx_gpio_config(haptics_enable.gpio,
-						&haptics_enable.config);
-		if (rc) {
-			pr_err("%s: PMIC GPIO %d write failed\n", __func__,
-							haptics_enable.gpio);
-			return rc;
-		}
-		/* Flash boost gpio */
-		rc = pm8xxx_gpio_config(flash_boost_enable.gpio,
-						&flash_boost_enable.config);
-		if (rc) {
-			pr_err("%s: PMIC GPIO %d write failed\n", __func__,
-						flash_boost_enable.gpio);
-			return rc;
-		}
-		/* SCD4 gpio */
-		rc = pm8xxx_gpio_config(sdc4_en.gpio, &sdc4_en.config);
-		if (rc) {
-			pr_err("%s PMIC_GPIO_SDC4_EN_N config failed\n",
-								 __func__);
-			return rc;
-		}
-		rc = gpio_request(sdc4_en.gpio, "sdc4_en");
-		if (rc) {
-			pr_err("%s PMIC_GPIO_SDC4_EN_N gpio_request failed\n",
-				__func__);
-			return rc;
-		}
-		gpio_set_value_cansleep(sdc4_en.gpio, 0);
+	/* SDC4 gpio_25 */
+	rc = pm8xxx_gpio_config(sdc4_pwr_en.gpio, &sdc4_pwr_en.config);
+	if (rc) {
+		pr_err("%s PMIC_GPIO_SDC4_PWR_EN_N config failed: %d\n", __func__, rc);
+		return rc;
 	}
-	/* FFA -> gpio_25 controls vdd of sdcc4 */
-	else {
-		/* SCD4 gpio_25 */
-		rc = pm8xxx_gpio_config(sdc4_pwr_en.gpio, &sdc4_pwr_en.config);
-		if (rc) {
-			pr_err("%s PMIC_GPIO_SDC4_PWR_EN_N config failed: %d\n",
-			       __func__, rc);
-			return rc;
-		}
 
-		rc = gpio_request(sdc4_pwr_en.gpio, "sdc4_pwr_en");
-		if (rc) {
-			pr_err("PMIC_GPIO_SDC4_PWR_EN_N gpio_req failed: %d\n",
-			       rc);
-			return rc;
-		}
+	rc = gpio_request(sdc4_pwr_en.gpio, "sdc4_pwr_en");
+	if (rc) {
+		pr_err("PMIC_GPIO_SDC4_PWR_EN_N gpio_req failed: %d\n", rc);
+		return rc;
 	}
 
 	return 0;
@@ -969,20 +883,6 @@ static uint32_t camera_on_gpio_table[] = {
 #endif
 };
 
-static uint32_t camera_off_gpio_fluid_table[] = {
-	/* FLUID: CAM_VGA_RST_N */
-	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* FLUID: CAMIF_STANDBY */
-	GPIO_CFG(CAM_STNDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA)
-};
-
-static uint32_t camera_on_gpio_fluid_table[] = {
-	/* FLUID: CAM_VGA_RST_N */
-	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* FLUID: CAMIF_STANDBY */
-	GPIO_CFG(CAM_STNDBY, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA)
-};
-
 static void config_gpio_table(uint32_t *table, int len)
 {
 	int n, rc;
@@ -1005,16 +905,6 @@ static int config_camera_on_gpios(void)
 		only configure it for non-Timpani RF card */
 		config_gpio_table(camera_on_vcm_gpio_table,
 			ARRAY_SIZE(camera_on_vcm_gpio_table));
-
-	if (machine_is_msm7x30_fluid()) {
-		config_gpio_table(camera_on_gpio_fluid_table,
-			ARRAY_SIZE(camera_on_gpio_fluid_table));
-		/* FLUID: turn on 5V booster */
-		gpio_set_value(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_FLASH_BOOST_ENABLE), 1);
-		/* FLUID: drive high to put secondary sensor to STANDBY */
-		gpio_set_value(CAM_STNDBY, 1);
-	}
 	return 0;
 }
 
@@ -1028,14 +918,6 @@ static void config_camera_off_gpios(void)
 		only configure it for non-Timpani RF card */
 		config_gpio_table(camera_off_vcm_gpio_table,
 			ARRAY_SIZE(camera_off_vcm_gpio_table));
-
-	if (machine_is_msm7x30_fluid()) {
-		config_gpio_table(camera_off_gpio_fluid_table,
-			ARRAY_SIZE(camera_off_gpio_fluid_table));
-		/* FLUID: turn off 5V booster */
-		gpio_set_value(
-			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_FLASH_BOOST_ENABLE), 0);
-	}
 }
 
 struct resource msm_camera_resources[] = {
@@ -1232,9 +1114,6 @@ static struct platform_device msm_vpe_standalone_device = {
 static uint32_t audio_pamp_gpio_config =
    GPIO_CFG(82, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 
-static uint32_t audio_fluid_icodec_tx_config =
-  GPIO_CFG(85, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
-
 static uint32_t HAC_amp_gpio_config =
    GPIO_CFG(109, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA);
 
@@ -1264,37 +1143,12 @@ static int __init snddev_poweramp_gpio_init(void)
 
 void msm_snddev_tx_route_config(void)
 {
-	int rc;
-
 	pr_debug("%s()\n", __func__);
-
-	if (machine_is_msm7x30_fluid()) {
-		rc = gpio_tlmm_config(audio_fluid_icodec_tx_config,
-		GPIO_CFG_ENABLE);
-		if (rc) {
-			printk(KERN_ERR
-				"%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, audio_fluid_icodec_tx_config, rc);
-		} else
-			gpio_set_value(85, 0);
-	}
 }
 
 void msm_snddev_tx_route_deconfig(void)
 {
-	int rc;
-
 	pr_debug("%s()\n", __func__);
-
-	if (machine_is_msm7x30_fluid()) {
-		rc = gpio_tlmm_config(audio_fluid_icodec_tx_config,
-		GPIO_CFG_DISABLE);
-		if (rc) {
-			printk(KERN_ERR
-				"%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, audio_fluid_icodec_tx_config, rc);
-		}
-	}
 }
 
 void msm_hac_amp_on(void)
@@ -1613,26 +1467,6 @@ static void msm_timpani_shutdown_power(void)
 				   ARRAY_SIZE(timpani_reset_gpio_cfg));
 };
 
-static struct msm_gpio marimba_svlte_config_clock[] = {
-	{ GPIO_CFG(34, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"MARIMBA_SVLTE_CLOCK_ENABLE" },
-};
-
-static unsigned int msm_marimba_gpio_config_svlte(int gpio_cfg_marimba)
-{
-	if (machine_is_msm8x55_svlte_surf() ||
-		machine_is_msm8x55_svlte_ffa()) {
-		if (gpio_cfg_marimba)
-			gpio_set_value(GPIO_PIN
-				(marimba_svlte_config_clock->gpio_cfg), 1);
-		else
-			gpio_set_value(GPIO_PIN
-				(marimba_svlte_config_clock->gpio_cfg), 0);
-	}
-
-	return 0;
-};
-
 static unsigned int msm_marimba_setup_power(void)
 {
 	int rc;
@@ -1649,27 +1483,8 @@ static unsigned int msm_marimba_setup_power(void)
 		goto disable_marimba_1;
 	}
 
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa()) {
-		rc = msm_gpios_request_enable(marimba_svlte_config_clock,
-				ARRAY_SIZE(marimba_svlte_config_clock));
-		if (rc < 0) {
-			pr_err("%s: msm_gpios_request_enable failed (%d)\n",
-					__func__, rc);
-			goto disable_marimba_2;
-		}
-
-		rc = gpio_direction_output(GPIO_PIN
-			(marimba_svlte_config_clock->gpio_cfg), 0);
-		if (rc < 0) {
-			pr_err("%s: gpio_direction_output failed (%d)\n",
-					__func__, rc);
-			goto disable_marimba_2;
-		}
-	}
-
 	return 0;
 
-disable_marimba_2:
 	regulator_disable(vreg_marimba_2);
 disable_marimba_1:
 	regulator_disable(vreg_marimba_1);
@@ -1918,7 +1733,6 @@ static struct marimba_platform_data marimba_pdata = {
 	.slave_id[MARIMBA_SLAVE_ID_QMEMBIST] = MARIMBA_SLAVE_ID_QMEMBIST_ADDR,
 	.marimba_setup = msm_marimba_setup_power,
 	.marimba_shutdown = msm_marimba_shutdown_power,
-	.marimba_gpio_config = msm_marimba_gpio_config_svlte,
 	.codec = &mariba_codec_pdata,
 	.tsadc_ssbi_adap = MARIMBA_SSBI_ADAP,
 };
@@ -4151,11 +3965,7 @@ static int hdmi_enable_5v(int on)
 {
 	int pmic_gpio_hdmi_5v_en ;
 
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa() ||
-						machine_is_msm7x30_fluid())
-		pmic_gpio_hdmi_5v_en = PMIC_GPIO_HDMI_5V_EN_V2 ;
-	else
-		pmic_gpio_hdmi_5v_en = PMIC_GPIO_HDMI_5V_EN_V3 ;
+	pmic_gpio_hdmi_5v_en = PMIC_GPIO_HDMI_5V_EN_V3 ;
 
 	pr_info("%s: %d\n", __func__, on);
 	if (on) {
@@ -4208,106 +4018,9 @@ static int hdmi_cec_power(int on)
 				hdmi_cec_regs);
 }
 
-#if defined(CONFIG_FB_MSM_HDMI_ADV7520_PANEL) || defined(CONFIG_BOSCH_BMA150)
-/* there is an i2c address conflict between adv7520 and bma150 sensor after
- * power up on fluid. As a solution, the default address of adv7520's packet
- * memory is changed as soon as possible
- */
-static int __init fluid_i2c_address_fixup(void)
-{
-	unsigned char wBuff[16];
-	unsigned char rBuff[16];
-	struct i2c_msg msgs[3];
-	int res;
-	int rc = -EINVAL;
-	struct i2c_adapter *adapter;
-
-	if (machine_is_msm7x30_fluid()) {
-		adapter = i2c_get_adapter(0);
-		if (!adapter) {
-			pr_err("%s: invalid i2c adapter\n", __func__);
-			return PTR_ERR(adapter);
-		}
-
-		/* turn on LDO8 */
-		rc = hdmi_core_power(1, 0);
-		if (rc) {
-			pr_err("%s: could not enable hdmi core regs: %d",
-					__func__, rc);
-			goto adapter_put;
-		}
-
-		/* change packet memory address to 0x74 */
-		wBuff[0] = 0x45;
-		wBuff[1] = 0x74;
-
-		msgs[0].addr = ADV7520_I2C_ADDR;
-		msgs[0].flags = 0;
-		msgs[0].buf = (unsigned char *) wBuff;
-		msgs[0].len = 2;
-
-		res = i2c_transfer(adapter, msgs, 1);
-		if (res != 1) {
-			pr_err("%s: error writing adv7520\n", __func__);
-			goto ldo8_disable;
-		}
-
-		/* powerdown adv7520 using bit 6 */
-		/* i2c read first */
-		wBuff[0] = 0x41;
-
-		msgs[0].addr = ADV7520_I2C_ADDR;
-		msgs[0].flags = 0;
-		msgs[0].buf = (unsigned char *) wBuff;
-		msgs[0].len = 1;
-
-		msgs[1].addr = ADV7520_I2C_ADDR;
-		msgs[1].flags = I2C_M_RD;
-		msgs[1].buf = rBuff;
-		msgs[1].len = 1;
-		res = i2c_transfer(adapter, msgs, 2);
-		if (res != 2) {
-			pr_err("%s: error reading adv7520\n", __func__);
-			goto ldo8_disable;
-		}
-
-		/* i2c write back */
-		wBuff[0] = 0x41;
-		wBuff[1] = rBuff[0] | 0x40;
-
-		msgs[0].addr = ADV7520_I2C_ADDR;
-		msgs[0].flags = 0;
-		msgs[0].buf = (unsigned char *) wBuff;
-		msgs[0].len = 2;
-
-		res = i2c_transfer(adapter, msgs, 1);
-		if (res != 1) {
-			pr_err("%s: error writing adv7520\n", __func__);
-			goto ldo8_disable;
-		}
-
-		/* for successful fixup, we release the i2c adapter */
-		/* but leave ldo8 on so that the adv7520 is not repowered */
-		i2c_put_adapter(adapter);
-		pr_info("%s: fluid i2c address conflict resolved\n", __func__);
-	}
-	return 0;
-
-ldo8_disable:
-	hdmi_core_power(0, 0);
-adapter_put:
-	i2c_put_adapter(adapter);
-	return rc;
-}
-fs_initcall_sync(fluid_i2c_address_fixup);
-#endif
-
 static bool hdmi_check_hdcp_hw_support(void)
 {
-	if (machine_is_msm7x30_fluid())
-		return false;
-	else
-		return true;
+	return true;
 }
 
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
@@ -4778,12 +4491,6 @@ static struct platform_device msm_batt_device = {
 	.name 		    = "msm-battery",
 	.id		    = -1,
 	.dev.platform_data  = &msm_psy_batt_data,
-};
-
-static char *msm_adc_fluid_device_names[] = {
-	"LTC_ADC1",
-	"LTC_ADC2",
-	"LTC_ADC3",
 };
 
 static char *msm_adc_surf_device_names[] = {
@@ -5963,28 +5670,12 @@ static void __init msm7x30_init_mmc(void)
 	if (mmc_regulator_init(1, "s3", 1800000))
 		goto out1;
 
-	if (machine_is_msm7x30_fluid()) {
-		msm7x30_sdc1_data.ocr_mask =  MMC_VDD_27_28 | MMC_VDD_28_29;
-		if (msm_sdc1_lvlshft_enable()) {
-			pr_err("%s: could not enable level shift\n");
-			goto out1;
-		}
-	}
-
 	msm_add_sdcc(1, &msm7x30_sdc1_data);
 out1:
 #endif
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 	if (mmc_regulator_init(2, "s3", 1800000))
 		goto out2;
-
-	if (machine_is_msm8x55_svlte_surf())
-		msm7x30_sdc2_data.msmsdcc_fmax =  24576000;
-	if (machine_is_msm8x55_svlte_surf() ||
-			machine_is_msm8x55_svlte_ffa()) {
-		msm7x30_sdc2_data.sdiowakeup_irq = MSM_GPIO_TO_INT(68);
-		msm7x30_sdc2_data.is_sdio_al_client = 1;
-	}
 
 	msm_add_sdcc(2, &msm7x30_sdc2_data);
 out2:
@@ -6148,13 +5839,7 @@ struct platform_device mogami_reset_keys_device = {
 
 static void __init msm7x30_init(void)
 {
-	int rc;
 	unsigned smem_size;
-	uint32_t usb_hub_gpio_cfg_value = GPIO_CFG(56,
-						0,
-						GPIO_CFG_OUTPUT,
-						GPIO_CFG_NO_PULL,
-						GPIO_CFG_2MA);
 	uint32_t soc_version = 0;
 
 	soc_version = socinfo_get_version();
@@ -6187,13 +5872,8 @@ static void __init msm7x30_init(void)
 #if defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE)
 	msm_device_tsif.dev.platform_data = &tsif_platform_data;
 #endif
-	if (machine_is_msm7x30_fluid()) {
-		msm_adc_pdata.dev_names = msm_adc_fluid_device_names;
-		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_fluid_device_names);
-	} else {
-		msm_adc_pdata.dev_names = msm_adc_surf_device_names;
-		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
-	}
+	msm_adc_pdata.dev_names = msm_adc_surf_device_names;
+	msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
 	buses_init();
 #ifdef CONFIG_MSM_SSBI
 	msm_device_ssbi_pmic1.dev.platform_data =
@@ -6246,12 +5926,6 @@ static void __init msm7x30_init(void)
 	i2c_register_board_info(0, msm_i2c_board_info,
 			ARRAY_SIZE(msm_i2c_board_info));
 
-#ifdef CONFIG_BOSCH_BMA150
-	if (machine_is_msm7x30_fluid())
-		i2c_register_board_info(0, bma150_board_info,
-					ARRAY_SIZE(bma150_board_info));
-#endif
-
 	i2c_register_board_info(2, msm_marimba_board_info,
 			ARRAY_SIZE(msm_marimba_board_info));
 
@@ -6268,13 +5942,6 @@ static void __init msm7x30_init(void)
 #endif
 
 	pm8058_gpios_init();
-
-	if (machine_is_msm8x55_svlte_surf() || machine_is_msm8x55_svlte_ffa()) {
-		rc = gpio_tlmm_config(usb_hub_gpio_cfg_value, GPIO_CFG_ENABLE);
-		if (rc)
-			pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, usb_hub_gpio_cfg_value, rc);
-	}
 
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
@@ -6314,14 +5981,6 @@ static int __init pmem_adsp_size_setup(char *p)
 }
 early_param("pmem_adsp_size", pmem_adsp_size_setup);
 
-static unsigned fluid_pmem_adsp_size = MSM_FLUID_PMEM_ADSP_SIZE;
-static int __init fluid_pmem_adsp_size_setup(char *p)
-{
-	fluid_pmem_adsp_size = memparse(p, NULL);
-	return 0;
-}
-early_param("fluid_pmem_adsp_size", fluid_pmem_adsp_size_setup);
-
 static unsigned pmem_kernel_ebi0_size = PMEM_KERNEL_EBI0_SIZE;
 static int __init pmem_kernel_ebi0_size_setup(char *p)
 {
@@ -6344,13 +6003,7 @@ static struct memtype_reserve msm7x30_reserve_table[] __initdata = {
 static void __init size_pmem_devices(void)
 {
 #ifdef CONFIG_ANDROID_PMEM
-	unsigned long size;
-
-	if machine_is_msm7x30_fluid()
-		size = fluid_pmem_adsp_size;
-	else
-		size = pmem_adsp_size;
-	android_pmem_adsp_pdata.size = size;
+	android_pmem_adsp_pdata.size = pmem_adsp_size;
 	android_pmem_pdata.size = pmem_sf_size;
 #endif
 }
