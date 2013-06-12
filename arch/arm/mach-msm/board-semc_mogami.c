@@ -32,7 +32,6 @@
 #include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
 #include <linux/i2c/isa1200.h>
-#include <linux/i2c/tsc2007.h>
 #include <linux/input/kp_flip_switch.h>
 #include <linux/leds-pmic8058.h>
 #include <linux/input/cy8c_ts.h>
@@ -6239,135 +6238,6 @@ static struct msm_spm_platform_data msm_spm_data __initdata = {
 	.vctl_timeout_us = 50,
 };
 
-#if defined(CONFIG_TOUCHSCREEN_TSC2007) || \
-	defined(CONFIG_TOUCHSCREEN_TSC2007_MODULE)
-
-#define TSC2007_TS_PEN_INT	20
-
-static struct msm_gpio tsc2007_config_data[] = {
-	{ GPIO_CFG(TSC2007_TS_PEN_INT, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	"tsc2007_irq" },
-};
-
-static struct regulator_bulk_data tsc2007_regs[] = {
-	{ .supply = "s3", .min_uV = 1800000, .max_uV = 1800000 },
-	{ .supply = "s2", .min_uV = 1300000, .max_uV = 1300000 },
-};
-
-static int tsc2007_init(void)
-{
-	int rc;
-
-	rc = regulator_bulk_get(NULL, ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-
-	if (rc) {
-		pr_err("%s: could not get regulators: %d\n", __func__, rc);
-		goto out;
-	}
-
-	rc = regulator_bulk_set_voltage(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-
-	if (rc) {
-		pr_err("%s: could not set voltages: %d\n", __func__, rc);
-		goto reg_free;
-	}
-
-	rc = regulator_bulk_enable(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-
-	if (rc) {
-		pr_err("%s: could not enable regulators: %d\n", __func__, rc);
-		goto reg_free;
-	}
-
-	rc = msm_gpios_request_enable(tsc2007_config_data,
-			ARRAY_SIZE(tsc2007_config_data));
-	if (rc) {
-		pr_err("%s: Unable to request gpios\n", __func__);
-		goto reg_disable;
-	}
-
-	return 0;
-
-reg_disable:
-	regulator_bulk_disable(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-reg_free:
-	regulator_bulk_free(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-out:
-	return rc;
-}
-
-static int tsc2007_get_pendown_state(void)
-{
-	int rc;
-
-	rc = gpio_get_value(TSC2007_TS_PEN_INT);
-	if (rc < 0) {
-		pr_err("%s: MSM GPIO %d read failed\n", __func__,
-						TSC2007_TS_PEN_INT);
-		return rc;
-	}
-
-	return (rc == 0 ? 1 : 0);
-}
-
-static void tsc2007_exit(void)
-{
-
-	regulator_bulk_disable(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-	regulator_bulk_free(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-
-	msm_gpios_disable_free(tsc2007_config_data,
-		ARRAY_SIZE(tsc2007_config_data));
-}
-
-static int tsc2007_power_shutdown(bool enable)
-{
-	int rc;
-
-	rc = (enable == false) ?
-		regulator_bulk_enable(ARRAY_SIZE(tsc2007_regs), tsc2007_regs) :
-		regulator_bulk_disable(ARRAY_SIZE(tsc2007_regs), tsc2007_regs);
-
-	if (rc) {
-		pr_err("%s: could not %sable regulators: %d\n",
-				__func__, enable ? "dis" : "en", rc);
-		return rc;
-	}
-
-	if (enable == false)
-		msleep(20);
-
-	return 0;
-}
-
-static struct tsc2007_platform_data tsc2007_ts_data = {
-	.model = 2007,
-	.x_plate_ohms = 300,
-	.min_x		= 210,
-	.max_x		= 3832,
-	.min_y		= 150,
-	.max_y		= 3936,
-	.irq_flags    = IRQF_TRIGGER_LOW,
-	.init_platform_hw = tsc2007_init,
-	.exit_platform_hw = tsc2007_exit,
-	.power_shutdown	  = tsc2007_power_shutdown,
-	.invert_x	  = true,
-	.invert_y	  = true,
-	/* REVISIT: Temporary fix for reversed pressure */
-	.invert_z1	  = true,
-	.invert_z2	  = true,
-	.get_pendown_state = tsc2007_get_pendown_state,
-};
-
-static struct i2c_board_info tsc_i2c_board_info[] = {
-	{
-		I2C_BOARD_INFO("tsc2007", 0x48),
-		.irq		= MSM_GPIO_TO_INT(TSC2007_TS_PEN_INT),
-		.platform_data = &tsc2007_ts_data,
-	},
-};
-#endif
-
 static struct regulator_bulk_data regs_isa1200[] = {
 	{ .supply = "gp7",  .min_uV = 1800000, .max_uV = 1800000 },
 	{ .supply = "gp10", .min_uV = 2600000, .max_uV = 2600000 },
@@ -6664,13 +6534,6 @@ static void __init msm7x30_init(void)
 	if (machine_is_msm7x30_fluid())
 		i2c_register_board_info(0, msm_isa1200_board_info,
 			ARRAY_SIZE(msm_isa1200_board_info));
-
-#if defined(CONFIG_TOUCHSCREEN_TSC2007) || \
-	defined(CONFIG_TOUCHSCREEN_TSC2007_MODULE)
-	if (machine_is_msm8x55_svlte_ffa())
-		i2c_register_board_info(2, tsc_i2c_board_info,
-				ARRAY_SIZE(tsc_i2c_board_info));
-#endif
 
 	if (machine_is_msm7x30_surf())
 		platform_device_register(&flip_switch_device);
