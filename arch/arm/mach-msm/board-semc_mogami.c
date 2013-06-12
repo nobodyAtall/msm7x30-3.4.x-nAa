@@ -215,8 +215,7 @@
 
 #define PMIC_GPIO_INT		27
 #define PMIC_VREG_WLAN_LEVEL	2900
-#define PMIC_GPIO_SD_DET	36
-#define PMIC_GPIO_SDC4_EN_N	17  /* PMIC GPIO Number 18 */
+#define PMIC_GPIO_SD_DET	22
 #define PMIC_GPIO_HDMI_5V_EN_V3 32  /* PMIC GPIO for V3 H/W */
 #define PMIC_GPIO_HDMI_5V_EN_V2 39 /* PMIC GPIO for V2 H/W */
 
@@ -235,12 +234,6 @@
 #define PM8058_GPIO_SYS_TO_PM(sys_gpio)    (sys_gpio - NR_GPIO_IRQS)
 #define PM8058_MPP_BASE			   PM8058_GPIO_PM_TO_SYS(PM8058_GPIOS)
 #define PM8058_MPP_PM_TO_SYS(pm_gpio)	   (pm_gpio + PM8058_MPP_BASE)
-
-#define PMIC_GPIO_HAP_ENABLE   16  /* PMIC GPIO Number 17 */
-
-#define PMIC_GPIO_WLAN_EXT_POR  22 /* PMIC GPIO NUMBER 23 */
-
-#define BMA150_GPIO_INT 1
 
 #define PMIC_GPIO_QUICKVX_CLK 37 /* PMIC GPIO 38 */
 
@@ -481,13 +474,13 @@ static int pm8058_gpios_init(void)
 	struct pm8xxx_gpio_init_info bq24185_irq = {
 		PM8058_GPIO_PM_TO_SYS(BQ24185_GPIO_IRQ - 1),
 		{
-			.direction 		= PM_GPIO_DIR_IN,
-			.pull 			= PM_GPIO_PULL_NO,
-			.vin_sel 		= PM8058_GPIO_VIN_S3,
-			.function 		= PM_GPIO_FUNC_NORMAL,
-			.inv_int_pol 	= 0,
-			.out_strength	= PM_GPIO_STRENGTH_LOW,
-			.output_value	= 0,
+			.direction      = PM_GPIO_DIR_IN,
+			.pull           = PM_GPIO_PULL_NO,
+			.vin_sel        = PM8058_GPIO_VIN_S3,
+			.function       = PM_GPIO_FUNC_NORMAL,
+			.inv_int_pol    = 0,
+			.out_strength   = PM_GPIO_STRENGTH_LOW,
+			.output_value   = 0,
 		},
 	};
 
@@ -514,19 +507,6 @@ static int pm8058_gpios_init(void)
 			.out_strength   = PM_GPIO_STRENGTH_LOW,
 			.output_value   = 0,
 		},
-	};
-
-	struct pm8xxx_gpio_init_info gpio23 = {
-		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_WLAN_EXT_POR),
-		{
-			.direction      = PM_GPIO_DIR_OUT,
-			.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-			.output_value   = 0,
-			.pull           = PM_GPIO_PULL_NO,
-			.vin_sel        = 2,
-			.out_strength   = PM_GPIO_STRENGTH_LOW,
-			.function       = PM_GPIO_FUNC_NORMAL,
-		}
 	};
 
 	struct pm8xxx_gpio_init_info sdcc_det = {
@@ -559,13 +539,6 @@ static int pm8058_gpios_init(void)
 	rc = pm8xxx_gpio_config(hdmi_5V_en.gpio, &hdmi_5V_en.config);
 	if (rc) {
 		pr_err("%s PMIC_GPIO_HDMI_5V_EN config failed\n", __func__);
-		return rc;
-	}
-
-	/* Deassert GPIO#23 (source for Ext_POR on WLAN-Volans) */
-	rc = pm8xxx_gpio_config(gpio23.gpio, &gpio23.config);
-	if (rc) {
-		pr_err("%s PMIC_GPIO_WLAN_EXT_POR config failed\n", __func__);
 		return rc;
 	}
 
@@ -800,7 +773,6 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 		.type = "semc_sub_camera"
 	},
 #endif
-
 };
 
 #ifdef CONFIG_MSM_CAMERA
@@ -5153,7 +5125,7 @@ out:
 static unsigned int msm7x30_sdcc_slot_status(struct device *dev)
 {
 	return (unsigned int)
-		gpio_get_value_cansleep(
+		!gpio_get_value_cansleep(
 			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1));
 }
 
