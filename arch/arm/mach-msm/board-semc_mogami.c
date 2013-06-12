@@ -25,13 +25,11 @@
 #endif
 #include <linux/msm_ssbi.h>
 #include <linux/mfd/pmic8058.h>
-#include <linux/leds.h>
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
-#include <linux/leds-pmic8058.h>
 #include <linux/input/cy8c_ts.h>
 #include <linux/msm_adc.h>
 #ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
@@ -787,65 +785,6 @@ static struct pm8058_pwm_pdata pm8058_pwm_data = {
 	.enable         = pm8058_pwm_enable,
 };
 
-static struct pmic8058_led pmic8058_ffa_leds[] = {
-	[0] = {
-		.name		= "keyboard-backlight",
-		.max_brightness = 15,
-		.id		= PMIC8058_ID_LED_KB_LIGHT,
-	},
-};
-
-static struct pmic8058_leds_platform_data pm8058_ffa_leds_data = {
-	.num_leds = ARRAY_SIZE(pmic8058_ffa_leds),
-	.leds	= pmic8058_ffa_leds,
-};
-
-static struct pmic8058_led pmic8058_surf_leds[] = {
-	[0] = {
-		.name		= "keyboard-backlight",
-		.max_brightness = 15,
-		.id		= PMIC8058_ID_LED_KB_LIGHT,
-	},
-	[1] = {
-		.name		= "voice:red",
-		.max_brightness = 20,
-		.id		= PMIC8058_ID_LED_0,
-	},
-	[2] = {
-		.name		= "wlan:green",
-		.max_brightness = 20,
-		.id		= PMIC8058_ID_LED_2,
-	},
-};
-
-static struct pmic8058_leds_platform_data pm8058_surf_leds_data = {
-	.num_leds = ARRAY_SIZE(pmic8058_surf_leds),
-	.leds	= pmic8058_surf_leds,
-};
-
-static struct pmic8058_led pmic8058_fluid_leds[] = {
-	[0] = {
-		.name		= "keyboard-backlight",
-		.max_brightness = 15,
-		.id		= PMIC8058_ID_LED_KB_LIGHT,
-	},
-	[1] = {
-		.name		= "flash:led_0",
-		.max_brightness = 15,
-		.id		= PMIC8058_ID_FLASH_LED_0,
-	},
-	[2] = {
-		.name		= "flash:led_1",
-		.max_brightness = 15,
-		.id		= PMIC8058_ID_FLASH_LED_1,
-	},
-};
-
-static struct pmic8058_leds_platform_data pm8058_fluid_leds_data = {
-	.num_leds = ARRAY_SIZE(pmic8058_fluid_leds),
-	.leds	= pmic8058_fluid_leds,
-};
-
 static struct pm8xxx_irq_platform_data pm8xxx_irq_pdata = {
 	.irq_base		= PMIC8058_IRQ_BASE,
 	.devirq			= MSM_GPIO_TO_INT(PMIC_GPIO_INT),
@@ -953,46 +892,6 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 	{
 		I2C_BOARD_INFO("semc_sub_camera", 0x3D),
 		.type = "semc_sub_camera"
-	},
-#endif
-#ifdef CONFIG_MT9D112
-	{
-		I2C_BOARD_INFO("mt9d112", 0x78 >> 1),
-	},
-#endif
-#ifdef CONFIG_WEBCAM_OV9726
-	{
-		I2C_BOARD_INFO("ov9726", 0x10),
-	},
-#endif
-#ifdef CONFIG_S5K3E2FX
-	{
-		I2C_BOARD_INFO("s5k3e2fx", 0x20 >> 1),
-	},
-#endif
-#ifdef CONFIG_MT9P012
-	{
-		I2C_BOARD_INFO("mt9p012", 0x6C >> 1),
-	},
-#endif
-#ifdef CONFIG_VX6953
-	{
-		I2C_BOARD_INFO("vx6953", 0x20),
-	},
-#endif
-#ifdef CONFIG_MT9E013
-	{
-		I2C_BOARD_INFO("mt9e013", 0x6C >> 2),
-	},
-#endif
-#ifdef CONFIG_SN12M0PZ
-	{
-		I2C_BOARD_INFO("sn12m0pz", 0x34 >> 1),
-	},
-#endif
-#if defined(CONFIG_MT9T013) || defined(CONFIG_SENSORS_MT9T013)
-	{
-		I2C_BOARD_INFO("mt9t013", 0x6C),
 	},
 #endif
 
@@ -6197,16 +6096,6 @@ static struct msm_tsif_platform_data tsif_platform_data = {
 #endif /* defined(CONFIG_TSIF) || defined(CONFIG_TSIF_MODULE) */
 /* TSIF end   */
 
-static void __init pmic8058_leds_init(void)
-{
-	if (machine_is_msm7x30_surf())
-		pm8058_7x30_data.leds_pdata = &pm8058_surf_leds_data;
-	else if (!machine_is_msm7x30_fluid())
-		pm8058_7x30_data.leds_pdata = &pm8058_ffa_leds_data;
-	else if (machine_is_msm7x30_fluid())
-		pm8058_7x30_data.leds_pdata = &pm8058_fluid_leds_data;
-}
-
 static struct msm_spm_platform_data msm_spm_data __initdata = {
 	.reg_base_addr = MSM_SAW0_BASE,
 
@@ -6305,7 +6194,6 @@ static void __init msm7x30_init(void)
 		msm_adc_pdata.dev_names = msm_adc_surf_device_names;
 		msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
 	}
-	pmic8058_leds_init();
 	buses_init();
 #ifdef CONFIG_MSM_SSBI
 	msm_device_ssbi_pmic1.dev.platform_data =
