@@ -2691,7 +2691,7 @@ static struct lm356x_platform_data lm3561_platform_data = {
 	.privacy_terminate	= LM356X_PRIVACY_MODE_TURN_BACK,
 	.privacy_led_nums	= 0,
 	.privacy_blink_period	= 0, /* No bliking */
-	.current_limit		= 1000, /* uA
+	.current_limit		= 1000000, /* uA
 				   selectable value are 1500mA or 1000mA.
 				   if set other value,
 				   it assume current limit is 1000mA.
@@ -2912,7 +2912,7 @@ static struct spi_board_info spi_board_info[] __initdata = {
                 .platform_data  = &cyttsp_data,
                 .bus_num        = 0,
                 .chip_select    = 0,
-                .max_speed_hz   = 1 *  1000 * 1000,
+                .max_speed_hz   = 1 * 1000 * 1000,
         },
 #endif /* CONFIG_TOUCHSCREEN_CYTTSP_SPI */
 };
@@ -3244,10 +3244,10 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_set_voltage	 = msm_hsusb_ldo_set_voltage,
 #ifdef CONFIG_CHARGER_BQ24185
-	.chg_is_initialized	= bq24185_charger_initialized,
+	.chg_is_initialized	 = bq24185_charger_initialized,
 #endif
 #if defined(CONFIG_CHARGER_BQ24185) && defined(CONFIG_USB_MSM_OTG_72K)
-	.vbus_drawable_ida	= USB_IDCHG_MAX,
+	.vbus_drawable_ida	 = USB_IDCHG_MAX,
 #endif
 };
 
@@ -3345,9 +3345,7 @@ static struct platform_device sii_uio_dev = {
 		.platform_data = &sii_uio_pdata,
 	},
 };
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
 static struct lcdc_platform_data dtv_pdata = {
 };
 #endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
@@ -3934,30 +3932,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_SEMC_SUB_CAMERA_MODULE
 	&msm_camera_sensor_semc_sub_camera,
-#endif
-#ifdef CONFIG_MT9T013
-	&msm_camera_sensor_mt9t013,
-#endif
-#ifdef CONFIG_MT9D112
-	&msm_camera_sensor_mt9d112,
-#endif
-#ifdef CONFIG_WEBCAM_OV9726
-	&msm_camera_sensor_ov9726,
-#endif
-#ifdef CONFIG_S5K3E2FX
-	&msm_camera_sensor_s5k3e2fx,
-#endif
-#ifdef CONFIG_MT9P012
-	&msm_camera_sensor_mt9p012,
-#endif
-#ifdef CONFIG_MT9E013
-	&msm_camera_sensor_mt9e013,
-#endif
-#ifdef CONFIG_VX6953
-	&msm_camera_sensor_vx6953,
-#endif
-#ifdef CONFIG_SN12M0PZ
-	&msm_camera_sensor_sn12m0pz,
 #endif
 	&msm_device_vidc_720p,
 #ifdef CONFIG_MSM_GEMINI
