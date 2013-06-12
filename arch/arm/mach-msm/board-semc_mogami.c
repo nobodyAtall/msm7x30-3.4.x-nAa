@@ -31,7 +31,6 @@
 #include <linux/input.h>
 #include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
-#include <linux/input/kp_flip_switch.h>
 #include <linux/leds-pmic8058.h>
 #include <linux/input/cy8c_ts.h>
 #include <linux/msm_adc.h>
@@ -256,8 +255,6 @@
 #define BMA150_GPIO_INT 1
 
 #define PMIC_GPIO_QUICKVX_CLK 37 /* PMIC GPIO 38 */
-
-#define	PM_FLIP_MPP 5 /* PMIC MPP 06 */
 
 #define DDR0_BANK_BASE PHYS_OFFSET
 #define DDR0_BANK_SIZE 0X03C00000
@@ -6235,36 +6232,6 @@ static struct msm_spm_platform_data msm_spm_data __initdata = {
 	.vctl_timeout_us = 50,
 };
 
-static int kp_flip_mpp_config(void)
-{
-	struct pm8xxx_mpp_config_data kp_flip_mpp = {
-		.type = PM8XXX_MPP_TYPE_D_INPUT,
-		.level = PM8018_MPP_DIG_LEVEL_S3,
-		.control = PM8XXX_MPP_DIN_TO_INT,
-	};
-
-	return pm8xxx_mpp_config(PM8058_MPP_PM_TO_SYS(PM_FLIP_MPP),
-						&kp_flip_mpp);
-}
-
-static struct flip_switch_pdata flip_switch_data = {
-	.name = "kp_flip_switch",
-	.flip_gpio = PM8058_GPIO_PM_TO_SYS(PM8058_GPIOS) + PM_FLIP_MPP,
-	.left_key = KEY_OPEN,
-	.right_key = KEY_CLOSE,
-	.active_low = 0,
-	.wakeup = 1,
-	.flip_mpp_config = kp_flip_mpp_config,
-};
-
-static struct platform_device flip_switch_device = {
-	.name   = "kp_flip_switch",
-	.id	= -1,
-	.dev    = {
-		.platform_data = &flip_switch_data,
-	}
-};
-
 #ifdef CONFIG_INPUT_KEYRESET
 #include <linux/keyreset.h>
 /* keyreset platform device */
@@ -6411,8 +6378,6 @@ static void __init msm7x30_init(void)
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi7.dev.platform_data = &msm_i2c_ssbi7_pdata;
 #endif
-	if (machine_is_msm7x30_surf())
-		platform_device_register(&flip_switch_device);
 
 	pm8058_gpios_init();
 
