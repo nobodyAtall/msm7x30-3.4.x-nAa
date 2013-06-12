@@ -170,7 +170,6 @@
 #define LIPO_BAT_MAX_VOLTAGE 4200
 #define LIPO_BAT_MIN_VOLTAGE 3000
 #define FULLY_CHARGED_AND_RECHARGE_CAP 95
-#define USHORT_MAX	((u16)(~0U))
 #ifdef CONFIG_USB_MSM_OTG_72K
 #include <mach/msm72k_otg.h>
 #endif
@@ -205,7 +204,6 @@
 #define PMEM_KERNEL_EBI0_SIZE   0x600000
 
 #define PMIC_GPIO_INT		27
-#define PMIC_VREG_WLAN_LEVEL	2900
 #define PMIC_GPIO_SD_DET	22
 
 #define PMIC_GPIO_SDC4_PWR_EN_N 24  /* PMIC GPIO Number 25 */
@@ -2588,7 +2586,7 @@ static struct battery_regulation_vs_temperature id_bat_reg = {
 	/* Cold, Normal, Warm, Overheat */
 	{5, 45,		55,	127},	/* temp */
 	{0, 4200,	4000,	0},	/* volt */
-	{0, USHORT_MAX,	400,	0},	/* curr */
+	{0, USHRT_MAX,	400,	0},	/* curr */
 };
 
 /* Driver(s) to be notified upon change in algorithm */
