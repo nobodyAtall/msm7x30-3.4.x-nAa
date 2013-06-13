@@ -1,11 +1,13 @@
-/* [kernel/drivers/input/misc/simple_remote.c]
+/* kernel/drivers/input/misc/simple_remote.c
  *
- * Copyright (C) [2010] Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2011 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Authors: Takashi Shiina <takashi.shiina@sonyericsson.com>
  *          Tadashi Kubo <tadashi.kubo@sonyericsson.com>
  *          Joachim Holst <joachim.holst@sonyericsson.com>
  *          Torbjorn Eklund <torbjorn.eklund@sonyericsson.com>
+ *          Atsushi Iyogi <Atsushi.XA.Iyogi@sonyericsson.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2, as
@@ -13,6 +15,7 @@
  * of the License, or (at your option) any later version.
  */
 
+#include <linux/slab.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
@@ -31,7 +34,8 @@
 #include <linux/ctype.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
-#include <linux/slab.h>
+#include <linux/wakelock.h>
+
 #include <linux/simple_remote.h>
 
 #define SIMPLE_REMOTE_APPKEY BTN_3
@@ -39,15 +43,12 @@
 #define DETECTION_DELAY 200
 #define DETECTION_CYCLES 20
 #define MAX_NODEV_CYCLES 10
-#define MIN_NUM_OMTP_DETECTIONS 3
-#define MIN_NUM_HEADPHONE_DETECTIONS 5
+#define MIN_NUM_SUPPORTED_HS_DET 3
+#define MIN_NUM_HEADPHONE_DET 5
+#define DEV_UNKNOWN_ADC_VAL 2000
 
 #define DETECT_WORK_DELAY				\
 	(jiffies + msecs_to_jiffies(DETECTION_DELAY))
-
-#define SHORT_MAX	((s16)(USHORT_MAX>>1))
-#define SHORT_MIN	(-SHORT_MAX - 1)
-#define USHORT_MAX	((u16)(~0U))
 
 static irqreturn_t simple_remote_button_irq_handler(int irq, void *dev_id);
 static irqreturn_t simple_remote_detect_irq_handler(int irq, void *dev_id);
@@ -73,7 +74,7 @@ static int simple_remote_acc_max[] = {
 static int simple_remote_btn_min[] = {
 	0,   /* BTN_0 */
 	100, /* BTN_1 */
-	300, /* BTN_2 */
+	280, /* BTN_2 */
 	500, /* BTN_3 */
 };
 
@@ -117,7 +118,7 @@ static ssize_t simple_remote_attrs_store_property(struct device *dev,
 #define SIMPLE_REMOTE_ATTR(_name) \
 {\
 	.attr = { .name = _name,\
-			.mode = (S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH)\
+			.mode = (S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH),\
 			},\
 	.show = simple_remote_attrs_show_property,\
 	.store = simple_remote_attrs_store_property,\
@@ -132,6 +133,7 @@ static ssize_t simple_remote_attrs_store_property(struct device *dev,
 #define SIMPLE_REMOTE_TRIG_PRD_T_NAME "btn_trig_period_time"
 #define SIMPLE_REMOTE_TRIG_HST_F_NAME "btn_trig_hyst_freq"
 #define SIMPLE_REMOTE_TRIG_HST_T_NAME "btn_trig_hyst_time"
+#define MAX_ATTRS_NAME_LEN 32
 
 static struct device_attribute simple_remote_attrs[] = {
 	SIMPLE_REMOTE_ATTR(SIMPLE_REMOTE_ACC_MIN_VALS_NAME),
@@ -152,12 +154,11 @@ struct simple_remote_driver {
 
 	atomic_t detection_in_progress;
 	atomic_t detect_cycle;
-	atomic_t initialized;
 
 	u8 pressed_button;
 	u8 nodetect_cycles;
-	u8 num_omtp_detections;
-	u8 num_headphone_detections;
+	u8 num_supported_hs_det;
+	u8 num_headphone_det;
 
 	enum dev_state current_accessory_state;
 
@@ -174,6 +175,8 @@ struct simple_remote_driver {
 	struct device *dev;
 
 	struct simple_remote_pf_interface *interface;
+
+	struct wake_lock lock;
 };
 
 
@@ -212,43 +215,52 @@ static ssize_t simple_remote_attrs_show_property(struct device *dev,
 
 	mutex_lock(&jack->simple_remote_mutex);
 
-	if (!strcmp(SIMPLE_REMOTE_ACC_MIN_VALS_NAME, attr->attr.name)) {
+	if (!strncmp(SIMPLE_REMOTE_ACC_MIN_VALS_NAME, attr->attr.name,
+		     MAX_ATTRS_NAME_LEN)) {
 		retval = simple_remote_attrs_set_data_buffer(
 			buf, simple_remote_acc_min,
 			ARRAY_SIZE(simple_remote_acc_min));
 		goto done;
 	}
 
-	if (!strcmp(SIMPLE_REMOTE_ACC_MAX_VALS_NAME, attr->attr.name)) {
+	if (!strncmp(SIMPLE_REMOTE_ACC_MAX_VALS_NAME, attr->attr.name,
+		     MAX_ATTRS_NAME_LEN)) {
 		retval = simple_remote_attrs_set_data_buffer(
 			buf, simple_remote_acc_max,
 			ARRAY_SIZE(simple_remote_acc_max));
 		goto done;
 	}
 
-	if (!strcmp(SIMPLE_REMOTE_BTN_MIN_VALS_NAME, attr->attr.name)) {
+	if (!strncmp(SIMPLE_REMOTE_BTN_MIN_VALS_NAME, attr->attr.name,
+		     MAX_ATTRS_NAME_LEN)) {
 		retval = simple_remote_attrs_set_data_buffer(
 			buf, simple_remote_btn_min,
 			ARRAY_SIZE(simple_remote_btn_min));
 		goto done;
 	}
 
-	if (!strcmp(SIMPLE_REMOTE_BTN_MAX_VALS_NAME, attr->attr.name)) {
+	if (!strncmp(SIMPLE_REMOTE_BTN_MAX_VALS_NAME, attr->attr.name,
+		     MAX_ATTRS_NAME_LEN)) {
 		retval = simple_remote_attrs_set_data_buffer(
 			buf, simple_remote_btn_max,
 			ARRAY_SIZE(simple_remote_btn_max));
 		goto done;
 	}
 
-	if (!strcmp(SIMPLE_REMOTE_TRIG_LVL_NAME, attr->attr.name))
+	if (!strncmp(SIMPLE_REMOTE_TRIG_LVL_NAME, attr->attr.name,
+		     MAX_ATTRS_NAME_LEN))
 		retval = jack->interface->get_trig_level(&val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_PRD_F_NAME, attr->attr.name))
+	else if (!strncmp(SIMPLE_REMOTE_TRIG_PRD_F_NAME, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN))
 		retval = jack->interface->get_period_freq(&val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_PRD_T_NAME, attr->attr.name))
+	else if (!strncmp(SIMPLE_REMOTE_TRIG_PRD_T_NAME, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN))
 		retval = jack->interface->get_period_time(&val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_HST_F_NAME, attr->attr.name))
+	else if (!strncmp(SIMPLE_REMOTE_TRIG_HST_F_NAME, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN))
 		retval = jack->interface->get_hysteresis_freq(&val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_HST_T_NAME, attr->attr.name))
+	else if (!strncmp(SIMPLE_REMOTE_TRIG_HST_T_NAME, attr->attr.name,
+			  MAX_ATTRS_NAME_LEN))
 		retval = jack->interface->get_hysteresis_time(&val);
 
 	if (!retval)
@@ -260,7 +272,7 @@ done:
 	return retval;
 }
 
-static void simple_remote_attrs_update_data(const char *buf, size_t count,
+static int simple_remote_attrs_update_data(const char *buf, size_t count,
 					    int *array, int array_len)
 {
 	char tmp_buf[10];
@@ -280,21 +292,21 @@ static void simple_remote_attrs_update_data(const char *buf, size_t count,
 			else if (isdigit(q[stepper]))
 				tmp_buf[stepper] = q[stepper];
 			else
-				return;
+				return -EINVAL;
 		}
 
 		tmp_buf[stepper] = '\0';
 
 		if (strict_strtol(tmp_buf, 10, &conversion))
-			return;
+			return -EINVAL;
 
 		/* Making sure that we get values that are in range */
-		if (conversion <= SHORT_MAX && conversion >= SHORT_MIN) {
+		if (conversion <= SHRT_MAX && conversion >= SHRT_MIN) {
 			array[value_count] = (short)conversion;
 		} else {
 			pr_err("%s - Value out of range. Aborting"
 				" change!\n", __func__);
-			return;
+			return -EINVAL;
 		}
 
 		value_count++;
@@ -302,6 +314,7 @@ static void simple_remote_attrs_update_data(const char *buf, size_t count,
 		count -= (i + 1);
 	} while (count > 0 && value_count < array_len);
 
+	return 0;
 }
 
 static ssize_t simple_remote_attrs_store_property(struct device *dev,
@@ -309,43 +322,64 @@ static ssize_t simple_remote_attrs_store_property(struct device *dev,
 						  const char *buf, size_t count)
 {
 	long val;
+	int ret;
 
 	struct simple_remote_driver *jack = dev_get_drvdata(dev);
 
 	mutex_lock(&jack->simple_remote_mutex);
 
-	strict_strtol(buf, 10, &val);
-
-	if (!strcmp(SIMPLE_REMOTE_ACC_MIN_VALS_NAME, attr->attr.name)) {
-		simple_remote_attrs_update_data(
+	if (!strncmp(SIMPLE_REMOTE_ACC_MIN_VALS_NAME, attr->attr.name,
+		     MAX_ATTRS_NAME_LEN)) {
+		ret = simple_remote_attrs_update_data(
 			buf, count, simple_remote_acc_min,
 			ARRAY_SIZE(simple_remote_acc_min));
-	} else if (!strcmp(SIMPLE_REMOTE_ACC_MAX_VALS_NAME, attr->attr.name)) {
-		simple_remote_attrs_update_data(
+	} else if (!strncmp(SIMPLE_REMOTE_ACC_MAX_VALS_NAME, attr->attr.name,
+			    MAX_ATTRS_NAME_LEN)) {
+		ret = simple_remote_attrs_update_data(
 			buf, count, simple_remote_acc_max,
 			ARRAY_SIZE(simple_remote_acc_max));
-	} else if (!strcmp(SIMPLE_REMOTE_BTN_MIN_VALS_NAME, attr->attr.name)) {
-		simple_remote_attrs_update_data(
+	} else if (!strncmp(SIMPLE_REMOTE_BTN_MIN_VALS_NAME, attr->attr.name,
+			    MAX_ATTRS_NAME_LEN)) {
+		ret = simple_remote_attrs_update_data(
 			buf, count, simple_remote_btn_min,
 			ARRAY_SIZE(simple_remote_btn_min));
-	} else if (!strcmp(SIMPLE_REMOTE_BTN_MAX_VALS_NAME, attr->attr.name)) {
-		simple_remote_attrs_update_data(
+	} else if (!strncmp(SIMPLE_REMOTE_BTN_MAX_VALS_NAME, attr->attr.name,
+			    MAX_ATTRS_NAME_LEN)) {
+		ret = simple_remote_attrs_update_data(
 			buf, count, simple_remote_btn_max,
 			ARRAY_SIZE(simple_remote_btn_max));
-	} else if (!strcmp(SIMPLE_REMOTE_TRIG_LVL_NAME, attr->attr.name))
-		jack->interface->set_trig_level(val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_PRD_F_NAME, attr->attr.name))
-		jack->interface->set_period_freq(val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_PRD_T_NAME, attr->attr.name))
-		jack->interface->set_period_time(val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_HST_F_NAME, attr->attr.name))
-		jack->interface->set_hysteresis_freq(val);
-	else if (!strcmp(SIMPLE_REMOTE_TRIG_HST_T_NAME, attr->attr.name))
-		jack->interface->set_hysteresis_time(val);
+	} else {
+		ret = strict_strtol(buf, 10, &val);
 
+		if (ret) {
+			dev_err(dev, "Error when parsing string: %s\n", buf);
+			goto done;
+		}
+
+		if (!strncmp(SIMPLE_REMOTE_TRIG_LVL_NAME, attr->attr.name,
+			     MAX_ATTRS_NAME_LEN))
+			ret = jack->interface->set_trig_level(val);
+		else if (!strncmp(SIMPLE_REMOTE_TRIG_PRD_F_NAME,
+				  attr->attr.name, MAX_ATTRS_NAME_LEN))
+			ret = jack->interface->set_period_freq(val);
+		else if (!strncmp(SIMPLE_REMOTE_TRIG_PRD_T_NAME,
+				  attr->attr.name, MAX_ATTRS_NAME_LEN))
+			ret = jack->interface->set_period_time(val);
+		else if (!strncmp(SIMPLE_REMOTE_TRIG_HST_F_NAME,
+				  attr->attr.name, MAX_ATTRS_NAME_LEN))
+			ret = jack->interface->set_hysteresis_freq(val);
+		else if (!strncmp(SIMPLE_REMOTE_TRIG_HST_T_NAME,
+				  attr->attr.name, MAX_ATTRS_NAME_LEN))
+			ret = jack->interface->set_hysteresis_time(val);
+	}
+
+done:
 	mutex_unlock(&jack->simple_remote_mutex);
 
-	return count;
+	if (!ret)
+		ret = count;
+
+	return ret;
 }
 
 static int create_sysfs_interfaces(struct device *dev)
@@ -465,7 +499,7 @@ static ssize_t simple_remote_print_name(struct switch_dev *sdev, char *buf)
 		return snprintf(buf, PAGE_SIZE, "Headset\n");
 	case DEVICE_HEADPHONE:
 		dev_info(jack->dev, "Headphone\n");
-		return snprintf(buf, PAGE_SIZE, "Headphone\n");
+		return snprintf(buf, PAGE_SIZE, "Headset\n");
 	}
 	return -EINVAL;
 }
@@ -497,7 +531,7 @@ static void simple_remote_report_accessory_type(
 			dev_dbg(jack->dev, "DEVICE_UNKNOWN\n");
 			break;
 		case DEVICE_UNSUPPORTED:
-			dev_dbg(jack->dev, "UNSUPPORTED\n");
+			dev_err(jack->dev, "UNSUPPORTED\n");
 			break;
 		case DEVICE_HEADPHONE:
 			dev_dbg(jack->dev, "DEVICE_HEADPHONE\n");
@@ -516,6 +550,7 @@ static void simple_remote_report_accessory_type(
 			break;
 		}
 		switch_set_state(&jack->swdev, jack->new_accessory_state);
+		wake_lock_timeout(&jack->lock, HZ / 2);
 		jack->current_accessory_state = jack->new_accessory_state;
 	}
 }
@@ -593,8 +628,8 @@ static void simple_remote_close(struct input_dev *dev)
 static void simple_remote_plug_det_work(struct work_struct *work)
 {
 	u8 getgpiovalue;
-	unsigned int adc_value = 2000;
-	unsigned int alt_adc_val = 2000;
+	unsigned int adc_value = DEV_UNKNOWN_ADC_VAL;
+	unsigned int alt_adc_val = DEV_UNKNOWN_ADC_VAL;
 	enum dev_state state;
 
 	struct simple_remote_driver *jack =
@@ -617,7 +652,7 @@ static void simple_remote_plug_det_work(struct work_struct *work)
 		simple_remote_attrs_parse_accessory_type(
 			jack, adc_value, getgpiovalue);
 
-	/* performing CTIA detection */
+	/* performing unsupported headset detection */
 	if (!getgpiovalue && jack->new_accessory_state == DEVICE_HEADSET) {
 		dev_dbg(jack->dev,
 			"%s - Headset detected. Checking for unsupported\n",
@@ -637,31 +672,32 @@ static void simple_remote_plug_det_work(struct work_struct *work)
 			jack, alt_adc_val, getgpiovalue);
 		if (DEVICE_HEADPHONE == state) {
 			dev_info(jack->dev,
-				 "%s - CTIA headset detected", __func__);
+				 "%s - unsupported headset detected", __func__);
 			if (jack->interface->enable_alternate_headset_mode(1)) {
 				jack->new_accessory_state = DEVICE_UNSUPPORTED;
-				jack->num_omtp_detections = 0;
+				jack->num_supported_hs_det = 0;
 			}
 		} else {
-			jack->num_omtp_detections++;
+			jack->num_supported_hs_det++;
 		}
 	}
 
 	if (jack->new_accessory_state == DEVICE_HEADPHONE)
-		jack->num_headphone_detections++;
+		jack->num_headphone_det++;
 	else
-		jack->num_headphone_detections = 0;
+		jack->num_headphone_det = 0;
 
 	/*
 	 * Avoid the conflict between audio path changing and alternate
 	 * ADC reading.
-	 * Accessory state report to the upper layer is deferred until OMTP
-	 * detection cycle finishes when the accessory state is DEVICE_HEADSET.
+	 * Accessory state report to the upper layer is deferred until supported
+	 * headset detection cycle finishes when the accessory state is
+	 * DEVICE_HEADSET.
 	 */
 	if (!(jack->new_accessory_state == DEVICE_HEADPHONE ||
 	    jack->new_accessory_state == DEVICE_HEADSET) ||
-	    jack->num_headphone_detections >= MIN_NUM_HEADPHONE_DETECTIONS ||
-	    jack->num_omtp_detections >= MIN_NUM_OMTP_DETECTIONS)
+	    jack->num_headphone_det >= MIN_NUM_HEADPHONE_DET ||
+	    jack->num_supported_hs_det >= MIN_NUM_SUPPORTED_HS_DET)
 		simple_remote_report_accessory_type(jack);
 
 	dev_vdbg(jack->dev, "%s - used detection cycles = %d\n", __func__,
@@ -669,7 +705,7 @@ static void simple_remote_plug_det_work(struct work_struct *work)
 
 	/* Restart detection cycle if required */
 	if (DETECTION_CYCLES > atomic_read(&jack->detect_cycle) &&
-	    jack->num_omtp_detections < MIN_NUM_OMTP_DETECTIONS &&
+	    jack->num_supported_hs_det < MIN_NUM_SUPPORTED_HS_DET &&
 	    MAX_NODEV_CYCLES > jack->nodetect_cycles) {
 		dev_vdbg(jack->dev, "%s - Restarting delayed work\n", __func__);
 		mod_timer(&jack->plug_det_timer, DETECT_WORK_DELAY);
@@ -677,8 +713,8 @@ static void simple_remote_plug_det_work(struct work_struct *work)
 	} else {
 		jack->nodetect_cycles = 0;
 		atomic_set(&jack->detection_in_progress, 0);
-		jack->num_omtp_detections = 0;
-		jack->num_headphone_detections = 0;
+		jack->num_supported_hs_det = 0;
+		jack->num_headphone_det = 0;
 	}
 }
 
@@ -747,13 +783,9 @@ static irqreturn_t simple_remote_button_irq_handler(int irq, void *data)
 
 	struct simple_remote_driver *jack = data;
 
-	if (atomic_read(&jack->initialized)) {
-		dev_dbg(jack->dev, "Received a Button interrupt\n");
-		schedule_work(&jack->btn_det_work);
-	} else {
-		dev_dbg(jack->dev, "Received button IRQ before initialized "
-			"system. Discarding\n");
-	}
+	dev_dbg(jack->dev, "Received a Button interrupt\n");
+
+	schedule_work(&jack->btn_det_work);
 
 	return IRQ_HANDLED;
 }
@@ -898,10 +930,9 @@ static int simple_remote_probe(struct platform_device *pdev)
 				"input device failed\n");
 		goto err_register_input_appkey_dev;
 	}
+	wake_lock_init(&jack->lock, WAKE_LOCK_SUSPEND, "simple remote");
 
 	dev_info(jack->dev, "***** Successfully registered\n");
-
-	atomic_set(&jack->initialized, 1);
 
 	return ret;
 
@@ -933,6 +964,7 @@ static int simple_remote_remove(struct platform_device *pdev)
 	input_unregister_device(jack->indev_appkey);
 	input_unregister_device(jack->indev);
 	switch_dev_unregister(&jack->swdev);
+	wake_lock_destroy(&jack->lock);
 	kzfree(jack);
 
 	return 0;

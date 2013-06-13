@@ -1,11 +1,13 @@
-/* [kernel/include/linux/simple_remote.h]
+/* kernel/include/linux/simple_remote.h
  *
- * Copyright (C) [2010] Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2011 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Authors: Takashi Shiina <takashi.shiina@sonyericsson.com>
  *          Tadashi Kubo <tadashi.kubo@sonyericsson.com>
  *          Joachim Holst <joachim.holst@sonyericsson.com>
  *          Torbjorn Eklund <torbjorn.eklung@sonyericsson.com>
+ *          Atsushi Iyogi <Atsushi.XA.Iyogi@sonyericsson.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2, as
