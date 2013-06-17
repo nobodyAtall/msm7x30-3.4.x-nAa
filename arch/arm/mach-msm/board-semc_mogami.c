@@ -182,7 +182,7 @@
 #include "pm.h"
 
 #ifdef CONFIG_FB_MSM_HDPI
-#define MSM_PMEM_SF_SIZE  0x1E00000
+#define MSM_PMEM_SF_SIZE  0x2500000
 #else
 #define MSM_PMEM_SF_SIZE  0x1600000
 #endif
