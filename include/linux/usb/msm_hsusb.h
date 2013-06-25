@@ -3,6 +3,8 @@
  * Copyright (C) 2008 Google, Inc.
  * Author: Brian Swetland <swetland@google.com>
  * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2012 Sony Mobile Communications AB
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -106,6 +108,9 @@ enum msm_usb_phy_type {
  * USB_CHG_STATE_SECONDARY_DONE	Secondary detection is completed (Detects
  *                              between DCP and CDP).
  * USB_CHG_STATE_DETECTED	USB charger type is determined.
+ * USB_CHG_STATE_RECHECK	DCP can be miss-detected as SDP when user
+ *				insert USB cable very slowly. Rechecking chager
+ *				type after a while.
  *
  */
 enum usb_chg_state {
@@ -115,6 +120,7 @@ enum usb_chg_state {
 	USB_CHG_STATE_PRIMARY_DONE,
 	USB_CHG_STATE_SECONDARY_DONE,
 	USB_CHG_STATE_DETECTED,
+	USB_CHG_STATE_RECHECK,
 };
 
 /**
@@ -290,6 +296,8 @@ struct msm_otg_platform_data {
  * @xo_handle: TCXO buffer handle
  * @bus_perf_client: Bus performance client handle to request BUS bandwidth
  * @mhl_enabled: MHL driver registration successful and MHL enabled.
+ * @id_wok: PMIC ID pin checking work.
+ * @wq: Work queue for sm_work, chg_work and id_work.
  */
 struct msm_otg {
 	struct usb_phy phy;
@@ -307,6 +315,7 @@ struct msm_otg {
 #define ID_B		3
 #define ID_C		4
 #define A_BUS_DROP	5
+#define VBUS_DROP_DET	5
 #define A_BUS_REQ	6
 #define A_SRP_DET	7
 #define A_VBUS_VLD	8
@@ -332,6 +341,8 @@ struct msm_otg {
 	enum usb_chg_state chg_state;
 	enum usb_chg_type chg_type;
 	u8 dcd_retries;
+	struct work_struct chg_recheck_stop_work;
+	u8 chg_recheck_retries;
 	struct wake_lock wlock;
 	struct notifier_block usbdev_nb;
 	unsigned mA_port;
@@ -369,6 +380,8 @@ struct msm_otg {
 	u8 active_tmout;
 	struct hrtimer timer;
 	enum usb_vdd_type vdd_type;
+	struct delayed_work id_work;
+	struct workqueue_struct *wq;
 };
 
 struct msm_hsic_host_platform_data {
@@ -465,4 +478,7 @@ static inline int msm_ep_unconfig(struct usb_ep *ep)
 	return -ENODEV;
 }
 #endif
+
+void msm_otg_notify_vbus_drop(void);
+
 #endif

@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2012 Sony Ericsson Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -156,13 +157,16 @@ struct msm_otg {
 	struct work_struct otg_resume_work;
 	struct notifier_block usbdev_nb;
 	struct msm_xo_voter *xo_handle; /*handle to vote for TCXO D1 buffer*/
-	unsigned long wait_charger_init_start;
 #ifdef CONFIG_USB_MSM_ACA
 	struct timer_list	id_timer;	/* drives id_status polling */
 	unsigned		b_max_power;	/* ACA: max power of accessory*/
-	u8			aca_connection;	/* ACA: connection status */
 	int			wait_id_stable_duration;
 #endif
+	atomic_t		shuttingdown;
+	atomic_t		pm_suspend;
+	wait_queue_head_t	pm_wait;
+	unsigned long		wait_charger_init_start;
+	atomic_t		skip_lpm;
 };
 
 static inline int can_phy_power_collapse(struct msm_otg *dev)

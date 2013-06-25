@@ -2,6 +2,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012 Sony Ericsson Mobile Communications AB.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -192,12 +193,13 @@ struct msm_otg_platform_data {
 	void (*chg_connected)(enum chg_type chg_type);
 	void (*chg_vbus_draw)(unsigned ma);
 	int  (*chg_init)(int init);
-	int  (*chg_is_initialized)(void);
-	unsigned vbus_drawable_ida;
 	int (*config_vddcx)(int high);
 	int (*init_vddcx)(int init);
+	int (*chg_is_initialized)(void);
+	int (*is_cradle_connected)(void);
 
 	struct pm_qos_request pm_qos_req_dma;
+	unsigned chg_drawable_ida;
 };
 
 struct msm_usb_host_platform_data {

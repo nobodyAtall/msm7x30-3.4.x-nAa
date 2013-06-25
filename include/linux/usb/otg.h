@@ -149,6 +149,12 @@ struct usb_phy {
 	int	(*set_suspend)(struct usb_phy *x,
 				int suspend);
 
+	/* start to recheck charger type to avoid miss detection */
+	void	(*start_recheck_chgtype)(struct usb_phy *otg,
+			unsigned long delay);
+
+	/* stop to recheck charger type */
+	void	(*stop_recheck_chgtype)(struct usb_phy *otg);
 };
 
 
@@ -307,6 +313,19 @@ static inline void
 usb_unregister_notifier(struct usb_phy *x, struct notifier_block *nb)
 {
 	atomic_notifier_chain_unregister(&x->notifier, nb);
+}
+
+/* workaround for charger type miss detection */
+static inline void
+otg_start_recheck_chgtype(struct usb_phy *otg, unsigned long delay)
+{
+	return otg->start_recheck_chgtype(otg, delay);
+}
+
+static inline void
+otg_stop_recheck_chgtype(struct usb_phy *otg)
+{
+	return otg->stop_recheck_chgtype(otg);
 }
 
 /* for OTG controller drivers (and maybe other stuff) */
