@@ -22,5 +22,9 @@ struct bq27520_platform_data {
 	int polling_upper_capacity;
 	struct bq27520_block_table *udatap;
 	void (*disable_algorithm)(bool);
+	int (*gpio_configure)(int);
 };
+
+int bq27520_get_current_average(void);
+
 #endif /* BQ27520_BATTERY_H_ */

@@ -53,7 +53,7 @@ obj-$(CONFIG_BATTERY_QCIBAT)    += qci_battery.o
 obj-$(CONFIG_BATTERY_BQ27520)	+= bq27520_fuelgauger.o
 obj-$(CONFIG_BATTERY_BQ27541)	+= bq27541_fuelgauger.o
 
-obj-$(CONFIG_BATTERY_BQ27520_SEMC)	+= bq27520_battery_semc.o
+obj-$(CONFIG_BATTERY_BQ27520_SEMC)	+= bq27520_battery.o
 obj-$(CONFIG_CHARGER_BQ24185)	+= bq24185_charger.o
 obj-$(CONFIG_BATTERY_CHARGALG)	+= battery_chargalg.o
 

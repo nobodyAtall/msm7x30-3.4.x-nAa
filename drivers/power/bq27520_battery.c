@@ -3,7 +3,8 @@
  *
  * TI BQ27520 Fuel Gauge interface
  *
- * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2010-2012 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Authors: James Jacobsson <james.jacobsson@sonyericsson.com>
  *          Imre Sunyi <imre.sunyi@sonyericsson.com>
@@ -14,7 +15,7 @@
  * of the License, or (at your option) any later version.
  */
 
-#include <asm/atomic.h>
+#include <linux/atomic.h>
 #include <linux/bitops.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
@@ -30,7 +31,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 
-#include <linux/i2c/bq27520_battery_semc.h>
+#include <linux/i2c/bq27520_battery.h>
 
 #include <asm/mach-types.h>
 
@@ -58,6 +59,7 @@
 #define SUB_CMD_HW_VERSION 0x0003
 #define SUB_CMD_BAT_INSERT 0x000D
 #define SUB_CMD_BAT_REMOVE 0x000E
+#define SUB_CMD_ENTER_SEALED 0x0020
 #define SUB_CMD_IT_ENABLE 0x0021
 #define SUB_CMD_CHOOSE_A 0x0024
 #define SUB_CMD_CHOOSE_B 0x0025
@@ -66,7 +68,7 @@
 #define SUB_CMD_CLEAR_SEALED 0x3672
 #define SUB_CMD_CLEAR_FULL_ACCESS_SEALED 0xFFFF
 
-#define WAIT_ON_READ_SUB_CMD_US 100
+#define WAIT_ON_READ_SUB_CMD_US 500
 /* According to datasheet this is the maximum time to program a
  * word in data flash memory.
 */
@@ -119,6 +121,26 @@
 #define IT_ENABLE_DELAY_MS 500
 
 #define GOLDEN_PROJ_NAME_LEN 4
+
+#define READ_VOLTAGE_FILTER 4500
+
+/* Fuelgauge force reset sequence */
+#define GPIO_FG_CE 13
+#define MAX_GPIO_FG_CE_MS 500 /* 500ms */
+#define MAX_AFTER_DEVICE_RESET_MS 300 /* 300ms */
+
+#define INVALID_BATT_VOLTAGE_RETRY_MAX 5
+#define INVALID_BATT_VOLTAGE_LOWER_LIMIT 2000
+#define INVALID_BATT_VOLTAGE_UPPER_LIMIT 4300
+
+#define SHUTDOWN_WAKELOCK_TIMEOUT (HZ * 5) /* 5sec */
+#define RECHARGE_WAKELOCK_TIMEOUT (HZ * 5) /* 5sec */
+
+
+#define IS_CHG_CONNECTED(old_status, new_status) \
+			(!old_status && new_status)
+#define IS_CHG_DISCONNECTED(old_status, new_status) \
+			(old_status && !new_status)
 
 /* #define DEBUG_FS */
 
@@ -174,12 +196,16 @@ struct bq27520_data {
 	struct mutex lock;
 	struct mutex int_lock;
 	struct mutex data_flash_lock;
+	struct mutex control_reg_lock;
+	struct wake_lock wake_lock;
+	struct wake_lock recharge_wake_lock;
 	int got_technology;
 	int lipo_bat_max_volt;
 	int lipo_bat_min_volt;
 	char *battery_dev_name;
 	char *set_batt_charged_dev_name;
 	int started_worker;
+	bool detect_fc_soon;
 	int polling_lower_capacity;
 	int polling_upper_capacity;
 	u8 suspended;
@@ -201,10 +227,10 @@ struct bq27520_data {
 static atomic_t bq27520_init_ok = ATOMIC_INIT(0);
 
 static int get_supplier_data(struct device *dev, void *data);
-static int bq27520_read_control_status(struct bq27520_data *bd);
 static int bq27520_write_control(struct bq27520_data *bd, int subcmd);
 static int bq27520_read_bat_flags(struct power_supply *bat_ps);
 static bool bq27520_read_soc(struct bq27520_data *bd);
+static void bq27520_device_reset(struct bq27520_data *bd);
 
 static int calculate_scaled_capacity(struct bq27520_data *bd)
 {
@@ -471,53 +497,156 @@ static s32 safe_i2c_smbus_read_i2c_block_data(struct i2c_client *client,
 	return (retry > I2C_RETRY_MAX) ? -EPERM : offs;
 }
 
+static int bq27520_get_control_status(struct bq27520_data *bd)
+{
+	int rc;
+
+	mutex_lock(&bd->control_reg_lock);
+
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+					SUB_CMD_NULL);
+	if (rc < 0) {
+		dev_err(&bd->clientp->dev,
+			"Failed write control reg. rc=%d\n", rc);
+		goto exit;
+	}
+
+	usleep(WAIT_ON_READ_SUB_CMD_US);
+
+	rc = i2c_smbus_read_word_data(bd->clientp, REG_CMD_CONTROL);
+	if (rc < 0) {
+		dev_err(&bd->clientp->dev,
+			"Failed read control reg. rc=%d\n", rc);
+		goto exit;
+	}
+	bd->control_status = rc;
+	dev_dbg(&bd->clientp->dev, "%s(): CONTROL_REG:0x%x\n", __func__, rc);
+
+exit:
+	mutex_unlock(&bd->control_reg_lock);
+	return (rc < 0) ? rc : 0;
+}
 
 static bool bq27520_check_if_sealed(struct bq27520_data *bd)
 {
-	if (bd->sealed == -1) {
-		bq27520_write_control(bd, SUB_CMD_NULL);
-		usleep(WAIT_ON_READ_SUB_CMD_US);
-		bq27520_read_control_status(bd);
-		bd->sealed = !!(bd->control_status & SEALED_MASK);
-	}
+	(void)bq27520_get_control_status(bd);
+	bd->sealed = !!(bd->control_status & SEALED_MASK);
 
 	return bd->sealed;
 }
 
 static int bq27520_unseal(struct bq27520_data *bd)
 {
-	int rc = bq27520_write_control(bd, SUB_CMD_ENTER_CLEAR_SEAL);
-	if (!rc)
-		rc = bq27520_write_control(bd, SUB_CMD_CLEAR_SEALED);
-	if (!rc)
-		rc = bq27520_write_control(bd,
-					   SUB_CMD_CLEAR_FULL_ACCESS_SEALED);
-	if (!rc)
-		rc = bq27520_write_control(bd,
-					   SUB_CMD_CLEAR_FULL_ACCESS_SEALED);
+	int rc;
+	int last_cmd = 0;
 
-	bd->sealed = (!rc) ? 0 : -1;
+	mutex_lock(&bd->control_reg_lock);
 
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+					   SUB_CMD_ENTER_CLEAR_SEAL);
+	if (rc < 0) {
+		last_cmd = SUB_CMD_ENTER_CLEAR_SEAL;
+		goto unseal_exit;
+	}
+
+	msleep(MAX_WORD_PROGRAMMING_TIME_MS);
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+					   SUB_CMD_CLEAR_SEALED);
+	if (rc < 0) {
+		last_cmd = SUB_CMD_CLEAR_SEALED;
+		goto unseal_exit;
+	}
+
+	msleep(MAX_WORD_PROGRAMMING_TIME_MS);
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+					   SUB_CMD_CLEAR_FULL_ACCESS_SEALED);
+	if (rc < 0) {
+		last_cmd = SUB_CMD_CLEAR_FULL_ACCESS_SEALED;
+		goto unseal_exit;
+	}
+
+	msleep(MAX_WORD_PROGRAMMING_TIME_MS);
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+					   SUB_CMD_CLEAR_FULL_ACCESS_SEALED);
+	if (rc < 0) {
+		last_cmd = SUB_CMD_CLEAR_FULL_ACCESS_SEALED;
+		goto unseal_exit;
+	}
+	msleep(MAX_WORD_PROGRAMMING_TIME_MS);
+	mutex_unlock(&bd->control_reg_lock);
+
+	bd->sealed = 0;
+
+	return rc;
+
+unseal_exit:
+	dev_err(&bd->clientp->dev, "Failed write unseal command :%#x\n",
+			last_cmd);
+	bd->sealed = -1;
+	mutex_unlock(&bd->control_reg_lock);
 	return rc;
 }
 
-static int bq27520_get_fw_version(struct i2c_client *client,
+
+static int bq27520_seal(struct bq27520_data *bd)
+{
+	int rc = 0;
+
+#ifdef CONFIG_BATTERY_BQ27520_SEAL_FW
+	mutex_lock(&bd->control_reg_lock);
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+					   SUB_CMD_ENTER_SEALED);
+	if (rc < 0) {
+		dev_err(&bd->clientp->dev,
+			"Failed enter sealed mode. rc=%d\n", rc);
+		goto seal_exit;
+	}
+	msleep(MAX_WORD_PROGRAMMING_TIME_MS);
+	mutex_unlock(&bd->control_reg_lock);
+
+	if (bq27520_check_if_sealed(bd))
+		dev_info(&bd->clientp->dev, "Seal firmware successful\n");
+	else
+		dev_info(&bd->clientp->dev, "Seal firmware failed\n");
+
+	return rc;
+seal_exit:
+	bd->sealed = -1;
+	mutex_unlock(&bd->control_reg_lock);
+#endif
+	return rc;
+}
+
+static int bq27520_get_fw_version(struct bq27520_data *bd,
 				  u16 *fw_ver)
 {
-	s32 rc = i2c_smbus_write_word_data(client,
+	s32 rc;
+
+	mutex_lock(&bd->control_reg_lock);
+
+	rc = i2c_smbus_write_word_data(bd->clientp,
 					   REG_CMD_CONTROL,
 					   SUB_CMD_FW_VERSION);
-	if (rc < 0)
-		return rc;
+	if (rc < 0) {
+		dev_err(&bd->clientp->dev,
+			"Failed write FW version command. rc=%d\n", rc);
+		goto exit;
+	}
 
 	usleep(WAIT_ON_READ_SUB_CMD_US);
-	rc = i2c_smbus_read_word_data(client, REG_CMD_CONTROL);
-	if (rc < 0)
-		return rc;
 
+	rc = i2c_smbus_read_word_data(bd->clientp, REG_CMD_CONTROL);
+	if (rc < 0) {
+		dev_err(&bd->clientp->dev,
+			"Failed read FW version. rc=%d\n", rc);
+		goto exit;
+	}
 	*fw_ver = rc;
 
-	return 0;
+	dev_dbg(&bd->clientp->dev, "FW version=0x%x\n", rc);
+exit:
+	mutex_unlock(&bd->control_reg_lock);
+	return (rc < 0) ? rc : 0;
 }
 
 static int bq27520_setup_to_read_df_class_block(struct bq27520_data *bd,
@@ -813,7 +942,7 @@ unregister_rom:
 	return rc;
 }
 
-static ssize_t bq27520_fg_data_write(struct file *filp, struct kobject *kobj,
+static ssize_t bq27520_fg_data_write(struct file *file, struct kobject *kobj,
 				     struct bin_attribute *bin_attr,
 				     char *buf, loff_t pos, size_t size)
 {
@@ -860,9 +989,10 @@ static ssize_t bq27520_fg_data_write(struct file *filp, struct kobject *kobj,
 	return (retry > I2C_RETRY_MAX) ? -EPERM : offs;
 }
 
-static ssize_t bq27520_fg_data_read(struct file *filp, struct kobject *kobj,
+static ssize_t bq27520_fg_data_read(struct file *file, struct kobject *kobj,
 				    struct bin_attribute *bin_attr,
 				    char *buf, loff_t pos, size_t size)
+
 {
 	struct device *dev = container_of(kobj, struct device, kobj);
 	struct power_supply *psy = dev_get_drvdata(dev);
@@ -964,7 +1094,7 @@ static ssize_t store_fg_cmd(struct device *pdev,
 		goto end;
 	}
 
-	rc = strlen(pbuf);
+	rc = strnlen(pbuf, sizeof(cmdstr));
 
 end:
 	mutex_unlock(&bd->lock);
@@ -991,7 +1121,7 @@ static ssize_t show_fg_cmd(struct device *dev,
 				 "0x0000 0x0000 0x0000 xxxx %d\n",
 				 atomic_read(&bq27520_init_ok));
 
-	rc = bq27520_get_fw_version(bd->clientp, &fw_ver);
+	rc = bq27520_get_fw_version(bd, &fw_ver);
 	if (rc < 0) {
 		dev_err(&bd->clientp->dev,
 			"Failed getting FW version. rc=%d\n", rc);
@@ -1022,18 +1152,22 @@ static ssize_t store_lock(struct device *pdev, struct device_attribute *attr,
 	struct power_supply *psy = dev_get_drvdata(pdev);
 	struct bq27520_data *bd =
 		container_of(psy, struct bq27520_data, bat_ps);
-	int rc = count;
-	s32 lock;
+	int rc;
+	s32 lock = 0;
 
-	if (!read_sysfs_interface(pbuf, &lock, 10) &&
-	    lock >= 0 && lock <= 1) {
-		if (lock) {
-			mutex_lock(&bd->lock);
-			mutex_lock(&bd->data_flash_lock);
-		} else {
-			mutex_unlock(&bd->data_flash_lock);
-			mutex_unlock(&bd->lock);
-		}
+	rc = read_sysfs_interface(pbuf, &lock, 10);
+	if (rc < 0) {
+		dev_err(pdev, "Reading sysfs fg_lock failed.\n");
+		return -EINVAL;
+	}
+
+	rc = count;
+	if (lock == 0) {
+		mutex_unlock(&bd->data_flash_lock);
+		mutex_unlock(&bd->lock);
+	} else if (lock == 1) {
+		mutex_lock(&bd->lock);
+		mutex_lock(&bd->data_flash_lock);
 	} else {
 		dev_err(pdev, "Wrong input to sysfs fg_lock. "
 			"Expect [0..1].\n");
@@ -1096,6 +1230,8 @@ static int bq27520_read_bat_voltage(struct power_supply *bat_ps)
 	rc = i2c_smbus_read_word_data(bd->clientp, REG_CMD_VOLTAGE);
 	if (rc < 0)
 		return rc;
+	if (rc > READ_VOLTAGE_FILTER)
+		return 0;
 	bd->curr_mv = rc;
 	dev_dbg(&bd->clientp->dev, "%s() rc=%d\n", __func__, bd->curr_mv);
 	return 0;
@@ -1110,6 +1246,9 @@ static int bq27520_read_bat_capacity(struct power_supply *bat_ps)
 	rc = i2c_smbus_read_byte_data(bd->clientp, REG_CMD_SOC);
 	if (rc < 0)
 		return rc;
+	if (atomic_read(&bq27520_init_ok) &&
+	    !bd->chg_connected && bd->curr_capacity < rc)
+		return 0;
 	bd->curr_capacity = rc;
 	dev_dbg(&bd->clientp->dev, "%s() rc=%d\n", __func__, bd->curr_capacity);
 	return 0;
@@ -1171,17 +1310,6 @@ static int bq27520_read_app_status(struct power_supply *bat_ps)
 	return 0;
 }
 
-static int bq27520_read_control_status(struct bq27520_data *bd)
-{
-	s32 rc = i2c_smbus_read_word_data(bd->clientp, REG_CMD_CONTROL);
-	if (rc < 0)
-		return rc;
-	bd->control_status = rc;
-	dev_dbg(&bd->clientp->dev, "%s() rc=0x%x\n",
-		__func__, bd->control_status);
-	return 0;
-}
-
 static int bq27520_read_designed_capacity(struct power_supply *bat_ps)
 {
 	s32 rc;
@@ -1200,21 +1328,13 @@ static int bq27520_read_designed_capacity(struct power_supply *bat_ps)
 	return 0;
 }
 
-static s32 bq27520_read_health_state(struct power_supply *bat_ps)
-{
-	struct bq27520_data *bd =
-		container_of(bat_ps, struct bq27520_data, bat_ps);
-
-	return i2c_smbus_read_byte_data(bd->clientp, REG_CMD_HEALTH_STATE);
-}
-
 static int bq27520_read_health(struct power_supply *bat_ps)
 {
 	s32 rc;
 	struct bq27520_data *bd =
 		container_of(bat_ps, struct bq27520_data, bat_ps);
 
-	rc = bq27520_read_health_state(bat_ps);
+	rc = i2c_smbus_read_byte_data(bd->clientp, REG_CMD_HEALTH_STATE);
 	if (rc < 0)
 		return rc;
 
@@ -1237,11 +1357,23 @@ static int bq27520_read_health(struct power_supply *bat_ps)
 
 static int bq27520_write_control(struct bq27520_data *bd, int subcmd)
 {
-	s32 rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
+	s32 rc;
+
+	mutex_lock(&bd->control_reg_lock);
+
+	rc = i2c_smbus_write_word_data(bd->clientp, REG_CMD_CONTROL,
 					   subcmd);
+	if (rc < 0) {
+		dev_err(&bd->clientp->dev,
+			"Failed write sub command:0x%x. rc=%d\n", subcmd, rc);
+		goto exit;
+	}
 	dev_dbg(&bd->clientp->dev, "%s() subcmd=0x%x rc=%d\n",
 		__func__, subcmd, rc);
-	return rc;
+
+exit:
+	mutex_unlock(&bd->control_reg_lock);
+	return (rc < 0) ? rc : 0;
 }
 
 static int bq27520_wait_for_qen_set(struct bq27520_data *bd)
@@ -1257,11 +1389,9 @@ static int bq27520_wait_for_qen_set(struct bq27520_data *bd)
 	 * conditions are met.
 	 */
 	for (i = 0; i < poll_cnt; i++) {
-		bq27520_write_control(bd, SUB_CMD_NULL);
-		usleep(WAIT_ON_READ_SUB_CMD_US);
-		bq27520_read_control_status(bd);
+		rc = bq27520_get_control_status(bd);
 
-		if (bd->control_status & QEN_MASK)
+		if (!rc && bd->control_status & QEN_MASK)
 			break;
 		else
 			msleep(POLL_QEN_PERIOD_MS);
@@ -1317,13 +1447,12 @@ static int bq27520_make_sure_temperature_is_set(struct bq27520_data *bd,
 static int bq27520_check_initialization_comp(struct bq27520_data *bd)
 {
 	int i;
+	int rc;
 
 	for (i = 0; i < RETRY_MAX; i++) {
 		msleep(1000);
-		bq27520_write_control(bd, SUB_CMD_NULL);
-		usleep(WAIT_ON_READ_SUB_CMD_US);
-		if (!bq27520_read_control_status(bd) &&
-		    (bd->control_status & INIT_COMP_MASK))
+		rc = bq27520_get_control_status(bd);
+		if (!rc && bd->control_status & INIT_COMP_MASK)
 			return 0;
 	}
 	return -ETIME;
@@ -1335,9 +1464,11 @@ static int bq27520_battery_info_setting(struct bq27520_data *bd,
 	int rc;
 	int subcmd = 0;
 
-	rc = bq27520_make_sure_it_enabled_is_set(bd);
-	if (rc)
-		return rc;
+	if (type != POWER_SUPPLY_TECHNOLOGY_UNKNOWN) {
+		rc = bq27520_make_sure_it_enabled_is_set(bd);
+		if (rc)
+			return rc;
+	}
 
 	bq27520_read_bat_flags(&bd->bat_ps);
 	/* Only set BAT_INSERT if gauge sees no battery detect
@@ -1403,6 +1534,13 @@ static int bq27520_battery_info_setting(struct bq27520_data *bd,
 		rc = bq27520_check_initialization_comp(bd);
 	}
 
+	rc = bq27520_seal(bd);
+	if (rc) {
+		dev_err(&bd->clientp->dev,
+			"Failed to seal firmware during initial phase\n");
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -1425,11 +1563,10 @@ static int bq27520_block_data_update(struct bq27520_data *bd)
 	}
 
 	msleep(100);
-	rc = i2c_smbus_write_word_data(bd->clientp,
-		REG_CMD_CONTROL, SUB_CMD_RESET);
+	rc = bq27520_write_control(bd, SUB_CMD_RESET);
 	if (rc < 0)
-		dev_err(&bd->clientp->dev, "%s() rc=%d adr=0x%x\n",
-			__func__, rc, REG_CMD_CONTROL);
+		dev_err(&bd->clientp->dev,
+			"Failed write RESET sub command. rc=%d\n", rc);
 	msleep(1000);
 	return rc;
 }
@@ -1440,17 +1577,37 @@ static void bq27520_init_worker(struct work_struct *work)
 	struct bq27520_data *bd =
 		container_of(work, struct bq27520_data, init_work);
 	struct power_supply *ps;
+	s32 volt;
 	int i;
+
+	for (i = 0; i < INVALID_BATT_VOLTAGE_RETRY_MAX; i++) {
+		volt = i2c_smbus_read_word_data(bd->clientp, REG_CMD_VOLTAGE);
+		dev_info(&bd->clientp->dev,
+			"%d: Check battery voltage=%d\n", i + 1, volt);
+		if (volt < 0) {
+			dev_err(&bd->clientp->dev,
+				"Failed read battery voltage. rc=%d\n", volt);
+		} else if (volt <= INVALID_BATT_VOLTAGE_LOWER_LIMIT ||
+			   volt >= INVALID_BATT_VOLTAGE_UPPER_LIMIT) {
+			dev_dbg(&bd->clientp->dev,
+			"Device RESET!! checked by not SYSDOWN but VBAT\n");
+			bq27520_device_reset(bd);
+			break;
+		}
+		msleep(1000);
+	}
 
 	if (bd->battery_dev_name) {
 		for (i = 0; i < RETRY_MAX; i++) {
 			ps = power_supply_get_by_name(bd->battery_dev_name);
-			if (ps) {
+			if (ps)
+				get_supplier_data(ps->dev, &bd->bat_ps);
+
+			if (bd->got_technology) {
 #ifdef SUPPORT_PARAMETER_UPDATE
 				if (bd->udatap)
 					bq27520_block_data_update(bd);
 #endif
-				get_supplier_data(ps->dev, &bd->bat_ps);
 				bq27520_battery_info_setting(bd,
 							     bd->technology,
 							     bd->bat_temp);
@@ -1581,8 +1738,12 @@ static void start_read_fc(struct bq27520_data *bd)
 static void stop_read_fc(struct bq27520_data *bd)
 {
 	dev_dbg(&bd->clientp->dev, "%s()\n", __func__);
-	if (delayed_work_pending(&bd->fc_work))
+	if (delayed_work_pending(&bd->fc_work)) {
+		if (bd->chg_connected)
+			wake_lock_timeout(&bd->recharge_wake_lock,
+				RECHARGE_WAKELOCK_TIMEOUT);
 		cancel_delayed_work_sync(&bd->fc_work);
+	}
 }
 
 static void bq27520_read_fc_worker(struct work_struct *work)
@@ -1608,22 +1769,32 @@ static void bq27520_read_fc_worker(struct work_struct *work)
 		    bd->chg_connected &&
 		    bd->curr_capacity_level !=
 		    POWER_SUPPLY_CAPACITY_LEVEL_FULL) {
+			if (!bd->detect_fc_soon) {
+				dev_dbg(&bd->clientp->dev,
+					"%s() FC=1 detected\n", __func__);
+				bd->detect_fc_soon = true;
+				goto exit_unlock;
+			}
 			dev_info(&bd->clientp->dev,
 				 "Fully charged (SOC=%d%%)\n",
 				 bd->curr_capacity);
 			bd->curr_capacity_level =
 				POWER_SUPPLY_CAPACITY_LEVEL_FULL;
 			changed = 1;
-			if (!bd->cap_scale.enable) {
-				bd->cap_scale.enable = true;
-				bd->cap_scale.capacity_to_scale[0] = 100;
-				bd->cap_scale.capacity_to_scale[1] =
-					bd->curr_capacity;
-				bd->cap_scale.disable_capacity_level = 100;
-			}
+			bd->cap_scale.enable = true;
+			bd->cap_scale.capacity_to_scale[0] = 100;
+			bd->cap_scale.capacity_to_scale[1] =
+				bd->curr_capacity;
+			bd->cap_scale.disable_capacity_level = 100;
 		} else if (!(bd->flags & FC_MASK) &&
 			   bd->curr_capacity_level !=
 			   POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN) {
+			if (!bd->detect_fc_soon) {
+				dev_dbg(&bd->clientp->dev,
+					"%s() FC=0 detected\n", __func__);
+				bd->detect_fc_soon = true;
+				goto exit_unlock;
+			}
 			dev_info(&bd->clientp->dev,
 				 "Recharge needed (SOC=%d%%)\n",
 				 bd->curr_capacity);
@@ -1631,11 +1802,12 @@ static void bq27520_read_fc_worker(struct work_struct *work)
 				POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
 			changed = 1;
 		}
+		bd->detect_fc_soon = false;
 
 		if (changed)
 			bd->cap_scale.scaled_capacity =
 				calculate_scaled_capacity(bd);
-
+exit_unlock:
 		mutex_unlock(&bd->lock);
 
 		if (changed)
@@ -1680,19 +1852,12 @@ static void bq27520_handle_soc_worker(struct work_struct *work)
 	struct bq27520_data *bd =
 		container_of(work, struct bq27520_data, soc_int_work);
 	bool valid_cap;
-	int soh_state;
 
 	mutex_lock(&bd->lock);
 
 	valid_cap = bq27520_read_soc(bd);
 
-	if (!bq27520_write_control(bd, SUB_CMD_NULL)) {
-		usleep(WAIT_ON_READ_SUB_CMD_US);
-		bq27520_read_control_status(bd);
-	}
-	soh_state = bq27520_read_health_state(&bd->bat_ps);
-	if (soh_state < 0)
-		soh_state = 0;
+	(void)bq27520_get_control_status(bd);
 
 	mutex_unlock(&bd->lock);
 
@@ -1702,6 +1867,7 @@ static void bq27520_handle_soc_worker(struct work_struct *work)
 		    bd->curr_capacity >= bd->polling_lower_capacity &&
 			bd->curr_capacity <= bd->polling_upper_capacity) {
 			if (!bd->started_worker) {
+				bd->detect_fc_soon = false;
 				start_read_fc(bd);
 				bd->started_worker = 1;
 			}
@@ -1729,6 +1895,10 @@ static void bq27520_handle_soc_worker(struct work_struct *work)
 				bd->cap_scale.capacity_to_scale[1]);
 		}
 
+		if (bd->curr_capacity == 0)
+			wake_lock_timeout(&bd->wake_lock,
+				SHUTDOWN_WAKELOCK_TIMEOUT);
+
 		bd->cap_scale.scaled_capacity =	calculate_scaled_capacity(bd);
 
 		mutex_unlock(&bd->lock);
@@ -1736,10 +1906,9 @@ static void bq27520_handle_soc_worker(struct work_struct *work)
 		power_supply_changed(&bd->bat_ps);
 	}
 	dev_info(&bd->clientp->dev,
-		 "%s() capacity=%d (%d) flags=0x%x ctrl_status=0x%x"
-		 " soh_state=0x%x, valid=%d\n",
+		 "%s() capacity=%d (%d) flags=0x%x ctrl_status=0x%x valid=%d\n",
 		 __func__, bd->curr_capacity, bd->cap_scale.scaled_capacity,
-		 bd->flags, bd->control_status, soh_state, valid_cap);
+		 bd->flags, bd->control_status, valid_cap);
 }
 
 static irqreturn_t bq27520_soc_thread_irq(int irq, void *data)
@@ -1758,6 +1927,39 @@ static irqreturn_t bq27520_soc_thread_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void bq27520_update_online_status(struct bq27520_data *bd,
+					enum power_supply_type type,
+					int curr_val)
+{
+	int usb = bd->chg_connected & USB_CHG;
+	int wall = bd->chg_connected & WALL_CHG;
+
+	if (POWER_SUPPLY_TYPE_USB == type) {
+		if (IS_CHG_CONNECTED(usb, curr_val)) {
+			bd->chg_connected |= USB_CHG;
+			dev_dbg(&bd->clientp->dev,
+			"USB charger connected\n");
+		}
+		if (IS_CHG_DISCONNECTED(usb, curr_val)) {
+			bd->chg_connected &= ~USB_CHG;
+			dev_dbg(&bd->clientp->dev,
+			"USB charger disconnected\n");
+		}
+	} else if (POWER_SUPPLY_TYPE_MAINS == type) {
+		if (IS_CHG_CONNECTED(wall, curr_val)) {
+			bd->chg_connected |= WALL_CHG;
+			dev_dbg(&bd->clientp->dev,
+			"Wall charger connected\n");
+		}
+
+		if (IS_CHG_DISCONNECTED(wall, curr_val)) {
+			bd->chg_connected &= ~WALL_CHG;
+			dev_dbg(&bd->clientp->dev,
+			"Wall charger disconnected\n");
+		}
+	}
+}
+
 static int get_supplier_data(struct device *dev, void *data)
 {
 	struct power_supply *psy = (struct power_supply *)data;
@@ -1767,13 +1969,13 @@ static int get_supplier_data(struct device *dev, void *data)
 	struct bq27520_data *bd =
 		container_of(psy, struct bq27520_data, bat_ps);
 
-	mutex_lock(&bd->lock);
-
 	for (i = 0; i < pst->num_supplicants; i++) {
-		if (strcmp(pst->supplied_to[i], psy->name))
+		if (strncmp(pst->supplied_to[i], psy->name,
+			sizeof(pst->supplied_to[i])))
 			continue;
 
 		if (!pst->get_property(pst, POWER_SUPPLY_PROP_TEMP, &ret)) {
+			mutex_lock(&bd->lock);
 			if (atomic_read(&bq27520_init_ok) &&
 			    bd->bat_temp != ret.intval) {
 				if (!bd->suspended)
@@ -1783,20 +1985,28 @@ static int get_supplier_data(struct device *dev, void *data)
 					bd->resume_temp = 1;
 			}
 			bd->bat_temp = ret.intval;
+			mutex_unlock(&bd->lock);
 			dev_dbg(&bd->clientp->dev, "got temperature %d C\n",
 				ret.intval);
 		}
 
 		if (!pst->get_property(pst, POWER_SUPPLY_PROP_TECHNOLOGY,
 				       &ret)) {
+			mutex_lock(&bd->lock);
 			bd->technology = ret.intval;
 			bd->got_technology = 1;
+			mutex_unlock(&bd->lock);
 			dev_dbg(&bd->clientp->dev, "got technology %d\n",
 				ret.intval);
 		}
-	}
 
-	mutex_unlock(&bd->lock);
+		if (!pst->get_property(pst, POWER_SUPPLY_PROP_ONLINE, &ret)) {
+			mutex_lock(&bd->lock);
+			bq27520_update_online_status(bd, pst->type,
+							ret.intval);
+			mutex_unlock(&bd->lock);
+		}
+	}
 
 	return 0;
 }
@@ -1805,15 +2015,15 @@ static void bq27520_ext_pwr_change_worker(struct work_struct *work)
 {
 	struct bq27520_data *bd =
 		container_of(work, struct bq27520_data, ext_pwr_change_work);
-	int chg_connected = power_supply_am_i_supplied(&bd->bat_ps);
+	int chg_connected = bd->chg_connected;
 	int technology = bd->technology;
+
+	class_for_each_device(power_supply_class, NULL, &bd->bat_ps,
+			      get_supplier_data);
 
 	if (chg_connected != bd->chg_connected) {
 		mutex_lock(&bd->lock);
-		bd->chg_connected = chg_connected;
-		dev_dbg(&bd->clientp->dev, "Charger %sonnected\n",
-			bd->chg_connected ? "c" : "disc");
-		if (!chg_connected) {
+		if (!bd->chg_connected) {
 			if (bd->started_worker) {
 				stop_read_fc(bd);
 				bd->started_worker = 0;
@@ -1854,14 +2064,13 @@ static void bq27520_ext_pwr_change_worker(struct work_struct *work)
 			if (!bd->started_worker &&
 			    bd->curr_capacity >= bd->polling_lower_capacity &&
 			    bd->curr_capacity <= bd->polling_upper_capacity) {
+				bd->detect_fc_soon = true;
 				start_read_fc(bd);
 				bd->started_worker = 1;
 			}
 		}
 		mutex_unlock(&bd->lock);
 	}
-	class_for_each_device(power_supply_class, NULL, &bd->bat_ps,
-			      get_supplier_data);
 
 	if (technology != bd->technology)
 		bq27520_battery_info_setting(bd, bd->technology, bd->bat_temp);
@@ -1874,6 +2083,22 @@ static void bq27520_bat_external_power_changed(struct power_supply *bat_ps)
 
 	queue_work(bd->wq, &bd->ext_pwr_change_work);
 }
+
+int bq27520_get_current_average(void)
+{
+	struct power_supply *psy = power_supply_get_by_name(BQ27520_NAME);
+	struct bq27520_data *bd;
+
+	if (!psy)
+		return -EAGAIN;
+
+	bd = container_of(psy, struct bq27520_data, bat_ps);
+	mutex_lock(&bd->lock);
+	bq27520_read_bat_current_avg(&bd->bat_ps);
+	mutex_unlock(&bd->lock);
+	return bd->current_avg;
+}
+EXPORT_SYMBOL_GPL(bq27520_get_current_average);
 
 #ifdef CONFIG_SUSPEND
 static int bq27520_pm_suspend(struct device *dev)
@@ -1970,6 +2195,15 @@ static const struct i2c_device_id bq27520_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, bq27520_id);
 
+static void bq27520_device_reset(struct bq27520_data *bd)
+{
+	dev_info(&bd->clientp->dev, "Fuelgauge Device Reset!\n");
+	gpio_set_value(GPIO_FG_CE, 1);
+	msleep(MAX_GPIO_FG_CE_MS);
+	gpio_set_value(GPIO_FG_CE, 0);
+	msleep(MAX_AFTER_DEVICE_RESET_MS);
+}
+
 static int bq27520_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
@@ -1978,24 +2212,20 @@ static int bq27520_probe(struct i2c_client *client,
 	struct bq27520_platform_data *pdata;
 	struct bq27520_data *bd;
 	struct bq27520_golden_info gi;
-	struct i2c_client *rom_clientp = NULL;
 
-	rc = bq27520_get_fw_version(client, &fw_ver);
-	if (rc == -EIO) {
-		rc = bq27520_recover_rom_mode(client, &rom_clientp);
-		if (rc < 0) {
-			dev_err(&client->dev, "Failed recover ROM mode\n");
+	pdata = client->dev.platform_data;
+	if (pdata && pdata->gpio_configure) {
+		rc = pdata->gpio_configure(1);
+		if (rc) {
+			dev_err(&client->dev, "failed to gpio_configure\n");
 			goto probe_exit;
 		}
-	} else if (rc < 0) {
-		dev_err(&client->dev, "Failed getting FW version\n");
-		goto probe_exit;
 	}
 
 	bd = kzalloc(sizeof(struct bq27520_data), GFP_KERNEL);
 	if (!bd) {
 		rc = -ENOMEM;
-		goto probe_exit;
+		goto probe_exit_hw_deinit;
 	}
 
 	bd->bat_ps.name = BQ27520_NAME;
@@ -2007,7 +2237,6 @@ static int bq27520_probe(struct i2c_client *client,
 		bq27520_bat_external_power_changed;
 	bd->bat_ps.use_for_apm = 1;
 	bd->clientp = client;
-	bd->rom_clientp = rom_clientp;
 
 	bd->polling_lower_capacity = 95;
 	bd->polling_upper_capacity = 100;
@@ -2031,6 +2260,21 @@ static int bq27520_probe(struct i2c_client *client,
 	mutex_init(&bd->lock);
 	mutex_init(&bd->int_lock);
 	mutex_init(&bd->data_flash_lock);
+	mutex_init(&bd->control_reg_lock);
+
+	bd->rom_clientp = NULL;
+
+	rc = bq27520_get_fw_version(bd, &fw_ver);
+	if (rc == -EIO || rc == -ENODEV || rc == -ENOTCONN) {
+		rc = bq27520_recover_rom_mode(client, &bd->rom_clientp);
+		if (rc < 0) {
+			dev_err(&client->dev, "Failed recover ROM mode\n");
+			bq27520_device_reset(bd);
+		}
+	} else if (rc < 0) {
+		dev_err(&client->dev, "Failed getting FW version\n");
+		bq27520_device_reset(bd);
+	}
 
 	if (bd->rom_clientp) {
 		dev_info(&bd->clientp->dev, "In ROM mode\n");
@@ -2062,6 +2306,10 @@ static int bq27520_probe(struct i2c_client *client,
 	INIT_WORK(&bd->ext_pwr_change_work, bq27520_ext_pwr_change_worker);
 	INIT_WORK(&bd->soc_int_work, bq27520_handle_soc_worker);
 	INIT_DELAYED_WORK(&bd->fc_work, bq27520_read_fc_worker);
+	wake_lock_init(&bd->wake_lock, WAKE_LOCK_SUSPEND,
+		       "bq27520_shutdown_lock");
+	wake_lock_init(&bd->recharge_wake_lock, WAKE_LOCK_SUSPEND,
+		       "bq27520_recharge_lock");
 
 	rc = power_supply_register(&client->dev, &bd->bat_ps);
 	if (rc) {
@@ -2098,6 +2346,9 @@ probe_exit_destroy_wq:
 	destroy_workqueue(bd->wq);
 probe_exit_mem_free:
 	kfree(bd);
+probe_exit_hw_deinit:
+	if (pdata && pdata->gpio_configure)
+		rc = pdata->gpio_configure(0);
 probe_exit:
 	return rc;
 }

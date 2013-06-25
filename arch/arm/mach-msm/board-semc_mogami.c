@@ -158,7 +158,7 @@
 #include "board-semc_mogami-touch.h"
 #include <mach/semc_rpc_server_handset.h>
 #include <linux/i2c/bq24185_charger.h>
-#include <linux/i2c/bq27520_battery_semc.h>
+#include <linux/i2c/bq27520_battery.h>
 #include <linux/battery_chargalg.h>
 #include <mach/semc_battery_data.h>
 
