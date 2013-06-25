@@ -363,9 +363,8 @@ ifdef CONFIG_ARCH_MSM7X30
 	obj-$(CONFIG_SIMPLE_REMOTE_PLATFORM) += simple_remote_msm7x30_pf.o
 endif
 
-ifdef CONFIG_MSM_RPC_OEM_RAPI
-	obj-$(CONFIG_BATTERY_SEMC_ARCH)	+= semc_battery_data.o
-endif
+obj-$(CONFIG_SEMC_CHARGER_USB_ARCH) += semc_charger_usb.o
+obj-$(CONFIG_BATTERY_SEMC_ARCH)	+= semc_battery_data.o
 
 obj-$(CONFIG_ARCH_MSM7X27) += gpiomux-7x27.o gpiomux-v1.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM7X30) += gpiomux-7x30.o gpiomux-v1.o gpiomux.o

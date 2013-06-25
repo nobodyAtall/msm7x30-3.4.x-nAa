@@ -4590,8 +4590,10 @@ static void __init msm7x30_init(void)
 		pr_debug("%s: SOC Version:2.(1 or more)\n", __func__);
 		msm_otg_pdata.ldo_set_voltage = 0;
 	}
-	hsusb_chg_set_supplicants(hsusb_chg_supplied_to,
-				  ARRAY_SIZE(hsusb_chg_supplied_to));
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+	semc_chg_usb_set_supplicants(semc_chg_usb_supplied_to,
+				  ARRAY_SIZE(semc_chg_usb_supplied_to));
+#endif
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =

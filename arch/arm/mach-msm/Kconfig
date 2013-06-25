@@ -2343,6 +2343,12 @@ config SEMC_CAMERA_8MP
 	help
 	  Increased PMEP_ADSP for phones with 8MP sensors.
 
+config SEMC_CHARGER_USB_ARCH
+	bool "Support USB interface for charger"
+	default n
+	help
+	  This enables USB interface for charger.
+
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
 	depends on ARCH_MSM8X60 || ARCH_MSM8960 || ARCH_MSM9615
