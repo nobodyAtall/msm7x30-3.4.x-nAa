@@ -170,10 +170,6 @@
 #endif
 #define CYPRESS_TOUCH_GPIO_SPI_CS	(46)
 
-#define GPIO_BQ27520_SOC_INT 20
-#define LIPO_BAT_MAX_VOLTAGE 4200
-#define LIPO_BAT_MIN_VOLTAGE 3000
-#define FULLY_CHARGED_AND_RECHARGE_CAP 95
 #ifdef CONFIG_USB_MSM_OTG_72K
 #include <mach/msm72k_otg.h>
 #endif
@@ -2517,7 +2513,11 @@ static struct clearpad_platform_data clearpad_platform_data = {
 };
 #endif
 
-/* Driver(s) to be notified upon change in battery data */
+#define GPIO_BQ27520_SOC_INT 20
+#define LIPO_BAT_MAX_VOLTAGE 4200
+#define LIPO_BAT_MIN_VOLTAGE 3000
+#define FULLY_CHARGED_AND_RECHARGE_CAP 95
+
 static char *semc_bdata_supplied_to[] = {
 	BQ27520_NAME,
 	BATTERY_CHARGALG_NAME,
@@ -2548,6 +2548,21 @@ static struct bq27520_block_table bq27520_block_table[BQ27520_BTBL_MAX] = {
 	{0x60, 0xF4}
 };
 
+static int bq27520_gpio_configure(int enable)
+{
+	int rc = 0;
+
+	if (!!enable) {
+		rc = gpio_request(GPIO_BQ27520_SOC_INT, "bq27520");
+		if (rc)
+			pr_err("%s: gpio_requeset failed, "
+					"rc=%d\n", __func__, rc);
+	} else {
+		gpio_free(GPIO_BQ27520_SOC_INT);
+	}
+	return rc;
+}
+
 struct bq27520_platform_data bq27520_platform_data = {
 	.name = BQ27520_NAME,
 	.supplied_to = bq27520_supplied_to,
@@ -2555,6 +2570,7 @@ struct bq27520_platform_data bq27520_platform_data = {
 	.lipo_bat_max_volt = LIPO_BAT_MAX_VOLTAGE,
 	.lipo_bat_min_volt = LIPO_BAT_MIN_VOLTAGE,
 	.battery_dev_name = SEMC_BDATA_NAME,
+	.gpio_configure = bq27520_gpio_configure,
 	.polling_lower_capacity = FULLY_CHARGED_AND_RECHARGE_CAP,
 	.polling_upper_capacity = 100,
 	.udatap = bq27520_block_table,
