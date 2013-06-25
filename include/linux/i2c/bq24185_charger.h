@@ -20,6 +20,17 @@
 #define BQ24185_MCCSV_MV_27p2   (1<<6)
 #define BQ24185_MCCSV_MV_54p4   (1<<7)
 
+enum bq24185_vindpm {
+	VINDPM_4150MV,
+	VINDPM_4230MV,
+	VINDPM_4310MV,
+	VINDPM_4390MV,
+	VINDPM_4470MV,
+	VINDPM_4550MV,
+	VINDPM_4630MV,
+	VINDPM_4710MV,
+};
+
 enum bq24185_opa_mode {
 	CHARGER_CHARGER_MODE,
 	CHARGER_BOOST_MODE
@@ -35,6 +46,9 @@ struct bq24185_platform_data {
 	int mbrv;	/* Max battery regulation voltage (BQ24185_MBRV_*)   */
 	int mccsv;	/* Max charge current sense voltage(BQ24185_MCCSV_*) */
 	void (*notify_vbus_drop)(void);
+	int (*gpio_configure)(int);
+	u8 vindpm_usb_compliant;
+	u8 vindpm_non_compliant;
 };
 
 /**

@@ -3,7 +3,7 @@
  *
  * TI BQ24185 Switch-Mode One-Cell Li-Ion charger
  *
- * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2010-2012 Sony Ericsson Mobile Communications AB.
  *
  * Authors: James Jacobsson <james.jacobsson@sonyericsson.com>
  *          Imre Sunyi <imre.sunyi@sonyericsson.com>
@@ -14,7 +14,7 @@
  * of the License, or (at your option) any later version.
  */
 
-#include <asm/atomic.h>
+#include <linux/atomic.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
@@ -144,17 +144,6 @@ enum bq24185_iin_lim {
 	IIN_LIM_NO,
 };
 
-enum bq24185_vindpm {
-	VINDPM_4150MV,
-	VINDPM_4230MV,
-	VINDPM_4310MV,
-	VINDPM_4390MV,
-	VINDPM_4470MV,
-	VINDPM_4550MV,
-	VINDPM_4630MV,
-	VINDPM_4710MV,
-};
-
 enum bq247185_tmr {
 	TMR_27MIN,
 	TMR_3H,
@@ -184,7 +173,6 @@ struct bq24185_data {
 	int bat_present;
 	u8 rsens;
 	u8 watchdog_enable_vote;
-	u8 hz_disable_vote;
 	u8 irq_wake_enabled;
 	u8 chg_disable_vote;
 	u8 usb_compliant_mode;
@@ -195,7 +183,11 @@ struct bq24185_data {
 	u8 chg_disabled_by_input_current;
 
 	enum bq24185_opa_mode mode;
+	u8 vindpm_usb_compliant;
+	u8 vindpm_non_compliant;
 };
+
+static void bq24185_hz_enable(struct bq24185_data *bd, int enable);
 
 #ifdef DEBUG_FS
 static int read_sysfs_interface(const char *pbuf, s32 *pvalue, u8 base)
@@ -271,13 +263,13 @@ static ssize_t store_chg_volt(struct device *pdev,
 	s32 mv;
 
 	if (!read_sysfs_interface(pbuf, &mv, 10) &&
-	    mv >= 0 && mv <= USHORT_MAX) {
+	    mv >= 0 && mv <= USHRT_MAX) {
 		int ret = bq24185_set_charger_voltage(mv);
 		if (ret < 0)
 			rc = ret;
 	} else {
 		dev_err(pdev, "Wrong input to sysfs. "
-			"Expect [0..%u] mV\n", USHORT_MAX);
+			"Expect [0..%u] mV\n", USHRT_MAX);
 		rc = -EINVAL;
 	}
 
@@ -292,13 +284,13 @@ static ssize_t store_chg_curr(struct device *pdev,
 	s32 ma;
 
 	if (!read_sysfs_interface(pbuf, &ma, 10) &&
-	    ma >= 0 && ma <= USHORT_MAX) {
+	    ma >= 0 && ma <= USHRT_MAX) {
 		int ret = bq24185_set_charger_current(ma);
 		if (ret < 0)
 			rc = ret;
 	} else {
 		dev_err(pdev, "Wrong input to sysfs. "
-			"Expect [0..%u] mA\n", USHORT_MAX);
+			"Expect [0..%u] mA\n", USHRT_MAX);
 		rc = -EINVAL;
 	}
 
@@ -313,13 +305,13 @@ static ssize_t store_chg_curr_term(struct device *pdev,
 	s32 ma;
 
 	if (!read_sysfs_interface(pbuf, &ma, 10) &&
-	    ma >= 0 && ma <= USHORT_MAX) {
+	    ma >= 0 && ma <= USHRT_MAX) {
 		int ret = bq24185_set_charger_termination_current(ma);
 		if (ret < 0)
 			rc = ret;
 	} else {
 		dev_err(pdev, "Wrong input to sysfs. Expect [0..%u] mA\n",
-			USHORT_MAX);
+			USHRT_MAX);
 		rc = -EINVAL;
 	}
 
@@ -334,13 +326,13 @@ static ssize_t store_input_curr_lim(struct device *pdev,
 	s32 ma;
 
 	if (!read_sysfs_interface(pbuf, &ma, 10) &&
-	    ma >= 0 && ma <= USHORT_MAX) {
+	    ma >= 0 && ma <= USHRT_MAX) {
 		int ret = bq24185_set_input_current_limit(ma);
 		if (ret < 0)
 			rc = ret;
 	} else {
 		dev_err(pdev, "Wrong input to sysfs. Expect [0..%u] mA\n",
-			USHORT_MAX);
+			USHRT_MAX);
 		rc = -EINVAL;
 	}
 
@@ -356,13 +348,13 @@ static ssize_t store_safety_timer(struct device *pdev,
 	s32 time;
 
 	if (!read_sysfs_interface(pbuf, &time, 10) &&
-	    time >= 0 && time <= USHORT_MAX) {
+	    time >= 0 && time <= USHRT_MAX) {
 		int ret = bq24185_set_charger_safety_timer(time);
 		if (ret < 0)
 			rc = ret;
 	} else {
 		dev_err(pdev, "Wrong input to sysfs. Expect [0..%u] minutes\n",
-			USHORT_MAX);
+			USHRT_MAX);
 		rc = -EINVAL;
 	}
 
@@ -427,55 +419,85 @@ static void bq24185_dump_registers(struct bq24185_data *bd)
 }
 #endif
 
+static s32 bq24185_i2c_read_byte(struct i2c_client *client, u8 command)
+{
+	s32 data = i2c_smbus_read_byte_data(client, command);
+
+	if (data < 0)
+		dev_err(&client->dev, "I2C Read error  REG: %d "
+			"return: %d\n", command, data);
+	return data;
+}
+
+static s32 bq24185_i2c_write_byte(struct i2c_client *client,
+				  u8 command, u8 value)
+{
+	s32 data = i2c_smbus_write_byte_data(client, command, value);
+	if (data < 0)
+		dev_err(&client->dev, "I2C Write error REG: %d DATA:"
+			" 0x%.2x return: %d\n", command, value, data);
+	return data;
+}
+
 static int bq24185_enable_charger(struct bq24185_data *bd)
 {
+	s32 rc;
+
 	MUTEX_LOCK(&bd->lock);
 	if (bd->chg_disable_vote && --bd->chg_disable_vote) {
 		MUTEX_UNLOCK(&bd->lock);
 		return 0;
 	}
+
+	if (bd->mode != CHARGER_BOOST_MODE)
+		bq24185_hz_enable(bd, 0);
+
 	MUTEX_UNLOCK(&bd->lock);
 
 	dev_info(&bd->clientp->dev, "Enabling charger\n");
 
-	return i2c_smbus_write_byte_data(bd->clientp, REG_CONTROL,
-		 SET_BIT(REG_CONTROL_CE_BIT, 0,
-			 i2c_smbus_read_byte_data(bd->clientp, REG_CONTROL)));
+	rc = bq24185_i2c_read_byte(bd->clientp, REG_CONTROL);
+	if (rc < 0)
+		return rc;
+
+	return bq24185_i2c_write_byte(bd->clientp, REG_CONTROL,
+		 SET_BIT(REG_CONTROL_CE_BIT, 0, rc));
 }
 
 static int bq24185_disable_charger(struct bq24185_data *bd)
 {
+	s32 rc;
+
 	MUTEX_LOCK(&bd->lock);
 	if (bd->chg_disable_vote++) {
 		MUTEX_UNLOCK(&bd->lock);
 		return 0;
 	}
+
+	if (bd->mode != CHARGER_BOOST_MODE)
+		bq24185_hz_enable(bd, 1);
+
 	MUTEX_UNLOCK(&bd->lock);
 
 	dev_info(&bd->clientp->dev, "Disabling charger\n");
 
-	return i2c_smbus_write_byte_data(bd->clientp, REG_CONTROL,
-		 SET_BIT(REG_CONTROL_CE_BIT, 1,
-			 i2c_smbus_read_byte_data(bd->clientp, REG_CONTROL)));
+	rc = bq24185_i2c_read_byte(bd->clientp, REG_CONTROL);
+	if (rc < 0)
+		return rc;
+
+	return bq24185_i2c_write_byte(bd->clientp, REG_CONTROL,
+		 SET_BIT(REG_CONTROL_CE_BIT, 1, rc));
 }
 
 static int bq24185_reset_charger(struct bq24185_data *bd)
 {
-	s32 data = i2c_smbus_read_byte_data(bd->clientp, REG_TERMINATION);
+	s32 data = bq24185_i2c_read_byte(bd->clientp, REG_TERMINATION);
 
-	if (data < 0) {
-		dev_err(&bd->clientp->dev,
-			"Failed resetting charger (getting reg)\n");
-		return (int)data;
-	}
+	if (data < 0)
+		return data;
 
 	data = SET_BIT(REG_TERMINATION_RESET_BIT, 1, data);
-	data = i2c_smbus_write_byte_data(bd->clientp, REG_TERMINATION, data);
-	if (data < 0)
-		dev_err(&bd->clientp->dev,
-			"Failed resetting charger (setting reg)\n");
-
-	return (int)data;
+	return bq24185_i2c_write_byte(bd->clientp, REG_TERMINATION, data);
 }
 
 static int bq24185_check_status(struct bq24185_data *bd)
@@ -489,12 +511,9 @@ static int bq24185_check_status(struct bq24185_data *bd)
 		"Thermal shutdown or TS Fault",	"Timer fault", "No battery"
 	};
 
-	status = i2c_smbus_read_byte_data(bd->clientp, REG_STATUS);
-	if (status < 0) {
-		dev_err(&bd->clientp->dev,
-			"Failed checking status. Errno = %d\n", status);
-		return (int)status;
-	}
+	status = bq24185_i2c_read_byte(bd->clientp, REG_STATUS);
+	if (status < 0)
+		return status;
 
 	MUTEX_LOCK(&bd->lock);
 	bd->cached_status.stat = (status & REG_STATUS_STAT_MASK) >>
@@ -573,44 +592,23 @@ static irqreturn_t bq24185_thread_irq(int irq, void *data)
 
 	if (!bq24185_check_status(bd) &&
 	    memcmp(&bd->cached_status, &old_status, sizeof bd->cached_status)) {
+		dev_info(&bd->clientp->dev, "Charger status: %d\n",
+			bd->cached_status.stat);
 		bq24185_update_power_supply(bd);
 	}
 
 	return IRQ_HANDLED;
 }
 
-static void bq24185_hz_enable(struct bq24185_data *bd)
+static void bq24185_hz_enable(struct bq24185_data *bd, int enable)
 {
-	MUTEX_LOCK(&bd->lock);
-	if (bd->hz_disable_vote)
-		bd->hz_disable_vote--;
-	MUTEX_UNLOCK(&bd->lock);
+	s32 data = bq24185_i2c_read_byte(bd->clientp, REG_CONTROL);
 
-	if (!bd->hz_disable_vote) {
-		s32 data = i2c_smbus_read_byte_data(bd->clientp, REG_CONTROL);
-		data = SET_BIT(REG_CONTROL_HZ_MODE_BIT, 1, data);
-		(void)i2c_smbus_write_byte_data(bd->clientp, REG_CONTROL, data);
-	}
-
-	return;
-}
-
-static void bq24185_hz_disable(struct bq24185_data *bd)
-{
-	s32 data;
-
-	MUTEX_LOCK(&bd->lock);
-	if (bd->hz_disable_vote++) {
-		MUTEX_UNLOCK(&bd->lock);
+	if (data < 0)
 		return;
-	}
-	MUTEX_UNLOCK(&bd->lock);
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_CONTROL);
-	data = SET_BIT(REG_CONTROL_HZ_MODE_BIT, 0, data);
-	(void)i2c_smbus_write_byte_data(bd->clientp, REG_CONTROL, data);
-
-	return;
+	data = SET_BIT(REG_CONTROL_HZ_MODE_BIT, enable, data);
+	bq24185_i2c_write_byte(bd->clientp, REG_CONTROL, data);
 }
 
 static void bq24185_start_watchdog_reset(struct bq24185_data *bd)
@@ -660,19 +658,11 @@ static void bq24185_reset_watchdog_worker(struct work_struct *work)
 		container_of(work, struct delayed_work, work);
 	struct bq24185_data *bd =
 		container_of(dwork, struct bq24185_data, work);
-	s32 data = i2c_smbus_read_byte_data(bd->clientp, REG_STATUS);
+	s32 data = bq24185_i2c_read_byte(bd->clientp, REG_STATUS);
 
 	if (data >= 0) {
-		s32 rc;
 		data = SET_BIT(REG_STATUS_TMR_RST_BIT, 1, data);
-		rc = i2c_smbus_write_byte_data(bd->clientp, REG_STATUS, data);
-		if (rc < 0)
-			dev_err(&bd->clientp->dev,
-				"Watchdog reset failed (write data), rc = %d\n",
-				rc);
-	} else {
-		dev_err(&bd->clientp->dev,
-			"Watchdog reset failed (read data), rc = %d\n", data);
+		bq24185_i2c_write_byte(bd->clientp, REG_STATUS, data);
 	}
 
 	/* bq24185_check_status(bd); */
@@ -706,19 +696,44 @@ static int bq24185_bat_get_property(struct power_supply *bat_ps,
 	return 0;
 }
 
-static void bq24185_set_init_values(struct bq24185_data *bd)
+static int bq24185_set_input_voltage_dpm(struct bq24185_data *bd)
 {
 	s32 data;
+
+	data = bq24185_i2c_read_byte(bd->clientp, REG_DPM);
+	if (data < 0)
+		return data;
+
+	if (bd->usb_compliant_mode)
+		data = SET_MASK(REG_DPM_VINDPM_MASK,
+				DATA_MASK(REG_DPM_VINDPM_MASK,
+					  bd->vindpm_usb_compliant),
+				data);
+	else
+		data = SET_MASK(REG_DPM_VINDPM_MASK,
+				DATA_MASK(REG_DPM_VINDPM_MASK,
+					  bd->vindpm_non_compliant),
+				data);
+
+	return bq24185_i2c_write_byte(bd->clientp, REG_DPM, data);
+}
+
+static int bq24185_set_init_values(struct bq24185_data *bd)
+{
+	s32 data;
+	s32 rc;
 
 	dev_info(&bd->clientp->dev, "Set init values\n");
 
 	/* Enable status interrupts */
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_STATUS);
-	data = SET_BIT(REG_STATUS_EN_STAT_BIT, 1, data);
-	(void)i2c_smbus_write_byte_data(bd->clientp, REG_STATUS, data);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_STATUS);
+	if (data < 0)
+		return data;
 
-	if (bd->boot_initiated_charging)
-		return;
+	data = SET_BIT(REG_STATUS_EN_STAT_BIT, 1, data);
+	rc = bq24185_i2c_write_byte(bd->clientp, REG_STATUS, data);
+	if (rc < 0)
+		return rc;
 
 	/* Sets any charging relates registers to 'off' */
 	(void)bq24185_set_charger_voltage(0);
@@ -726,23 +741,16 @@ static void bq24185_set_init_values(struct bq24185_data *bd)
 	(void)bq24185_set_charger_termination_current(0);
 	(void)bq24185_set_charger_safety_timer(0);
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_DPM);
-	if (bd->usb_compliant_mode)
-		data = SET_MASK(REG_DPM_VINDPM_MASK,
-				DATA_MASK(REG_DPM_VINDPM_MASK, VINDPM_4550MV),
-				data);
-	else
-		data = SET_MASK(REG_DPM_VINDPM_MASK,
-				DATA_MASK(REG_DPM_VINDPM_MASK, VINDPM_4390MV),
-				data);
+	(void)bq24185_set_input_voltage_dpm(bd);
 
-	(void)i2c_smbus_write_byte_data(bd->clientp, REG_DPM, data);
+	return 0;
 }
 
 int bq24185_turn_on_charger(u8 usb_compliant)
 {
 	struct power_supply *psy = power_supply_get_by_name(BQ24185_NAME);
 	struct bq24185_data *bd;
+	int rc;
 
 	if (!psy)
 		return -EAGAIN;
@@ -750,6 +758,12 @@ int bq24185_turn_on_charger(u8 usb_compliant)
 
 	dev_info(&bd->clientp->dev, "Turning on charger. USB-%s mode\n",
 		 usb_compliant ? "Host" : "Dedicated");
+
+	bd->usb_compliant_mode = usb_compliant;
+
+	rc = bq24185_set_init_values(bd);
+	if (rc < 0)
+		return rc;
 
 	/* Need to start watchdog reset otherwise HW will reset itself.
 	 * If boot has triggered charging the watchdog resetter is already
@@ -759,11 +773,6 @@ int bq24185_turn_on_charger(u8 usb_compliant)
 		bq24185_start_watchdog_reset(bd);
 	else
 		bd->boot_initiated_charging = 0;
-
-	bd->usb_compliant_mode = usb_compliant;
-
-	bq24185_set_init_values(bd);
-	bq24185_hz_disable(bd);
 
 	return 0;
 }
@@ -781,7 +790,6 @@ int bq24185_turn_off_charger(void)
 	dev_info(&bd->clientp->dev, "Turning off charger\n");
 
 	bq24185_stop_watchdog_reset(bd);
-	bq24185_hz_enable(bd);
 
 	return 0;
 }
@@ -796,9 +804,9 @@ int bq24185_set_opa_mode(enum bq24185_opa_mode mode)
 	if (!psy)
 		return -EAGAIN;
 	bd = container_of(psy, struct bq24185_data, bat_ps);
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_BOOST);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_BOOST);
 	if (data < 0)
-		return (int)data;
+		return data;
 
 	MUTEX_LOCK(&bd->lock);
 	bd->mode = mode;
@@ -812,21 +820,21 @@ int bq24185_set_opa_mode(enum bq24185_opa_mode mode)
 		(void)bq24185_set_charger_safety_timer(
 			bd->charging_safety_timer);
 		bq24185_stop_watchdog_reset(bd);
-		bq24185_hz_enable(bd);
+		bq24185_hz_enable(bd, 1);
 		data = SET_BIT(REG_BOOST_OPA_MODE_BIT, 0, data);
 		dev_info(&bd->clientp->dev, "Disabling boost mode\n");
-		return i2c_smbus_write_byte_data(bd->clientp, REG_BOOST, data);
+		return bq24185_i2c_write_byte(bd->clientp, REG_BOOST, data);
 	case CHARGER_BOOST_MODE:
 		if (CHK_BIT(REG_BOOST_OPA_MODE_BIT, data))
 			return 0;
 
 		(void)bq24185_set_charger_safety_timer(0);
 		/* HZ_MODE overrides OPA_MODE. Set no HZ_MODE */
-		bq24185_hz_disable(bd);
+		bq24185_hz_enable(bd, 0);
 		bq24185_start_watchdog_reset(bd);
 		data = SET_BIT(REG_BOOST_OPA_MODE_BIT, 1, data);
 		dev_info(&bd->clientp->dev, "Enabling boost mode\n");
-		return i2c_smbus_write_byte_data(bd->clientp, REG_BOOST, data);
+		return bq24185_i2c_write_byte(bd->clientp, REG_BOOST, data);
 	default:
 		dev_err(&bd->clientp->dev, "Invalid charger mode\n");
 	}
@@ -862,6 +870,7 @@ int bq24185_set_charger_voltage(u16 mv)
 	struct bq24185_data *bd;
 	u8 voreg;
 	s32 data;
+	s32 rc = 0;
 
 	if (!psy)
 		return -EAGAIN;
@@ -883,13 +892,15 @@ int bq24185_set_charger_voltage(u16 mv)
 		CHARGE_VOLTAGE_STEP;
 	dev_info(&bd->clientp->dev, "Setting charger voltage to %u mV\n",
 		 MIN_CHARGE_VOLTAGE + voreg * CHARGE_VOLTAGE_STEP);
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_BR_VOLTAGE);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_BR_VOLTAGE);
+	if (data < 0)
+		return data;
 	if (CHK_MASK(REG_BR_VOLTAGE_MASK, data) !=
 	    DATA_MASK(REG_BR_VOLTAGE_MASK, voreg)) {
 		data = SET_MASK(REG_BR_VOLTAGE_MASK,
 				DATA_MASK(REG_BR_VOLTAGE_MASK, voreg),
 				data);
-		(void)i2c_smbus_write_byte_data(bd->clientp, REG_BR_VOLTAGE,
+		rc = bq24185_i2c_write_byte(bd->clientp, REG_BR_VOLTAGE,
 						data);
 	}
 
@@ -902,7 +913,7 @@ int bq24185_set_charger_voltage(u16 mv)
 		MUTEX_UNLOCK(&bd->lock);
 	}
 
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL_GPL(bq24185_set_charger_voltage);
 
@@ -911,6 +922,7 @@ int bq24185_set_charger_current(u16 ma)
 	struct power_supply *psy = power_supply_get_by_name(BQ24185_NAME);
 	struct bq24185_data *bd;
 	s32 data;
+	s32 rc = 0;
 
 	if (!psy)
 		return -EAGAIN;
@@ -928,7 +940,9 @@ int bq24185_set_charger_current(u16 ma)
 		return 0;
 	}
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_DPM);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_DPM);
+	if (data < 0)
+		return data;
 
 	if (ma < MIN_CHARGE_CURRENT(bd->rsens)) {
 		dev_info(&bd->clientp->dev,
@@ -936,7 +950,7 @@ int bq24185_set_charger_current(u16 ma)
 			 LOW_CHARGE_CURRENT(bd->rsens));
 		if (!CHK_BIT(REG_DPM_LOW_CHG_BIT, data)) {
 			data = SET_BIT(REG_DPM_LOW_CHG_BIT, 1, data);
-			(void)i2c_smbus_write_byte_data(bd->clientp, REG_DPM,
+			rc = bq24185_i2c_write_byte(bd->clientp, REG_DPM,
 							data);
 		}
 	} else {
@@ -950,17 +964,22 @@ int bq24185_set_charger_current(u16 ma)
 
 		if (CHK_BIT(REG_DPM_LOW_CHG_BIT, data)) {
 			data = SET_BIT(REG_DPM_LOW_CHG_BIT, 0, data);
-			(void)i2c_smbus_write_byte_data(bd->clientp, REG_DPM,
+			rc = bq24185_i2c_write_byte(bd->clientp, REG_DPM,
 							data);
+			if (rc < 0)
+				return rc;
 		}
 
-		data = i2c_smbus_read_byte_data(bd->clientp, REG_TERMINATION);
+		data = bq24185_i2c_read_byte(bd->clientp, REG_TERMINATION);
+		if (data < 0)
+			return data;
+
 		if (CHK_MASK(REG_TERMINATION_VICHRG_MASK, data) !=
 		    DATA_MASK(REG_TERMINATION_VICHRG_MASK, vichrg)) {
 			data = SET_MASK(REG_TERMINATION_VICHRG_MASK,
 					DATA_MASK(REG_TERMINATION_VICHRG_MASK,
 						  vichrg), data);
-			(void)i2c_smbus_write_byte_data(bd->clientp,
+			rc = bq24185_i2c_write_byte(bd->clientp,
 							REG_TERMINATION, data);
 		}
 	}
@@ -974,7 +993,7 @@ int bq24185_set_charger_current(u16 ma)
 		MUTEX_UNLOCK(&bd->lock);
 	}
 
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL_GPL(bq24185_set_charger_current);
 
@@ -984,29 +1003,34 @@ int bq24185_set_charger_termination_current(u16 ma)
 	struct bq24185_data *bd;
 	s32 data;
 	u8 viterm;
+	s32 rc = 0;
 
 	if (!psy)
 		return -EAGAIN;
 	bd = container_of(psy, struct bq24185_data, bat_ps);
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_CONTROL);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_CONTROL);
+	if (data < 0)
+		return data;
 
 	if (ma < MIN_CHARGE_TERM_CURRENT(bd->rsens)) {
 		if (CHK_BIT(REG_CONTROL_TE_BIT, data)) {
 			data = SET_BIT(REG_CONTROL_TE_BIT, 0, data);
 			dev_info(&bd->clientp->dev,
 				 "Disable charge current termination\n");
-			(void)i2c_smbus_write_byte_data(bd->clientp,
+			rc = bq24185_i2c_write_byte(bd->clientp,
 							REG_CONTROL, data);
 		}
-		return 0;
+		return rc;
 	}
 
 	if (!CHK_BIT(REG_CONTROL_TE_BIT, data)) {
 		data = SET_BIT(REG_CONTROL_TE_BIT, 1, data);
 		dev_info(&bd->clientp->dev,
 			 "Enable charge current termination\n");
-		(void)i2c_smbus_write_byte_data(bd->clientp, REG_CONTROL, data);
+		rc = bq24185_i2c_write_byte(bd->clientp, REG_CONTROL, data);
+		if (rc < 0)
+			return rc;
 	}
 
 	viterm = (clamp_val(ma, MIN_CHARGE_TERM_CURRENT(bd->rsens),
@@ -1014,7 +1038,10 @@ int bq24185_set_charger_termination_current(u16 ma)
 		  MIN_CHARGE_TERM_CURRENT(bd->rsens))
 		/ CHARGE_TERM_CURRENT_STEP(bd->rsens);
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_TERMINATION);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_TERMINATION);
+	if (data < 0)
+		return data;
+
 	if (CHK_MASK(REG_TERMINATION_VITERM_MASK, data) ==
 	    DATA_MASK(REG_TERMINATION_VITERM_MASK, viterm))
 		return 0;
@@ -1023,7 +1050,7 @@ int bq24185_set_charger_termination_current(u16 ma)
 			DATA_MASK(REG_TERMINATION_VITERM_MASK, viterm), data);
 	dev_info(&bd->clientp->dev, "Charge current termination set to %u mA\n",
 		 25 + viterm * 25);
-	return i2c_smbus_write_byte_data(bd->clientp, REG_TERMINATION, data);
+	return bq24185_i2c_write_byte(bd->clientp, REG_TERMINATION, data);
 }
 EXPORT_SYMBOL_GPL(bq24185_set_charger_termination_current);
 
@@ -1064,7 +1091,9 @@ int bq24185_set_charger_safety_timer(u16 minutes)
 	else
 		safety_timer = TMR_6H;
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_NTC);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_NTC);
+	if (data < 0)
+		return data;
 	if (CHK_MASK(REG_NTC_TMR_MASK, data) ==
 	    DATA_MASK(REG_NTC_TMR_MASK, safety_timer))
 		return 0;
@@ -1075,7 +1104,7 @@ int bq24185_set_charger_safety_timer(u16 minutes)
 	data = SET_MASK(REG_NTC_TMR_MASK,
 			DATA_MASK(REG_NTC_TMR_MASK, safety_timer),
 			data);
-	return i2c_smbus_write_byte_data(bd->clientp, REG_NTC, data);
+	return bq24185_i2c_write_byte(bd->clientp, REG_NTC, data);
 }
 EXPORT_SYMBOL_GPL(bq24185_set_charger_safety_timer);
 
@@ -1088,6 +1117,7 @@ int bq24185_set_input_current_limit(u16 ma)
 	struct bq24185_data *bd;
 	enum bq24185_iin_lim iin_lim;
 	s32 data;
+	s32 rc = 0;
 
 	if (!psy)
 		return -EAGAIN;
@@ -1117,13 +1147,16 @@ int bq24185_set_input_current_limit(u16 ma)
 	dev_info(&bd->clientp->dev, "Setting input charger current to %s\n",
 		 hwlim[iin_lim]);
 
-	data = i2c_smbus_read_byte_data(bd->clientp, REG_CONTROL);
+	data = bq24185_i2c_read_byte(bd->clientp, REG_CONTROL);
+	if (data < 0)
+		return data;
+
 	if (CHK_MASK(REG_CONTROL_IIN_LIM_MASK, data) !=
 	    DATA_MASK(REG_CONTROL_IIN_LIM_MASK, iin_lim)) {
 		data = SET_MASK(REG_CONTROL_IIN_LIM_MASK,
 				DATA_MASK(REG_CONTROL_IIN_LIM_MASK, iin_lim),
 				data);
-		(void)i2c_smbus_write_byte_data(bd->clientp, REG_CONTROL, data);
+		rc = bq24185_i2c_write_byte(bd->clientp, REG_CONTROL, data);
 	}
 
 	MUTEX_LOCK(&bd->lock);
@@ -1135,7 +1168,7 @@ int bq24185_set_input_current_limit(u16 ma)
 		MUTEX_UNLOCK(&bd->lock);
 	}
 
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL_GPL(bq24185_set_input_current_limit);
 
@@ -1211,43 +1244,51 @@ static int bq24185_probe(struct i2c_client *client,
 	s32 buf;
 	int rc = 0;
 
+	if (pdata && pdata->gpio_configure) {
+		rc = pdata->gpio_configure(1);
+		if (rc) {
+			pr_err("%s: failed to gpio_configure\n", BQ24185_NAME);
+			goto probe_exit;
+		}
+	}
+
 	/* Make sure we have at least i2c functionality on the bus */
 	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "No i2c functionality available\n");
-		return -EIO;
+		rc = -EIO;
+		goto probe_exit_hw_deinit;
 	}
 
-	buf = i2c_smbus_read_byte_data(client, REG_VENDOR);
+	buf = bq24185_i2c_read_byte(client, REG_VENDOR);
 	if (buf <= 0) {
 		dev_err(&client->dev, "Failed read vendor info\n");
-		return -EIO;
+		rc = -EIO;
+		goto probe_exit_hw_deinit;
 	}
 
 	if (((buf & REG_VENDOR_CODE_MASK) >> 5) == REG_VENDOR_CODE) {
 		dev_info(&client->dev, "Found BQ24185, rev 0x%.2x\n", buf & 7);
 	} else {
 		dev_err(&client->dev, "Invalid vendor code\n");
-		return -ENODEV;
+		rc = -ENODEV;
+		goto probe_exit_hw_deinit;
 	}
 
-	pdata = client->dev.platform_data;
 	if (pdata) {
 		/* Set the safety limit register. Must be done before any other
 		 * registers are written to.
 		 */
-		buf = i2c_smbus_write_byte_data(client, REG_SAFETY_LIM,
+		buf = bq24185_i2c_write_byte(client, REG_SAFETY_LIM,
 						pdata->mbrv | pdata->mccsv);
 		if (buf < 0) {
-			dev_err(&client->dev,
-				"Failed setting safety limit register\n");
-			return (int)buf;
+			rc = buf;
+			goto probe_exit_hw_deinit;
 		}
 
-		buf = i2c_smbus_read_byte_data(client, REG_SAFETY_LIM);
+		buf = bq24185_i2c_read_byte(client, REG_SAFETY_LIM);
 		if (buf < 0) {
-			dev_err(&client->dev,
-				"Failed reading safety limit register\n");
-			return (int)buf;
+			rc = buf;
+			goto probe_exit_hw_deinit;
 		}
 
 		if (buf != (pdata->mbrv | pdata->mccsv)) {
@@ -1260,14 +1301,17 @@ static int bq24185_probe(struct i2c_client *client,
 			} else {
 				dev_err(&client->dev,
 					"Safety limit could not be set!\n");
-				return -EPERM;
+				rc = -EPERM;
+				goto probe_exit_hw_deinit;
 			}
 		}
 	}
 
 	bd = kzalloc(sizeof(struct bq24185_data), GFP_KERNEL);
-	if (!bd)
-		return -ENOMEM;
+	if (!bd) {
+		rc = -ENOMEM;
+		goto probe_exit_hw_deinit;
+	}
 
 	bd->bat_ps.name = BQ24185_NAME;
 	bd->bat_ps.type = POWER_SUPPLY_TYPE_BATTERY;
@@ -1284,6 +1328,8 @@ static int bq24185_probe(struct i2c_client *client,
 		bd->bat_ps.name = pdata->name;
 		bd->rsens = pdata->rsens;
 		bd->control = pdata;
+		bd->vindpm_usb_compliant = pdata->vindpm_usb_compliant;
+		bd->vindpm_non_compliant = pdata->vindpm_non_compliant;
 
 		if (pdata->supplied_to) {
 			bd->bat_ps.supplied_to = pdata->supplied_to;
@@ -1369,7 +1415,10 @@ probe_exit_work_queue:
 probe_exit_free:
 	wake_lock_destroy(&bd->wake_lock);
 	kfree(bd);
-
+probe_exit_hw_deinit:
+	if (pdata && pdata->gpio_configure)
+		rc = pdata->gpio_configure(0);
+probe_exit:
 	return rc;
 }
 
