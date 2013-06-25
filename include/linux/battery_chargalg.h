@@ -1,6 +1,7 @@
 #ifndef _BATTERY_CHARGALG_H_
 #define _BATTERY_CHARGALG_H_
 
+#include <linux/kernel.h>
 #include <linux/types.h>
 
 #define BATTERY_CHARGALG_NAME "chargalg"
@@ -54,6 +55,8 @@ struct step_charging {
 #endif
 
 struct device_data {
+	struct battery_regulation_vs_temperature *id_bat_reg;
+	struct battery_regulation_vs_temperature *unid_bat_reg;
 	struct ambient_temperature_limit *limit_tbl;
 #ifdef CONFIG_BATTERY_CHARGALG_ENABLE_STEP_CHARGING
 	struct step_charging *step_charging;
@@ -61,6 +64,7 @@ struct device_data {
 #endif
 	u16 battery_capacity_mah;
 	u16 maximum_charging_current_ma;
+	int battery_connector_resistance;
 };
 
 struct battery_chargalg_platform_data {
@@ -69,8 +73,6 @@ struct battery_chargalg_platform_data {
 	size_t num_supplicants;
 
 	u16 overvoltage_max_design; /* mV */
-	struct battery_regulation_vs_temperature *id_bat_reg;
-	struct battery_regulation_vs_temperature *unid_bat_reg;
 	u8 ext_eoc_recharge_enable;
 	u8 recharge_threshold_capacity; /* % */
 	u16 eoc_current_term; /* mA */
@@ -90,7 +92,9 @@ struct battery_chargalg_platform_data {
 	int (*set_input_current_limit)(u16 ma);
 	int (*set_charging_status)(int status);
 	unsigned int (*get_supply_current_limit)(void);
-
+	bool (*get_restrict_ctl)(int bvolt, u16 volt, u16 curr);
+	void (*get_restricted_setting)(u16 *volt, u16 *curr);
+	int (*setup_exchanged_power_supply)(u8 connection);
 	unsigned int allow_dynamic_charge_current_ctrl;
 	u16 charge_set_current_1; /* mA */
 	u16 charge_set_current_2; /* mA */
