@@ -2608,13 +2608,6 @@ struct bq24185_platform_data bq24185_platform_data = {
 #endif
 };
 
-static struct battery_regulation_vs_temperature id_bat_reg = {
-	/* Cold, Normal, Warm, Overheat */
-	{5, 45,		55,	127},	/* temp */
-	{0, 4200,	4000,	0},	/* volt */
-	{0, USHRT_MAX,	400,	0},	/* curr */
-};
-
 static char *battery_chargalg_supplied_to[] = {
 	SEMC_BDATA_NAME,
 };
@@ -2623,7 +2616,6 @@ static struct battery_chargalg_platform_data battery_chargalg_platform_data = {
 	.name = BATTERY_CHARGALG_NAME,
 	.supplied_to = battery_chargalg_supplied_to,
 	.num_supplicants = ARRAY_SIZE(battery_chargalg_supplied_to),
-	.id_bat_reg = &id_bat_reg,
 	.ext_eoc_recharge_enable = 1,
 	.temp_hysteresis_design = 3,
 	.ddata = &device_data,
@@ -2636,6 +2628,10 @@ static struct battery_chargalg_platform_data battery_chargalg_platform_data = {
 	.set_charger_current = bq24185_set_charger_current,
 	.set_input_current_limit = bq24185_set_input_current_limit,
 	.set_charging_status = bq24185_set_ext_charging_status,
+	.get_supply_current_limit = NULL,
+	.get_restrict_ctl = NULL,
+	.get_restricted_setting = NULL,
+	.setup_exchanged_power_supply = NULL,
 	.charge_set_current_1 = 350,
 	.charge_set_current_2 = 550,
 	.charge_set_current_3 = 750,
