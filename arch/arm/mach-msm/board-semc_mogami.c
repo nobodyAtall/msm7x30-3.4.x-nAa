@@ -161,6 +161,12 @@
 #include <linux/i2c/bq27520_battery.h>
 #include <linux/battery_chargalg.h>
 #include <mach/semc_battery_data.h>
+#ifdef CONFIG_USB_MSM_OTG_72K
+#include <mach/msm72k_otg.h>
+#endif
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+#include <mach/semc_charger_usb.h>
+#endif
 
 #define BQ24185_GPIO_IRQ		(31)
 #define CYPRESS_TOUCH_GPIO_RESET	(40)
@@ -169,10 +175,6 @@
 #define SYNAPTICS_TOUCH_GPIO_IRQ	(42)
 #endif
 #define CYPRESS_TOUCH_GPIO_SPI_CS	(46)
-
-#ifdef CONFIG_USB_MSM_OTG_72K
-#include <mach/msm72k_otg.h>
-#endif
 
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
@@ -2513,10 +2515,12 @@ static struct clearpad_platform_data clearpad_platform_data = {
 };
 #endif
 
-#define GPIO_BQ27520_SOC_INT 20
-#define LIPO_BAT_MAX_VOLTAGE 4200
-#define LIPO_BAT_MIN_VOLTAGE 3000
-#define FULLY_CHARGED_AND_RECHARGE_CAP 95
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+static char *semc_chg_usb_supplied_to[] = {
+	BATTERY_CHARGALG_NAME,
+	BQ27520_NAME,
+};
+#endif
 
 static char *semc_bdata_supplied_to[] = {
 	BQ27520_NAME,
@@ -2536,7 +2540,11 @@ static struct platform_device bdata_driver = {
 	},
 };
 
-/* Driver(s) to be notified upon change in fuelgauge data */
+#define GPIO_BQ27520_SOC_INT 20
+#define LIPO_BAT_MAX_VOLTAGE 4200
+#define LIPO_BAT_MIN_VOLTAGE 3000
+#define FULLY_CHARGED_AND_RECHARGE_CAP 95
+
 static char *bq27520_supplied_to[] = {
 	BATTERY_CHARGALG_NAME,
 };
@@ -2579,7 +2587,6 @@ struct bq27520_platform_data bq27520_platform_data = {
 #endif
 };
 
-/* Driver(s) to be notified upon change in charging */
 static char *bq24185_supplied_to[] = {
 	BATTERY_CHARGALG_NAME,
 	SEMC_BDATA_NAME,
@@ -2608,7 +2615,6 @@ static struct battery_regulation_vs_temperature id_bat_reg = {
 	{0, USHRT_MAX,	400,	0},	/* curr */
 };
 
-/* Driver(s) to be notified upon change in algorithm */
 static char *battery_chargalg_supplied_to[] = {
 	SEMC_BDATA_NAME,
 };
@@ -2617,7 +2623,6 @@ static struct battery_chargalg_platform_data battery_chargalg_platform_data = {
 	.name = BATTERY_CHARGALG_NAME,
 	.supplied_to = battery_chargalg_supplied_to,
 	.num_supplicants = ARRAY_SIZE(battery_chargalg_supplied_to),
-	.overvoltage_max_design = 4225,
 	.id_bat_reg = &id_bat_reg,
 	.ext_eoc_recharge_enable = 1,
 	.temp_hysteresis_design = 3,
@@ -2631,12 +2636,15 @@ static struct battery_chargalg_platform_data battery_chargalg_platform_data = {
 	.set_charger_current = bq24185_set_charger_current,
 	.set_input_current_limit = bq24185_set_input_current_limit,
 	.set_charging_status = bq24185_set_ext_charging_status,
-#endif
-	.get_supply_current_limit = hsusb_get_chg_current_ma,
-	.allow_dynamic_charge_current_ctrl = 1,
 	.charge_set_current_1 = 350,
 	.charge_set_current_2 = 550,
 	.charge_set_current_3 = 750,
+	.overvoltage_max_design = 4225,
+#endif
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+	.get_supply_current_limit = semc_charger_usb_current_ma,
+#endif
+	.allow_dynamic_charge_current_ctrl = 1,
 	.average_current_min_limit = -1,
 	.average_current_max_limit = 250,
 };
@@ -2647,12 +2655,6 @@ static struct platform_device battery_chargalg_platform_device = {
 	.dev = {
 		.platform_data = &battery_chargalg_platform_data,
 	},
-};
-
-/* Driver(s) to be notified upon change in USB */
-static char *hsusb_chg_supplied_to[] = {
-	BATTERY_CHARGALG_NAME,
-	BQ27520_NAME,
 };
 
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
@@ -3259,12 +3261,16 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.ldo_enable		 = msm_hsusb_ldo_enable,
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_set_voltage	 = msm_hsusb_ldo_set_voltage,
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+	.chg_vbus_draw		 = semc_charger_usb_vbus_draw,
+	.chg_connected		 = semc_charger_usb_connected,
+	.chg_init		 = semc_charger_usb_init,
+#endif
 #ifdef CONFIG_CHARGER_BQ24185
 	.chg_is_initialized	 = bq24185_charger_initialized,
 #endif
-#if defined(CONFIG_CHARGER_BQ24185) && defined(CONFIG_USB_MSM_OTG_72K)
-	.vbus_drawable_ida	 = USB_IDCHG_MAX,
-#endif
+	.phy_can_powercollapse	 = 1,
+	.chg_drawable_ida	 = USB_IDCHG_MAX,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -3960,13 +3966,13 @@ static struct platform_device *devices[] __initdata = {
 	&msm_vpe_standalone_device,
 #endif
 	&bdata_driver,
+	&battery_chargalg_platform_device,
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 	&simple_remote_pf_device,
 #endif
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 	&novatek_device,
 #endif
-	&battery_chargalg_platform_device,
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD)
 	&mddi_sony_hvga_display_device,
 #endif
