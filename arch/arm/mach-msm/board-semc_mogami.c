@@ -157,7 +157,9 @@
 #endif
 #include "board-semc_mogami-touch.h"
 #include <mach/semc_rpc_server_handset.h>
+#ifdef CONFIG_CHARGER_BQ24185
 #include <linux/i2c/bq24185_charger.h>
+#endif
 #include <linux/i2c/bq27520_battery.h>
 #include <linux/battery_chargalg.h>
 #include <mach/semc_battery_data.h>
@@ -168,7 +170,9 @@
 #include <mach/semc_charger_usb.h>
 #endif
 
+#ifdef CONFIG_CHARGER_BQ24185
 #define BQ24185_GPIO_IRQ		(31)
+#endif
 #define CYPRESS_TOUCH_GPIO_RESET	(40)
 #define CYPRESS_TOUCH_GPIO_IRQ		(42)
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
@@ -452,6 +456,7 @@ static int pm8058_gpios_init(void)
 {
 	int rc;
 
+#ifdef CONFIG_CHARGER_BQ24185
 	struct pm8xxx_gpio_init_info bq24185_irq = {
 		PM8058_GPIO_PM_TO_SYS(BQ24185_GPIO_IRQ - 1),
 		{
@@ -462,6 +467,7 @@ static int pm8058_gpios_init(void)
 			.inv_int_pol    = 0,
 		},
 	};
+#endif
 
 	struct pm8xxx_gpio_init_info sdc4_pwr_en = {
 		PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SDC4_PWR_EN_N),
@@ -493,11 +499,13 @@ static int pm8058_gpios_init(void)
 		return rc;
 	}
 
+#ifdef CONFIG_CHARGER_BQ24185
 	rc = pm8xxx_gpio_config(bq24185_irq.gpio, &bq24185_irq.config);
 	if (rc) {
 		pr_err("%s BQ24185_GPIO_IRQ config failed with %d\n", __func__, rc);
 		return rc;
 	}
+#endif
 
 	/* SDC4 gpio_25 */
 	rc = pm8xxx_gpio_config(sdc4_pwr_en.gpio, &sdc4_pwr_en.config);
@@ -2587,6 +2595,7 @@ struct bq27520_platform_data bq27520_platform_data = {
 #endif
 };
 
+#ifdef CONFIG_CHARGER_BQ24185
 static char *bq24185_supplied_to[] = {
 	BATTERY_CHARGALG_NAME,
 	SEMC_BDATA_NAME,
@@ -2606,7 +2615,10 @@ struct bq24185_platform_data bq24185_platform_data = {
 #ifdef CONFIG_USB_MSM_OTG_72K
 	.notify_vbus_drop = msm_otg_notify_vbus_drop,
 #endif
+	.vindpm_usb_compliant = VINDPM_4550MV,
+	.vindpm_non_compliant = VINDPM_4390MV,
 };
+#endif
 
 static char *battery_chargalg_supplied_to[] = {
 	SEMC_BDATA_NAME,
@@ -2845,12 +2857,14 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.platform_data = &bq27520_platform_data,
 		.type = BQ27520_NAME,
 	},
+#ifdef CONFIG_CHARGER_BQ24185
 	{
-		I2C_BOARD_INFO(BQ24185_NAME, 0xd6 >> 1),
+		I2C_BOARD_INFO(BQ24185_NAME, 0xD6 >> 1),
+		.irq = PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, BQ24185_GPIO_IRQ - 1),
 		.platform_data = &bq24185_platform_data,
 		.type = BQ24185_NAME,
-		.irq = PM8058_GPIO_IRQ(PMIC8058_IRQ_BASE, BQ24185_GPIO_IRQ - 1),
 	},
+#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 	{
 		I2C_BOARD_INFO("bma150", 0x70 >> 1),
