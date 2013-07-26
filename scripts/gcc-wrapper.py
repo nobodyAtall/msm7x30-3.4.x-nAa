@@ -43,6 +43,16 @@ allowed_warnings = set([
     "alignment.c:327",
     "mmu.c:602",
     "return_address.c:62",
+    "swab.h:49",
+    "nf_tproxy_core.h:75",
+    "nf_tproxy_core.h:175",
+    "xc4000.c:1049",
+    "xc4000.c:1063",
+    "inet_hashtables.h:356",
+    "inet_hashtables.h:359",
+    "lm356x.c:1021",
+    "lm356x.c:1101",
+    "transport.c:673",
  ])
 
 # Capture the name of the object file, can find it.
