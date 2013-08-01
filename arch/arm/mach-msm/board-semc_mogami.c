@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,10 +31,6 @@
 #include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
 #include <linux/msm_adc.h>
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-#include <linux/uio_driver.h>
-#include <linux/i2c/sii9024.h>
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 #include <linux/dma-mapping.h>
 #include <linux/regulator/consumer.h>
 
@@ -61,12 +57,58 @@
 #include <mach/rpc_server_handset.h>
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
+#include <linux/cyttsp-qc.h>
+
+#include <asm/mach/mmc.h>
+#include <asm/mach/flash.h>
+#include <mach/vreg.h>
+#include <linux/platform_data/qcom_crypto_device.h>
+
+#include "devices.h"
+#include "timer.h"
+#ifdef CONFIG_USB_G_ANDROID
+#include <linux/usb/android.h>
+#include <mach/usbdiag.h>
+#endif
+#include "pm.h"
+#include "pm-boot.h"
+#include "spm.h"
+#include "acpuclock.h"
+#include "clock.h"
+#include <mach/dal_axi.h>
+#include <mach/msm_serial_hs.h>
+#include <mach/qdsp5v2/mi2s.h>
+#include <mach/qdsp5v2/audio_dev_ctl.h>
+#include <mach/sdio_al.h>
+#include "smd_private.h"
+
+#include "board-msm7x30-regulator.h"
+#include "pm.h"
+
+#include "board-semc_mogami-gpio.h"
+#include "board-semc_mogami-keypad.h"
+#include "board-semc_mogami-touch.h"
+
+#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
+#include <mach/simple_remote_msm7x30_pf.h>
+#endif
+#include <mach/semc_rpc_server_handset.h>
+
+#ifdef CONFIG_CHARGER_BQ24185
+#include <linux/i2c/bq24185_charger.h>
+#endif
+#include <linux/i2c/bq27520_battery.h>
+#include <linux/battery_chargalg.h>
+#include <mach/semc_battery_data.h>
+#ifdef CONFIG_USB_MSM_OTG_72K
+#include <mach/msm72k_otg.h>
+#endif
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+#include <mach/semc_charger_usb.h>
+#endif
+
 #ifdef CONFIG_SENSORS_AKM8975
 #include <linux/i2c/akm8975.h>
-#endif
-#include <linux/cyttsp-qc.h>
-#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
-#include <linux/spi/cy8ctma300_touch.h>
 #endif
 #ifdef CONFIG_INPUT_BMA150_NG
 #include <linux/bma150_ng.h>
@@ -77,9 +119,13 @@
 #ifdef CONFIG_INPUT_APDS9702
 #include <linux/apds9702.h>
 #endif
+
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
 #include <linux/lm356x.h>
-#define LM356X_HW_RESET_GPIO 2
+#endif
+#ifdef CONFIG_LEDS_AS3676
+#include <linux/leds-as3676.h>
+#include "board-semc_mogami-leds.h"
 #endif
 
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
@@ -97,20 +143,20 @@
 #if defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
 #include <linux/mddi_auo_s6d05a1_hvga.h>
 #endif
+#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
+#include <linux/uio_driver.h>
+#include <linux/i2c/sii9024.h>
+#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
+#include <linux/spi/cy8ctma300_touch.h>
+#endif
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
 #include <linux/clearpad.h>
 #endif
 
-#if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
-	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
-	defined(CONFIG_FB_MSM_MDDI_SII_HVGA_LCD) || \
-	defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
-#define GPIO_MSM_MDDI_XRES		(157)
-#endif
-
-#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
-#define NOVATEK_GPIO_RESET              (157)
+#ifdef CONFIG_CHARGER_BQ24185
+#define BQ24185_GPIO_IRQ		(31)
 #endif
 
 #ifdef CONFIG_SENSORS_AKM8975
@@ -123,65 +169,27 @@
 #define BMA250_GPIO			(51)
 #endif
 
-#include <asm/mach/mmc.h>
-#include <asm/mach/flash.h>
-#include <mach/vreg.h>
-#include <linux/platform_data/qcom_crypto_device.h>
-
-#include "devices.h"
-#include "timer.h"
-#include "board-semc_mogami-keypad.h"
-#ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
-#include <mach/simple_remote_msm7x30_pf.h>
-#endif
-#include "board-semc_mogami-gpio.h"
-#ifdef CONFIG_USB_G_ANDROID
-#include <linux/usb/android.h>
-#include <mach/usbdiag.h>
-#endif
-#include "pm.h"
-#include "pm-boot.h"
-#include "spm.h"
-#include "acpuclock.h"
-#include "clock.h"
-#include <mach/dal_axi.h>
-#include <mach/msm_serial_hs.h>
-#include <mach/qdsp5v2/mi2s.h>
-#include <mach/qdsp5v2/audio_dev_ctl.h>
-#include <mach/sdio_al.h>
-#include "smd_private.h"
-
-#ifdef CONFIG_LEDS_AS3676
-#include <linux/leds-as3676.h>
-#include "board-semc_mogami-leds.h"
-#endif
-#include "board-semc_mogami-touch.h"
-#include <mach/semc_rpc_server_handset.h>
-#ifdef CONFIG_CHARGER_BQ24185
-#include <linux/i2c/bq24185_charger.h>
-#endif
-#include <linux/i2c/bq27520_battery.h>
-#include <linux/battery_chargalg.h>
-#include <mach/semc_battery_data.h>
-#ifdef CONFIG_USB_MSM_OTG_72K
-#include <mach/msm72k_otg.h>
-#endif
-#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
-#include <mach/semc_charger_usb.h>
+#if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
+#define LM356X_HW_RESET_GPIO 2
 #endif
 
-#ifdef CONFIG_CHARGER_BQ24185
-#define BQ24185_GPIO_IRQ		(31)
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
+#define NOVATEK_GPIO_RESET              (157)
 #endif
+
+#if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
+	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
+	defined(CONFIG_FB_MSM_MDDI_SII_HVGA_LCD) || \
+	defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
+#define GPIO_MSM_MDDI_XRES		(157)
+#endif
+
 #define CYPRESS_TOUCH_GPIO_RESET	(40)
 #define CYPRESS_TOUCH_GPIO_IRQ		(42)
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
 #define SYNAPTICS_TOUCH_GPIO_IRQ	(42)
 #endif
 #define CYPRESS_TOUCH_GPIO_SPI_CS	(46)
-
-#include "board-msm7x30-regulator.h"
-#include "pm.h"
 
 #ifdef CONFIG_FB_MSM_HDPI
 #define MSM_PMEM_SF_SIZE  0x2500000
@@ -510,13 +518,15 @@ static int pm8058_gpios_init(void)
 	/* SDC4 gpio_25 */
 	rc = pm8xxx_gpio_config(sdc4_pwr_en.gpio, &sdc4_pwr_en.config);
 	if (rc) {
-		pr_err("%s PMIC_GPIO_SDC4_PWR_EN_N config failed: %d\n", __func__, rc);
+		pr_err("%s PMIC_GPIO_SDC4_PWR_EN_N config failed: %d\n",
+		       __func__, rc);
 		return rc;
 	}
 
 	rc = gpio_request(sdc4_pwr_en.gpio, "sdc4_pwr_en");
 	if (rc) {
-		pr_err("PMIC_GPIO_SDC4_PWR_EN_N gpio_req failed: %d\n", rc);
+		pr_err("PMIC_GPIO_SDC4_PWR_EN_N gpio_req failed: %d\n",
+		       rc);
 		return rc;
 	}
 
@@ -746,66 +756,99 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 
 #ifdef CONFIG_MSM_CAMERA
 #define	CAM_STNDBY	143
+static uint32_t camera_off_vcm_gpio_table[] = {
+GPIO_CFG(1, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VCM */
+};
 
 static uint32_t camera_off_gpio_table[] = {
 	/* parallel CAMERA interfaces */
-	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* RST */
+	/* RST */
+	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #if !defined(CONFIG_SEMC_CAMERA_MODULE)
 #if !defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-#ifndef CONFIG_TIMPANI_CODEC
-	GPIO_CFG(1,  0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VCM */
-#endif
-	GPIO_CFG(2,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(3,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
+	/* DAT2 */
+	GPIO_CFG(2,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT3 */
+	GPIO_CFG(3,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
 #endif
 #endif
 #if defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	GPIO_CFG(4,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
-	GPIO_CFG(5,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
-	GPIO_CFG(6,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT6 */
-	GPIO_CFG(7,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT7 */
-	GPIO_CFG(8,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT8 */
-	GPIO_CFG(9,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT9 */
-	GPIO_CFG(10, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT10 */
-	GPIO_CFG(11, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT11 */
-	GPIO_CFG(12, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* PCLK */
-	GPIO_CFG(13, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* HSYNC_IN */
-	GPIO_CFG(14, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VSYNC_IN */
+	/* DAT4 */
+	GPIO_CFG(4,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT5 */
+	GPIO_CFG(5,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT6 */
+	GPIO_CFG(6,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT7 */
+	GPIO_CFG(7,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT8 */
+	GPIO_CFG(8,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT9 */
+	GPIO_CFG(9,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT10 */
+	GPIO_CFG(10, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT11 */
+	GPIO_CFG(11, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* PCLK */
+	GPIO_CFG(12, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* HSYNC_IN */
+	GPIO_CFG(13, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* VSYNC_IN */
+	GPIO_CFG(14, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
 #endif
-	GPIO_CFG(15, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* MCLK */
+	/* MCLK */
+	GPIO_CFG(15, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #if defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* CAM_VGA_RST_N */
+	/* CAM_VGA_RST_N */
+	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #endif
+};
+
+static uint32_t camera_on_vcm_gpio_table[] = {
+GPIO_CFG(1, 0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* VCM */
 };
 
 static uint32_t camera_on_gpio_table[] = {
 	/* parallel CAMERA interfaces */
-	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* RST */
+	/* RST */
+	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #if !defined(CONFIG_SEMC_CAMERA_MODULE)
 #if !defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-#ifndef CONFIG_TIMPANI_CODEC
-	GPIO_CFG(1,  0, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* VCM */
-#endif
-	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT3 */
+	/* DAT2 */
+	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT3 */
+	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
 #endif
 #endif
 #if defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	GPIO_CFG(4,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT4 */
-	GPIO_CFG(5,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT5 */
-	GPIO_CFG(6,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT6 */
-	GPIO_CFG(7,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT7 */
-	GPIO_CFG(8,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT8 */
-	GPIO_CFG(9,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT9 */
-	GPIO_CFG(10, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT10 */
-	GPIO_CFG(11, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* DAT11 */
-	GPIO_CFG(12, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* PCLK */
-	GPIO_CFG(13, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* HSYNC_IN */
-	GPIO_CFG(14, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), /* VSYNC_IN */
+	/* DAT4 */
+	GPIO_CFG(4,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT5 */
+	GPIO_CFG(5,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT6 */
+	GPIO_CFG(6,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT7 */
+	GPIO_CFG(7,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT8 */
+	GPIO_CFG(8,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT9 */
+	GPIO_CFG(9,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT10 */
+	GPIO_CFG(10, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* DAT11 */
+	GPIO_CFG(11, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* PCLK */
+	GPIO_CFG(12, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* HSYNC_IN */
+	GPIO_CFG(13, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+	/* VSYNC_IN */
+	GPIO_CFG(14, 1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
 #endif
-	GPIO_CFG(15, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA), /* MCLK */
+	/* MCLK */
+	GPIO_CFG(15, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA),
 #if defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* CAM_VGA_RST_N */
+	/* CAM_VGA_RST_N */
+	GPIO_CFG(31, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 #endif
 };
 
@@ -825,6 +868,10 @@ static int config_camera_on_gpios(void)
 {
 	config_gpio_table(camera_on_gpio_table,
 		ARRAY_SIZE(camera_on_gpio_table));
+
+	config_gpio_table(camera_on_vcm_gpio_table,
+		ARRAY_SIZE(camera_on_vcm_gpio_table));
+
 	return 0;
 }
 
@@ -832,6 +879,9 @@ static void config_camera_off_gpios(void)
 {
 	config_gpio_table(camera_off_gpio_table,
 		ARRAY_SIZE(camera_off_gpio_table));
+
+	config_gpio_table(camera_off_vcm_gpio_table,
+		ARRAY_SIZE(camera_off_vcm_gpio_table));
 }
 
 struct resource msm_camera_resources[] = {
@@ -851,19 +901,19 @@ struct resource msm_camera_resources[] = {
 };
 
 struct msm_camera_device_platform_data msm_camera_device_data = {
-	.camera_gpio_on = config_camera_on_gpios,
+	.camera_gpio_on  = config_camera_on_gpios,
 	.camera_gpio_off = config_camera_off_gpios,
 	.ioext.camifpadphy = 0xAB000000,
-	.ioext.camifpadsz = 0x00000400,
+	.ioext.camifpadsz  = 0x00000400,
 	.ioext.csiphy = 0xA6100000,
-	.ioext.csisz = 0x00000400,
+	.ioext.csisz  = 0x00000400,
 	.ioext.csiirq = INT_CSI,
 #if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
 	.ioclk.mclk_clk_rate = 8000000,
 	.ioclk.vfe_clk_rate  = 192000000,
 #else
 	.ioclk.mclk_clk_rate = 24000000,
-	.ioclk.vfe_clk_rate  = 122880000,
+	.ioclk.vfe_clk_rate  = 147456000,
 #endif
 };
 
@@ -968,28 +1018,6 @@ static struct platform_device msm_camera_sensor_semc_sub_camera = {
 		.platform_data = &msm_camera_sensor_semc_sub_camera_data,
 	},
 };
-#endif
-
-#ifdef CONFIG_MSM_GEMINI
-static struct resource msm_gemini_resources[] = {
-	{
-		.start  = 0xA3A00000,
-		.end    = 0xA3A00000 + 0x0150 - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-	{
-		.start  = INT_JPEG,
-		.end    = INT_JPEG,
-		.flags  = IORESOURCE_IRQ,
-	},
-};
-
-static struct platform_device msm_gemini_device = {
-	.name           = "msm_gemini",
-	.resource       = msm_gemini_resources,
-	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
-};
-#endif
 
 #if defined (CONFIG_MSM_VPE) || defined(CONFIG_MSM_VPE_STANDALONE)
 static struct resource msm_vpe_resources[] = {
@@ -1023,6 +1051,28 @@ static struct platform_device msm_vpe_standalone_device = {
 #endif
 
 #endif /*CONFIG_MSM_CAMERA*/
+#endif
+
+#ifdef CONFIG_MSM_GEMINI
+static struct resource msm_gemini_resources[] = {
+	{
+		.start  = 0xA3A00000,
+		.end    = 0xA3A00000 + 0x0150 - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+	{
+		.start  = INT_JPEG,
+		.end    = INT_JPEG,
+		.flags  = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device msm_gemini_device = {
+	.name           = "msm_gemini",
+	.resource       = msm_gemini_resources,
+	.num_resources  = ARRAY_SIZE(msm_gemini_resources),
+};
+#endif
 
 #ifdef CONFIG_MSM7KV2_AUDIO
 static uint32_t audio_pamp_gpio_config =
@@ -1050,7 +1100,6 @@ static int __init snddev_poweramp_gpio_init(void)
 			"%s: gpio_tlmm_config(%#x)=%d\n",
 			__func__, HAC_amp_gpio_config, rc);
 	}
-
 
 	return rc;
 }
@@ -4833,7 +4882,7 @@ static void __init msm7x30_fixup(struct tag *tags, char **cmdline,
 }
 
 MACHINE_START(SEMC_MOGAMI, "mogami")
-	.atag_offset = PLAT_PHYS_OFFSET + 0x100,
+	.atag_offset = 0x100,
 	.map_io = msm7x30_map_io,
 	.reserve = msm7x30_reserve,
 	.init_irq = msm7x30_init_irq,
