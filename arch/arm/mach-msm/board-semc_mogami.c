@@ -3314,9 +3314,6 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.drv_ampl		 = HS_DRV_AMPLITUDE_DEFAULT,
 	.se1_gating		 = SE1_GATING_DISABLE,
-	.chg_vbus_draw		 = hsusb_chg_vbus_draw,
-	.chg_connected		 = hsusb_chg_connected,
-	.chg_init		 = hsusb_chg_init,
 	.ldo_enable		 = msm_hsusb_ldo_enable,
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_set_voltage	 = msm_hsusb_ldo_set_voltage,
@@ -4655,10 +4652,6 @@ static void __init msm7x30_init(void)
 		pr_debug("%s: SOC Version:2.(1 or more)\n", __func__);
 		msm_otg_pdata.ldo_set_voltage = 0;
 	}
-#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
-	semc_chg_usb_set_supplicants(semc_chg_usb_supplied_to,
-				  ARRAY_SIZE(semc_chg_usb_supplied_to));
-#endif
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =
@@ -4680,11 +4673,12 @@ static void __init msm7x30_init(void)
 			     msm_num_footswitch_devices);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	mogami_temp_fixups();
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+	semc_chg_usb_set_supplicants(semc_chg_usb_supplied_to,
+				  ARRAY_SIZE(semc_chg_usb_supplied_to));
+#endif
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
-#endif
-#ifdef CONFIG_MSM_CAMERA_V4L2
-	msm7x30_init_cam();
 #endif
 	msm7x30_init_mmc();
 	msm_qsd_spi_init();
