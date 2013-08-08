@@ -1018,6 +1018,7 @@ static struct platform_device msm_camera_sensor_semc_sub_camera = {
 		.platform_data = &msm_camera_sensor_semc_sub_camera_data,
 	},
 };
+#endif
 
 #if defined (CONFIG_MSM_VPE) || defined(CONFIG_MSM_VPE_STANDALONE)
 static struct resource msm_vpe_resources[] = {
@@ -1051,7 +1052,6 @@ static struct platform_device msm_vpe_standalone_device = {
 #endif
 
 #endif /*CONFIG_MSM_CAMERA*/
-#endif
 
 #ifdef CONFIG_MSM_GEMINI
 static struct resource msm_gemini_resources[] = {
