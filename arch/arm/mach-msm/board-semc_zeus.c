@@ -90,7 +90,9 @@
 #endif
 #include <mach/semc_rpc_server_handset.h>
 
+#ifdef CONFIG_BATTERY_ZEUS
 #include <linux/max17040.h>
+#endif
 #include <mach/semc_battery_data.h>
 #ifdef CONFIG_USB_MSM_OTG_72K
 #include <mach/msm72k_otg.h>
