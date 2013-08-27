@@ -22,6 +22,7 @@
 #include <linux/i2c.h>
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
+#include <linux/module.h>
 #include <linux/kthread.h>
 #include <media/msm_camera.h>
 #include <mach/gpio.h>
@@ -113,7 +114,7 @@ static long setix006_set_led_state(uint8_t led_state);
 
 static struct seix006_ctrl_t *seix006_ctrl = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(seix006_wait_queue);
-DECLARE_MUTEX(seix006_sem);
+DEFINE_SEMAPHORE(seix006_sem);
 static int is_capture_started = 0;
 enum {
 	FLASH_OFF,

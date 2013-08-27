@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/kthread.h>
+#include <linux/module.h>
 #include <mach/gpio.h>
 #include <mach/camera.h>
 #include "ovm7692.h"
