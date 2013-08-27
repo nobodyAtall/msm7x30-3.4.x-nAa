@@ -92,6 +92,9 @@
 
 #include <linux/max17040.h>
 #include <mach/semc_battery_data.h>
+#ifdef CONFIG_USB_MSM_OTG_72K
+#include <mach/msm72k_otg.h>
+#endif
 #ifdef CONFIG_SEMC_CHARGER_USB_ARCH
 #include <mach/semc_charger_usb.h>
 #endif
