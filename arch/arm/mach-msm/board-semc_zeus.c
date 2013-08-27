@@ -617,6 +617,24 @@ static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 		.platform_data	= &gp2a_platform_data
 	},
 #endif
+#ifdef CONFIG_SEIX006 /* zeus camera */
+	{
+		I2C_BOARD_INFO("seix006", 0x1A),
+		.type = "seix006"
+	},
+#endif /* CONFIG_SEIX006 */
+#ifdef CONFIG_OVM7692 /* zeus vt camera */
+	{
+		I2C_BOARD_INFO("ovm7692", 0x3C),
+		.type = "ovm7692"
+	},
+#endif /* CONFIG_OVM7692 */
+#ifdef CONFIG_MT9V114 /* zeus vt camera version 2 */
+	{
+		I2C_BOARD_INFO("mt9v114", 0x3D),
+		.type = "mt9v114"
+	},
+#endif /* CONFIG_MT9V114 */
 };
 
 #ifdef CONFIG_MSM_CAMERA
