@@ -340,4 +340,18 @@ config TOUCHDISC_VTD518_SHINETSU
 
 	  To compile this as a module choose M here: the module will be called
 	  tdisc_vtd518_shinetsu.
+
+config JOYSTICK_SYNAPTICS
+	tristate "Zeus I2C Synaptics touchpad"
+	depends on I2C
+	help
+	  Say Y here if you have a Zeus and want to use your touchpad.
+
+config JOYSTICK_SYNAPTICS_FLASH
+	bool "Firmware update for Synaptics Touchpad"
+	depends on JOYSTICK_SYNAPTICS
+	default y
+	help
+	  Say Y here if you want the ability to update the firmware on your
+	  touchpad.
 endif
