@@ -40,6 +40,7 @@
 #include <linux/syscalls.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
+#include <linux/module.h>
 #include <mach/gpio.h>
 #include <asm/irq.h>
 #include <linux/uaccess.h>
