@@ -105,6 +105,9 @@
 #ifdef CONFIG_INPUT_BMA150_NG
 #include <linux/bma150_ng.h>
 #endif
+#ifdef CONFIG_INPUT_GP2A
+#include <linux/input/gp2ap002a00f.h>
+#endif
 
 #ifdef CONFIG_LEDS_AS3676
 #include <linux/leds-as3676.h>
@@ -125,6 +128,9 @@
 #endif
 #ifdef CONFIG_INPUT_BMA150_NG
 #define BMA150_GPIO			(51)
+#endif
+#ifdef CONFIG_INPUT_GP2A
+#define GP2A_GPIO			(20)
 #endif
 
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
@@ -566,12 +572,49 @@ struct bma150_platform_data bma150_ng_platform_data = {
 };
 #endif
 
+#ifdef CONFIG_INPUT_GP2A
+static struct msm_gpio gp2a_gpio_config_data[] = {
+	{ GPIO_CFG(GP2A_GPIO, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "gp2a_vo" },
+};
+
+static int gp2a_gpio_setup(struct i2c_client *client)
+{
+	int rc;
+	rc = msm_gpios_request_enable(gp2a_gpio_config_data,
+		ARRAY_SIZE(gp2a_gpio_config_data));
+
+	return rc;
+}
+
+static int gp2a_gpio_teardown(struct i2c_client *client)
+{
+	msm_gpios_disable_free(gp2a_gpio_config_data,
+		ARRAY_SIZE(gp2a_gpio_config_data));
+
+	return 0;
+}
+
+static struct gp2a_platform_data gp2a_platform_data = {
+	.vout_gpio = GP2A_GPIO,
+	.wakeup = true,
+	.hw_setup = gp2a_gpio_setup,
+	.hw_shutdown = gp2a_gpio_teardown,
+};
+#endif
+
 static struct i2c_board_info msm_camera_boardinfo[] __initdata = {
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 	{
 		I2C_BOARD_INFO(MDDI_NOVATEK_I2C_NAME, 0x98 >> 1),
 		.type = MDDI_NOVATEK_I2C_NAME,
 		.platform_data = &novatek_i2c_pdata,
+	},
+#endif
+#ifdef CONFIG_INPUT_GP2A
+	{
+		I2C_BOARD_INFO(GP2A_I2C_NAME, 0x88 >> 1),
+		.irq		= MSM_GPIO_TO_INT(GP2A_GPIO),
+		.platform_data	= &gp2a_platform_data
 	},
 #endif
 };
