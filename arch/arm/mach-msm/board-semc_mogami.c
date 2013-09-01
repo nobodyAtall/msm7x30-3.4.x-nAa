@@ -256,7 +256,6 @@ static unsigned int phys_add = DDR2_BANK_BASE;
 unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
 EXPORT_SYMBOL(ebi1_phys_offset);
 
-extern void msm_init_pmic_vibrator(void);
 
 static int vreg_helper_on(const char *pzName, unsigned mv)
 {
@@ -4713,7 +4712,6 @@ static void __init msm7x30_init(void)
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
 	cypress_touch_gpio_init();
 #endif /* CONFIG_TOUCHSCREEN_CY8CTMA300_SPI */
-	msm_init_pmic_vibrator();
 
 	i2c_register_board_info(0, msm_i2c_board_info,
 			ARRAY_SIZE(msm_i2c_board_info));

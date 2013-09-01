@@ -1899,19 +1899,6 @@ config MOGAMI_SLIDER
 	help
 	  Select if GPIO slider switch is attached.
 
-config MOGAMI_VIBRATOR
-	bool "Mogami Vibrator"
-	default n
-	help
-	  Select to get vibrator support on the Mogami board
-
-config MOGAMI_VIBRATOR_ON_VOLTAGE
-	int "Mogami Vibrator on voltage(mV)"
-	default "2700"
-	depends on MOGAMI_VIBRATOR
-	help
-	  Set value in milli voltage(mV). Default voltage is 2700mV.
-
 config MSM_SLEEP_TIME_OVERRIDE
 	bool "Allow overriding suspend/sleep time with PM module parameter"
 	default y
