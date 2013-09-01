@@ -657,11 +657,18 @@ static struct pm8xxx_mpp_platform_data pm8xxx_mpp_pdata = {
 	.mpp_base	= PM8058_MPP_PM_TO_SYS(0),
 };
 
+static struct pm8xxx_vibrator_platform_data pm8xxx_vibrator_pdata = {
+	.initial_vibrate_ms	= 0,
+	.level_mV		= CONFIG_PMIC8XXX_VIBRATOR_VOLTAGE,
+	.max_timeout_ms		= 15000,
+};
+
 static struct pm8058_platform_data pm8058_7x30_data = {
 	.irq_pdata		= &pm8xxx_irq_pdata,
 	.gpio_pdata		= &pm8xxx_gpio_pdata,
 	.mpp_pdata		= &pm8xxx_mpp_pdata,
 	.pwm_pdata		= &pm8058_pwm_data,
+	.vibrator_pdata		= &pm8xxx_vibrator_pdata,
 };
 
 #ifdef CONFIG_MSM_SSBI
