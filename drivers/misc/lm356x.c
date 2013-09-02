@@ -1011,7 +1011,7 @@ static ssize_t attr_torch_current_show(struct device *dev,
 {
 	struct lm356x_drv_data *data = dev_get_drvdata(dev);
 	int result;
-	unsigned long torch_current;
+	unsigned long torch_current = 0;
 
 	result = lm356x_get_torch_current(data, &torch_current);
 
@@ -1091,7 +1091,7 @@ static ssize_t attr_flash_current_show(struct device *dev,
 	struct lm356x_drv_data *data = dev_get_drvdata(dev);
 
 	int result;
-	unsigned long flash_current;
+	unsigned long flash_current = 0;
 
 	result = lm356x_get_flash_current(data, &flash_current);
 
