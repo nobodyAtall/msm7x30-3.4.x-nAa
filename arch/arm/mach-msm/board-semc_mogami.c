@@ -79,7 +79,6 @@
 #include <mach/msm_serial_hs.h>
 #include <mach/qdsp5v2/mi2s.h>
 #include <mach/qdsp5v2/audio_dev_ctl.h>
-#include <mach/sdio_al.h>
 #include "smd_private.h"
 
 #include "board-msm7x30-regulator.h"
@@ -3826,48 +3825,6 @@ static struct platform_device msm_adc_device = {
 	},
 };
 
-#ifdef CONFIG_MSM_SDIO_AL
-static struct msm_gpio mdm2ap_status = {
-	GPIO_CFG(77, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	"mdm2ap_status"
-};
-
-
-static int configure_mdm2ap_status(int on)
-{
-	if (on)
-		return msm_gpios_request_enable(&mdm2ap_status, 1);
-	else {
-		msm_gpios_disable_free(&mdm2ap_status, 1);
-		return 0;
-	}
-}
-
-static int get_mdm2ap_status(void)
-{
-	return gpio_get_value(GPIO_PIN(mdm2ap_status.gpio_cfg));
-}
-
-static struct sdio_al_platform_data sdio_al_pdata = {
-	.config_mdm2ap_status = configure_mdm2ap_status,
-	.get_mdm2ap_status = get_mdm2ap_status,
-	.allow_sdioc_version_major_2 = 1,
-	.peer_sdioc_version_minor = 0x0001,
-	.peer_sdioc_version_major = 0x0003,
-	.peer_sdioc_boot_version_minor = 0x0001,
-	.peer_sdioc_boot_version_major = 0x0003,
-};
-
-struct platform_device msm_device_sdio_al = {
-	.name = "msm_sdio_al",
-	.id = -1,
-	.dev		= {
-		.platform_data	= &sdio_al_pdata,
-	},
-};
-
-#endif /* CONFIG_MSM_SDIO_AL */
-
 static struct platform_device *devices[] __initdata = {
 #if defined(CONFIG_SERIAL_MSM) || defined(CONFIG_MSM_SERIAL_DEBUGGER)
 	&msm_device_uart3,
@@ -3973,9 +3930,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_BT
 	&mogami_device_rfkill,
-#endif
-#ifdef CONFIG_MSM_SDIO_AL
-	&msm_device_sdio_al,
 #endif
 
 #if defined(CONFIG_CRYPTO_DEV_QCRYPTO) || \
