@@ -1051,13 +1051,13 @@ void msm_hac_amp_off(void)
 void msm_snddev_poweramp_on(void)
 {
 	gpio_set_value(82, 1);	/* enable spkr poweramp */
-	pr_info("%s: power on amplifier\n", __func__);
+	pr_debug("%s: power on amplifier\n", __func__);
 }
 
 void msm_snddev_poweramp_off(void)
 {
 	gpio_set_value(82, 0);	/* disable spkr poweramp */
-	pr_info("%s: power off amplifier\n", __func__);
+	pr_debug("%s: power off amplifier\n", __func__);
 }
 
 static struct regulator_bulk_data snddev_regs[] = {
