@@ -378,9 +378,8 @@ int mdp4_mddi_pipe_commit(void)
 
 static void mdp4_overlay_update_mddi(struct msm_fb_data_type *mfd);
 
-void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
+void mdp4_mddi_vsync_ctrl(int enable)
 {
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	struct vsycn_ctrl *vctrl;
 	unsigned long flags;
 	int clk_set_on = 0;
@@ -410,7 +409,6 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
 		vctrl->clk_control = 0;
 		vctrl->expire_tick = 0;
-		vctrl->uevent = 1;
 		vctrl->new_update = 1;
 		if (clk_set_on) {
 			vsync_irq_enable(INTR_PRIMARY_RDPTR,
@@ -418,7 +416,7 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 		}
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 
-		mdp4_overlay_update_mddi(mfd);
+		mdp4_overlay_update_mddi(vctrl->mfd);
 	} else {
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
 		vctrl->clk_control = 1;
@@ -428,6 +426,42 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
 	}
 	mutex_unlock(&vctrl->update_lock);
+}
+
+ssize_t mdp4_mddi_vsync_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int cndx;
+	struct vsycn_ctrl *vctrl;
+	ssize_t ret = 0;
+	unsigned long flags;
+	u64 vsync_tick;
+
+	cndx = 0;
+	vctrl = &vsync_ctrl_db[0];
+
+	if (atomic_read(&vctrl->suspend) > 0)
+		return 0;
+
+	spin_lock_irqsave(&vctrl->spin_lock, flags);
+	if (vctrl->wait_vsync_cnt == 0)
+		INIT_COMPLETION(vctrl->vsync_comp);
+	vctrl->wait_vsync_cnt++;
+	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+	ret = wait_for_completion_interruptible_timeout(&vctrl->vsync_comp,
+		msecs_to_jiffies(VSYNC_PERIOD * 4));
+	if (ret <= 0) {
+		vctrl->wait_vsync_cnt = 0;
+		vctrl->vsync_time = ktime_get();
+	}
+
+	spin_lock_irqsave(&vctrl->spin_lock, flags);
+	vsync_tick = ktime_to_ns(vctrl->vsync_time);
+	spin_unlock_irqrestore(&vctrl->spin_lock, flags);
+
+	ret = snprintf(buf, PAGE_SIZE, "VSYNC=%llu", vsync_tick);
+	buf[strlen(buf) + 1] = '\0';
+	return ret;
 }
 
 void mdp4_mddi_wait4vsync(int cndx, long long *vtime)
@@ -1036,7 +1070,7 @@ void mdp4_mddi_overlay(struct msm_fb_data_type *mfd)
 		//pr_err("%s: mdp clocks disabled\n", __func__);
 		mutex_unlock(&vctrl->update_lock);
 		//#nAa: hack to get things going
-		mdp4_mddi_vsync_ctrl(mfd->fbi, 1);
+		mdp4_mddi_vsync_ctrl(1);
 		//return;
 
 	}

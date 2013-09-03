@@ -2527,6 +2527,9 @@ static int mdp_probe(struct platform_device *pdev)
 #if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_MDDI)
 			mfd->dma_fnc = mdp4_mddi_overlay;
 			mfd->cursor_update = mdp4_mddi_overlay_cursor;
+            mfd->vsync_init = mdp4_mddi_vsync_init;
+            mfd->vsync_ctrl = mdp4_mddi_vsync_ctrl;
+            mfd->vsync_show = mdp4_mddi_vsync_show;
 #else
 			mfd->dma_fnc = mdp_dma2_update;
 #endif
