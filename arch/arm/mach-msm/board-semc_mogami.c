@@ -568,11 +568,6 @@ static struct pm8xxx_vibrator_platform_data pm8xxx_vibrator_pdata = {
 	.max_timeout_ms		= 15000,
 };
 
-static struct pm8xxx_rtc_platform_data pm8xxx_rtc_pdata = {
-	.rtc_write_enable	= true,
-	.rtc_alarm_powerup	= false,
-};
-
 static struct pm8xxx_misc_platform_data pm8xxx_misc_pdata = {
 	.priority		= 0,
 };
@@ -582,7 +577,6 @@ static struct pm8058_platform_data pm8058_7x30_data = {
 	.gpio_pdata		= &pm8xxx_gpio_pdata,
 	.mpp_pdata		= &pm8xxx_mpp_pdata,
 	.vibrator_pdata		= &pm8xxx_vibrator_pdata,
-	.rtc_pdata		= &pm8xxx_rtc_pdata,
 	.misc_pdata		= &pm8xxx_misc_pdata,
 };
 
