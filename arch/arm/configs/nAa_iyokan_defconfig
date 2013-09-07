@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm 3.4.55 Kernel Configuration
+# Linux/arm 3.4.60 Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_ARM_HAS_SG_CHAIN=y
@@ -1460,7 +1460,17 @@ CONFIG_MSM_RMNET=y
 # CONFIG_NET_VENDOR_STMICRO is not set
 # CONFIG_PHYLIB is not set
 # CONFIG_MICREL_KS8995MA is not set
-# CONFIG_PPP is not set
+CONFIG_PPP=y
+CONFIG_PPP_BSDCOMP=y
+CONFIG_PPP_DEFLATE=y
+# CONFIG_PPP_FILTER is not set
+CONFIG_PPP_MPPE=y
+# CONFIG_PPP_MULTILINK is not set
+# CONFIG_PPPOE is not set
+CONFIG_PPPOLAC=y
+CONFIG_PPPOPNS=y
+CONFIG_PPP_ASYNC=y
+# CONFIG_PPP_SYNC_TTY is not set
 CONFIG_SLIP=y
 CONFIG_SLHC=y
 CONFIG_SLIP_COMPRESSED=y
