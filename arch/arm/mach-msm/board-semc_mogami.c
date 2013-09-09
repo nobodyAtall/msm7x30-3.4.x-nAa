@@ -4322,6 +4322,33 @@ static struct mmc_platform_data msm7x30_sdc3_data = {
 	.msmsdcc_fmax	= 49152000,
 	.nonremovable	= 1,
 };
+
+static unsigned wifi_init_gpio_en[] = {
+	GPIO_CFG(57, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),  /* WLAN EN */
+};
+
+static void wlan_init_seq(void)
+{
+	int rc;
+	rc = gpio_tlmm_config(wifi_init_gpio_en[0], GPIO_CFG_ENABLE);
+
+	/* If we fail here print error and continue, this will result in */
+	/* higher power consumption but if gpio_tlmm_config() really fails */
+	/* than we have far bigger issues as this is the base call for */
+	/* config of gpio's */
+	if (rc)
+		printk(KERN_ERR
+		        "%s: gpio_tlmm_config(%#x)=%d\n",
+		        __func__, wifi_init_gpio_en[0], rc);
+
+	/* Set device in low VIO-leakage state according to spec */
+	/* This is done by toggle WLAN_EN OFF/ON/OFF (pulse width > 10ms) */
+	gpio_set_value(57, 0);
+	mdelay(1);
+	gpio_set_value(57, 1);
+	mdelay(12);
+	gpio_set_value(57, 0);
+}
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
@@ -4514,6 +4541,8 @@ static void __init msm7x30_init(void)
 	uint32_t soc_version = 0;
 
 	soc_version = socinfo_get_version();
+
+	wlan_init_seq();
 
 	msm_clock_init(&msm7x30_clock_init_data);
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
