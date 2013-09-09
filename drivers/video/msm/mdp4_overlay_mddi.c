@@ -57,7 +57,6 @@ static struct vsycn_ctrl {
 	int blt_change;
 	int blt_free;
 	int blt_end;
-	int uevent;
 	struct mutex update_lock;
 	struct completion ov_comp;
 	struct completion dmap_comp;
@@ -71,7 +70,6 @@ static struct vsycn_ctrl {
 	int clk_control;
 	int new_update;
 	ktime_t vsync_time;
-	struct work_struct vsync_work;
 	struct work_struct clk_work;
 } vsync_ctrl_db[MAX_CONTROLLER];
 
@@ -410,7 +408,6 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
 		vctrl->clk_control = 0;
 		vctrl->expire_tick = 0;
-		vctrl->uevent = 1;
 		vctrl->new_update = 1;
 		if (clk_set_on) {
 			vsync_irq_enable(INTR_PRIMARY_RDPTR,
@@ -422,7 +419,6 @@ void mdp4_mddi_vsync_ctrl(struct fb_info *info, int enable)
 	} else {
 		spin_lock_irqsave(&vctrl->spin_lock, flags);
 		vctrl->clk_control = 1;
-		vctrl->uevent = 0;
 		if (vctrl->clk_enabled)
 			vctrl->expire_tick = VSYNC_EXPIRE_TICK;
 		spin_unlock_irqrestore(&vctrl->spin_lock, flags);
@@ -509,8 +505,6 @@ static void primary_rdptr_isr(int cndx)
 	vctrl->vsync_time = ktime_get();
 
 	spin_lock(&vctrl->spin_lock);
-	if (vctrl->uevent)
-		schedule_work(&vctrl->vsync_work);
 
 	if (vctrl->wait_vsync_cnt) {
 		complete(&vctrl->vsync_comp);
@@ -633,21 +627,6 @@ static void clk_ctrl_work(struct work_struct *work)
 	mutex_unlock(&vctrl->update_lock);
 }
 
-static void send_vsync_work(struct work_struct *work)
-{
-	struct vsycn_ctrl *vctrl =
-		container_of(work, typeof(*vctrl), vsync_work);
-	char buf[64];
-	char *envp[2];
-
-	snprintf(buf, sizeof(buf), "VSYNC=%llu",
-			ktime_to_ns(vctrl->vsync_time));
-	envp[0] = buf;
-	envp[1] = NULL;
-	kobject_uevent_env(&vctrl->dev->kobj, KOBJ_CHANGE, envp);
-}
-
-
 void mdp4_mddi_rdptr_init(int cndx)
 {
 	struct vsycn_ctrl *vctrl;
@@ -668,7 +647,6 @@ void mdp4_mddi_rdptr_init(int cndx)
 	init_completion(&vctrl->dmap_comp);
 	init_completion(&vctrl->vsync_comp);
 	spin_lock_init(&vctrl->spin_lock);
-	INIT_WORK(&vctrl->vsync_work, send_vsync_work);
 	INIT_WORK(&vctrl->clk_work, clk_ctrl_work);
 }
 
@@ -971,7 +949,6 @@ int mdp4_mddi_off(struct platform_device *pdev)
 	vctrl->vsync_enabled = 0;
 	vctrl->clk_control = 0;
 	vctrl->expire_tick = 0;
-	vctrl->uevent = 0;
 
 	vsync_irq_disable(INTR_PRIMARY_RDPTR, MDP_PRIM_RDPTR_TERM);
 
