@@ -44,7 +44,6 @@
 #include <mach/memory.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_hsusb.h>
-#include <mach/rpc_hsusb.h>
 #include <mach/msm_spi.h>
 #include <mach/qdsp5v2/msm_lpa.h>
 #include <mach/dma.h>
@@ -1690,6 +1689,59 @@ static struct platform_device msm_device_adspdec = {
 
 
 #ifdef CONFIG_USB_G_ANDROID
+#define PID_MAGIC_ID		0x71432909
+#define SERIAL_NUM_MAGIC_ID	0x61945374
+#define SERIAL_NUMBER_LENGTH	127
+#define DLOAD_USB_BASE_ADD	0x2A05F0C8
+
+struct magic_num_struct {
+	uint32_t pid;
+	uint32_t serial_num;
+};
+
+struct dload_struct {
+	uint32_t	reserved1;
+	uint32_t	reserved2;
+	uint32_t	reserved3;
+	uint16_t	reserved4;
+	uint16_t	pid;
+	char		serial_number[SERIAL_NUMBER_LENGTH];
+	uint16_t	reserved5;
+	struct magic_num_struct
+			magic_struct;
+};
+
+static int usb_diag_update_pid_and_serial_num(uint32_t pid, const char *snum)
+{
+	struct dload_struct __iomem *dload = 0;
+
+	dload = ioremap(DLOAD_USB_BASE_ADD, sizeof(*dload));
+	if (!dload) {
+		pr_err("%s: cannot remap I/O memory region: %08x\n",
+					__func__, DLOAD_USB_BASE_ADD);
+		return -ENXIO;
+	}
+
+	pr_debug("%s: dload:%p pid:%x serial_num:%s\n",
+				__func__, dload, pid, snum);
+	/* update pid */
+	dload->magic_struct.pid = PID_MAGIC_ID;
+	dload->pid = pid;
+
+	/* update serial number */
+	dload->magic_struct.serial_num = 0;
+	if (!snum)
+		return 0;
+
+	dload->magic_struct.serial_num = SERIAL_NUM_MAGIC_ID;
+	strncpy(dload->serial_number, snum, SERIAL_NUMBER_LENGTH);
+	dload->serial_number[SERIAL_NUMBER_LENGTH - 1] = '\0';
+
+	iounmap(dload);
+
+	return 0;
+}
+
 static struct android_usb_platform_data android_usb_pdata = {
 	.update_pid_and_serial_num = usb_diag_update_pid_and_serial_num,
 };
@@ -3190,16 +3242,6 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 #endif
 
 #ifdef CONFIG_USB_MSM_OTG_72K
-static int hsusb_rpc_connect(int connect)
-{
-	if (connect)
-		return msm_hsusb_rpc_connect();
-	else
-		return msm_hsusb_rpc_close();
-}
-#endif
-
-#ifdef CONFIG_USB_MSM_OTG_72K
 static struct regulator *vreg_3p3;
 static int msm_hsusb_ldo_init(int init)
 {
@@ -3265,8 +3307,6 @@ static int msm_hsusb_ldo_set_voltage(int mV)
 static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init);
 #endif
 static struct msm_otg_platform_data msm_otg_pdata = {
-	.rpc_connect	= hsusb_rpc_connect,
-
 #ifndef CONFIG_USB_EHCI_MSM_72K
 	.pmic_vbus_notif_init         = msm_hsusb_pmic_notif_init,
 #else
