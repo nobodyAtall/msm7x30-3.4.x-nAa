@@ -1,11 +1,14 @@
-/*
+/* include/linux/bma250.h
+ *
  * Bosh BMA 250. Digital, triaxial acceleration sensor.
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
+ * Copyright (C) 2012 Sony Mobile Communications AB.
  *
  * Author: Marcus Bauer <marcus.bauer@sonyericsson.com>
  *
  * NOTE: This file has been created by Sony Ericsson Mobile Communications AB.
+ *       This file has been modified by Sony Mobile Communications AB.
  *       This file contains code from: bma150.c
  *       The orginal bma150.c header is included below:
  *
@@ -75,8 +78,6 @@
 #define BMA250_MODE_SLEEP_500MS          0x5C
 #define BMA250_MODE_SLEEP_1000MS         0x5E
 #define BMA250_MODE_SUSPEND              0x80
-#define BMA250_MODE_LOWPOWER             0x40
-
 
 #define BMA250_RESET_REG                 0x14
 #define BMA250_RESET                     0xB6
@@ -121,20 +122,17 @@
 
 #define BMA250_INT_CTRL_REG              0x21
 #define BMA250_INT_RESET                 0x80
-#define BMA250_INT_MODE_LATCHED          0x0F
 
 #define BMA250_SLOPE_DUR                 0x27
 #define BMA250_SLOPE_THR                 0x28
 
+#define BMA250_INTERRUPT_RESOLUTION   0
+#define BMA250_TIMER_RESOLUTION       1
+#define BMA250_INVALID   0xFFFFFFFF
+
 struct registers {
 	int range;
 	int bw_sel;
-	int int_mode_ctrl;
-	int int_enable1;
-	int int_enable2;
-	int int_pin1;
-	int int_new_data;
-	int int_pin2;
 };
 
 /**
@@ -148,7 +146,10 @@ struct registers {
 struct bma250_platform_data {
 	int (*setup)(struct device *);
 	void (*teardown)(struct device *);
+	void (*hw_config)(int enable);
 	struct registers *reg;
+	void (*power_mode)(int enable);
+	unsigned int rate;
 };
 
 #endif /* LINUX_BMA250_MODULE_H */
