@@ -2736,13 +2736,15 @@ static struct bma250_platform_data bma250_platform_data = {
 #ifdef CONFIG_INPUT_APDS9702
 #define APDS9702_DOUT_GPIO   88
 #ifdef CONFIG_MSM_UNDERVOLT_PROXIMITY
-#define APDS9702_VDD_VOLTAGE 2400
+#define APDS9702_VDD_VOLTAGE 2400000
 #else
-#define APDS9702_VDD_VOLTAGE 2900
+#define APDS9702_VDD_VOLTAGE 2900000
 #endif
 #define APDS9702_WAIT_TIME   5000
 
-static int apds9702_gpio_setup(struct device *dev, int request)
+static struct regulator *vreg_apds9702_vdd;
+
+static int apds9702_gpio_setup(int request)
 {
 	if (request) {
 		return gpio_request(APDS9702_DOUT_GPIO, "apds9702_dout");
@@ -2752,21 +2754,57 @@ static int apds9702_gpio_setup(struct device *dev, int request)
 	}
 }
 
-
-static void apds9702_power_mode(struct device *dev, int enable)
+static void apds9702_hw_config(int enable)
 {
-	enable = !!enable;
-	if (enable)
-		vreg_helper_on("wlan", APDS9702_VDD_VOLTAGE);
-	else
-		vreg_helper_off("wlan");
+	return;
+}
+
+static void apds9702_power_mode(int enable)
+{
+	int rc = 0;
+
+	vreg_apds9702_vdd = regulator_get(NULL, "wlan");
+	if (IS_ERR(vreg_apds9702_vdd)) {
+		pr_err("%s: get vdd failed\n", __func__);
+		return;
+	}
+
+	if (enable) {
+		rc = regulator_set_voltage(vreg_apds9702_vdd, APDS9702_VDD_VOLTAGE, APDS9702_VDD_VOLTAGE);
+		if (rc) {
+			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
+			goto vreg_configure_err;
+		}
+		rc = regulator_enable(vreg_apds9702_vdd);
+		if (rc) {
+			pr_err("%s: enable vdd failed, rc=%d\n", __func__, rc);
+			goto vreg_configure_err;
+		}
+	} else {
+		rc = regulator_set_voltage(vreg_apds9702_vdd, 0, APDS9702_VDD_VOLTAGE);
+		if (rc) {
+			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
+			goto vreg_configure_err;
+		}
+		rc = regulator_disable(vreg_apds9702_vdd);
+		if (rc)
+			pr_err("%s: disable vdd failed, rc=%d\n", __func__, rc);
+	}
+
 	usleep(APDS9702_WAIT_TIME);
+
+	return;
+
+vreg_configure_err:
+	regulator_put(vreg_apds9702_vdd);
+	return;
 }
 
 static struct apds9702_platform_data apds9702_pdata = {
 	.gpio_dout      = APDS9702_DOUT_GPIO,
 	.is_irq_wakeup  = 1,
-	.hw_config      = apds9702_power_mode,
+	.hw_config      = apds9702_hw_config,
+	.power_mode     = apds9702_power_mode,
 	.gpio_setup     = apds9702_gpio_setup,
 	.ctl_reg = {
 		.trg   = 1,
@@ -2856,9 +2894,9 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 #endif
 #ifdef CONFIG_INPUT_APDS9702
 	{
-		/* Config-spec is 8-bit = 0xA8, src-code need 7-bit => 0x54 */
 		I2C_BOARD_INFO(APDS9702_NAME, 0xA8 >> 1),
 		.platform_data = &apds9702_pdata,
+		.type = APDS9702_NAME,
 	},
 #endif
 #ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
