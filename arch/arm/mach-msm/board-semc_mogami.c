@@ -165,7 +165,8 @@
 #define BMA150_GPIO			(51)
 #endif
 #ifdef CONFIG_INPUT_BMA250
-#define BMA250_GPIO			(51)
+#define BMA250_GPIO		51
+#define BMA250_DEFAULT_RATE	50
 #endif
 
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
@@ -2711,25 +2712,28 @@ static void bma250_gpio_teardown(struct device *dev)
 	gpio_free(BMA250_GPIO);
 }
 
+static void bma250_hw_config(int enable)
+{
+	return;
+}
+
+static void bma250_power_mode(int enable)
+{
+	return;
+}
+
 static struct registers bma250_reg_setup = {
 	.range                = BMA250_RANGE_4G,
 	.bw_sel               = BMA250_BW_250HZ,
-	.int_mode_ctrl        = BMA250_MODE_SLEEP_50MS,
-	.int_enable1          = BMA250_INT_SLOPE_Z |
-				BMA250_INT_SLOPE_Y |
-				BMA250_INT_SLOPE_X |
-				BMA250_INT_ORIENT,
-	.int_enable2          = BMA250_INT_NEW_DATA,
-	.int_pin1             = BMA250_INT_PIN1_SLOPE |
-				BMA250_INT_PIN1_ORIENT,
-	.int_new_data         = BMA250_INT_PIN1,
-	.int_pin2             = -1,
 };
 
 static struct bma250_platform_data bma250_platform_data = {
 	.setup                = bma250_gpio_setup,
 	.teardown             = bma250_gpio_teardown,
+	.hw_config            = bma250_hw_config,
 	.reg                  = &bma250_reg_setup,
+	.power_mode           = bma250_power_mode,
+	.rate                 = BMA250_DEFAULT_RATE,
 };
 #endif
 
