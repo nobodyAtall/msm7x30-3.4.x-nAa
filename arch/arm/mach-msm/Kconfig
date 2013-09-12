@@ -673,100 +673,89 @@ config MACH_MSM7X30_FLUID
        help
          Support for the Qualcomm MSM7x30 FLUID eval board.
 
-config MACH_SEMC_MOGAMI
-       depends on ARCH_MSM7X30
-       depends on !MSM_STACKED_MEMORY
-       default y
-       bool "SonyEricsson Mogami CDB"
-       help
-         Support for the SonyEricsson Mogami CDB (development board).
-
-config MACH_SEMC_ANZU
+config SEMC_PLATFORM
 	depends on ARCH_MSM7X30
 	depends on !MSM_STACKED_MEMORY
+	default n
+	bool "SonyEricsson Platform"
+	help
+	  Support for the SonyEricsson mogami & zeus platforms.
+
+config MACH_SEMC_MOGAMI
+	depends on SEMC_PLATFORM
+	default n
+	bool "SonyEricsson Mogami CDB"
+	help
+	  Support for the SonyEricsson Mogami CDB (development board).
+
+config MACH_SEMC_ANZU
+	depends on SEMC_PLATFORM
 	select FB_MSM_HDPI
 	select SEMC_CAMERA_8MP
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	default n
 	bool "SonyEricsson Anzu"
 	help
 	  Support for the SonyEricsson Anzu devices.
 
 config MACH_SEMC_COCONUT
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
-	select SUPPORT_ALIEN_USB_CHARGER
+	depends on SEMC_PLATFORM
 	default n
 	bool "SonyEricsson Coconut"
 	help
 	  Support for the SonyEricsson Coconut devices.
 
 config MACH_SEMC_HAIDA
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
+	depends on SEMC_PLATFORM
 	select FB_MSM_HDPI
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	default n
 	bool "SonyEricsson Haida"
 	help
 	  Support for the SonyEricsson Haida devices.
 
 config MACH_SEMC_HALLON
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
+	depends on SEMC_PLATFORM
 	select FB_MSM_HDPI
 	select SEMC_CAMERA_8MP
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	default n
 	bool "SonyEricsson Hallon"
 	help
 	  Support for the SonyEricsson Hallon devices.
 
 config MACH_SEMC_IYOKAN
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
+	depends on SEMC_PLATFORM
 	select FB_MSM_HDPI
 	select SEMC_CAMERA_8MP
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	default n
 	bool "SonyEricsson Iyokan"
 	help
 	  Support for the SonyEricsson Iyokan devices.
 
 config MACH_SEMC_MANGO
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
-	select SUPPORT_ALIEN_USB_CHARGER
+	depends on SEMC_PLATFORM
 	default n
 	bool "SonyEricsson Mango"
 	help
 	  Support for the SonyEricsson Mango devices.
 
 config MACH_SEMC_SATSUMA
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	depends on SEMC_PLATFORM
+	default n
 	bool "SonyEricsson Satsuma"
 	help
 	  Support for the SonyEricsson Satsuma devices.
 
 config MACH_SEMC_SMULTRON
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	depends on SEMC_PLATFORM
+	default n
 	bool "SonyEricsson Smultron"
 	help
 	  Support for the SonyEricsson Smultron devices.
 
 config MACH_SEMC_URUSHI
-	depends on ARCH_MSM7X30
-	depends on !MSM_STACKED_MEMORY
+	depends on SEMC_PLATFORM
 	select FB_MSM_HDPI
 	select SEMC_CAMERA_8MP
-	select SUPPORT_ALIEN_USB_CHARGER
-	default y
+	default n
 	bool "SonyEricsson Urushi"
 	help
 	  Support for the SonyEricsson Urushi devices.
