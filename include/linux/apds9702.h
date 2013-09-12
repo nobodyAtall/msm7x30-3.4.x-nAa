@@ -1,4 +1,8 @@
 /*
+ * Partly modified 2012 Sony Mobile Communications AB.
+ */
+
+/*
  * Definitions for apds9702 proximity sensor chip.
  */
 
@@ -6,8 +10,6 @@
 #define __APDS9702_H__
 
 #define APDS9702_NAME "apds9702"
-
-struct device;
 
 struct apds9702_ctl_reg {
 	unsigned int trg:1;
@@ -24,7 +26,8 @@ struct apds9702_platform_data {
 	struct apds9702_ctl_reg ctl_reg;
 	char *phys_dev_path;
 	unsigned int is_irq_wakeup:1;
-	void (*hw_config)(struct device *dev, int enable);
-	int (*gpio_setup)(struct device *dev, int request);
+	void (*hw_config)(int enable);
+	int (*gpio_setup)(int request);
+	void (*power_mode)(int enable);
 };
 #endif
