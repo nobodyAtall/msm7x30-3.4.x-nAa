@@ -1019,7 +1019,6 @@ void msm_snddev_poweramp_off(void)
 }
 
 static struct regulator_bulk_data snddev_regs[] = {
-	{ .supply = "gp4", .min_uV = 2600000, .max_uV = 2600000 },
 	{ .supply = "ncp", .min_uV = 1800000, .max_uV = 1800000 },
 };
 
@@ -1097,12 +1096,12 @@ static struct msm_gpio mi2s_clk_gpios[] = {
 	    "MI2S_SCLK"},
 	{ GPIO_CFG(144, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	    "MI2S_WS"},
-	{ GPIO_CFG(120, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	{ GPIO_CFG(120, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	    "MI2S_MCLK_A"},
 };
 
 static struct msm_gpio mi2s_rx_data_lines_gpios[] = {
-	{ GPIO_CFG(121, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
+	{ GPIO_CFG(121, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	    "MI2S_DATA_SD0_A"},
 	{ GPIO_CFG(122, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
 	    "MI2S_DATA_SD1_A"},
@@ -1939,11 +1938,13 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.type = "bma150"
 	},
 #endif
+#ifdef CONFIG_SENSORS_AKM8975
 	{
 		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x18 >> 1),
 		.irq = MSM_GPIO_TO_INT(AKM8975_GPIO),
 		.platform_data = &akm8975_platform_data,
 	},
+#endif
 };
 
 static struct spi_board_info msm_spi_board_info[] __initdata = {
@@ -2278,7 +2279,6 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.chg_init		 = semc_charger_usb_init,
 #endif
 	.phy_can_powercollapse	 = 1,
-	.chg_drawable_ida	 = USB_IDCHG_MAX,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -2946,7 +2946,7 @@ static void __init msm_device_i2c_2_init(void)
 }
 
 static struct msm_i2c_platform_data qup_i2c_pdata = {
-	.clk_freq = 384000,
+	.clk_freq = 400000,
 	.msm_i2c_config_gpio = qup_i2c_gpio_config,
 };
 
@@ -3031,6 +3031,21 @@ static struct msm_gpio sdc4_cfg_data[] = {
 								"sdc4_dat_0"},
 };
 
+static struct msm_gpio sdc4_sleep_cfg_data[] = {
+	{GPIO_CFG(58, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+								"sdc4_clk"},
+	{GPIO_CFG(59, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+								"sdc4_cmd"},
+	{GPIO_CFG(60, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+								"sdc4_dat_3"},
+	{GPIO_CFG(61, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+								"sdc4_dat_2"},
+	{GPIO_CFG(62, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+								"sdc4_dat_1"},
+	{GPIO_CFG(63, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
+								"sdc4_dat_0"},
+};
+
 static struct sdcc_gpio sdcc_cfg_data[] = {
 	{
 		.cfg_data = NULL,
@@ -3050,7 +3065,7 @@ static struct sdcc_gpio sdcc_cfg_data[] = {
 	{
 		.cfg_data = sdc4_cfg_data,
 		.size = ARRAY_SIZE(sdc4_cfg_data),
-		.sleep_cfg_data = NULL,
+		.sleep_cfg_data = sdc4_sleep_cfg_data,
 	},
 };
 
@@ -3169,7 +3184,7 @@ out:
 static unsigned int msm7x30_sdcc_slot_status(struct device *dev)
 {
 	return (unsigned int)
-		gpio_get_value_cansleep(
+		!gpio_get_value_cansleep(
 			PM8058_GPIO_PM_TO_SYS(PMIC_GPIO_SD_DET - 1));
 }
 #endif
@@ -3463,7 +3478,6 @@ static void __init msm7x30_init(void)
 	soc_version = socinfo_get_version();
 
 	msm_clock_init(&msm7x30_clock_init_data);
-	zeus_detect_product();
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
 	msm7x30_init_uart3();
 #endif
@@ -3513,6 +3527,7 @@ static void __init msm7x30_init(void)
 	msm_fb_add_devices();
 	msm_pm_set_platform_data(msm_pm_data, ARRAY_SIZE(msm_pm_data));
 	BUG_ON(msm_pm_boot_init(&msm_pm_boot_pdata));
+	msm_pm_register_irqs();
 	msm_device_i2c_init();
 	msm_device_i2c_2_init();
 	qup_device_i2c_init();
@@ -3522,6 +3537,7 @@ static void __init msm7x30_init(void)
 	snddev_hsed_voltage_init();
 	aux_pcm_gpio_init();
 #endif
+	zeus_detect_product();
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300
 	cypress_touch_gpio_init();
 #endif /* CONFIG_TOUCHSCREEN_CY8CTMA300 */
