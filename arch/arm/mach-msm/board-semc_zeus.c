@@ -442,11 +442,16 @@ static struct pm8xxx_vibrator_platform_data pm8xxx_vibrator_pdata = {
 	.max_timeout_ms		= 15000,
 };
 
+static struct pm8xxx_misc_platform_data pm8xxx_misc_pdata = {
+	.priority		= 0,
+};
+
 static struct pm8058_platform_data pm8058_7x30_data = {
 	.irq_pdata		= &pm8xxx_irq_pdata,
 	.gpio_pdata		= &pm8xxx_gpio_pdata,
 	.mpp_pdata		= &pm8xxx_mpp_pdata,
 	.vibrator_pdata		= &pm8xxx_vibrator_pdata,
+	.misc_pdata		= &pm8xxx_misc_pdata,
 };
 
 #ifdef CONFIG_MSM_SSBI
