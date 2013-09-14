@@ -389,95 +389,6 @@ static struct platform_device msm_proccomm_regulator_dev = {
 };
 #endif
 
-static int pm8058_pwm_config(struct pwm_device *pwm, int ch, int on)
-{
-	struct pm_gpio pwm_gpio_config = {
-		.direction      = PM_GPIO_DIR_OUT,
-		.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-		.output_value   = 0,
-		.pull           = PM_GPIO_PULL_NO,
-		.vin_sel        = PM8058_GPIO_VIN_S3,
-		.out_strength   = PM_GPIO_STRENGTH_HIGH,
-		.function       = PM_GPIO_FUNC_2,
-	};
-	int	rc = -EINVAL;
-	int	id, mode, max_mA;
-
-	id = mode = max_mA = 0;
-	switch (ch) {
-	case 0:
-	case 1:
-	case 2:
-		if (on) {
-			id = 24 + ch;
-			rc = pm8xxx_gpio_config(PM8058_GPIO_PM_TO_SYS(id - 1),
-							&pwm_gpio_config);
-			if (rc)
-				pr_err("%s: pm8xxx_gpio_config(%d): rc=%d\n",
-				       __func__, id, rc);
-		}
-		break;
-
-	case 3:
-		id = PM_PWM_LED_KPD;
-		mode = PM_PWM_CONF_DTEST3;
-		max_mA = 200;
-		break;
-
-	case 4:
-		id = PM_PWM_LED_0;
-		mode = PM_PWM_CONF_PWM1;
-		max_mA = 40;
-		break;
-
-	case 5:
-		id = PM_PWM_LED_2;
-		mode = PM_PWM_CONF_PWM2;
-		max_mA = 40;
-		break;
-
-	case 6:
-		id = PM_PWM_LED_FLASH;
-		mode = PM_PWM_CONF_DTEST3;
-		max_mA = 200;
-		break;
-
-	default:
-		break;
-	}
-
-	if (ch >= 3 && ch <= 6) {
-		if (!on) {
-			mode = PM_PWM_CONF_NONE;
-			max_mA = 0;
-		}
-		rc = pm8058_pwm_config_led(pwm, id, mode, max_mA);
-		if (rc)
-			pr_err("%s: pm8058_pwm_config_led(ch=%d): rc=%d\n",
-			       __func__, ch, rc);
-	}
-
-	return rc;
-}
-
-static int pm8058_pwm_enable(struct pwm_device *pwm, int ch, int on)
-{
-	int	rc;
-
-	switch (ch) {
-	case 7:
-		rc = pm8058_pwm_set_dtest(pwm, on);
-		if (rc)
-			pr_err("%s: pwm_set_dtest(%d): rc=%d\n",
-			       __func__, on, rc);
-		break;
-	default:
-		rc = -EINVAL;
-		break;
-	}
-	return rc;
-}
-
 static const unsigned int keymap_game[] = {
 	KEY(7, 0, KEY_VOLUMEUP),   /* DBZ2, VOL_UP */
 	KEY(7, 1, KEY_VOLUMEDOWN), /* DBZ2, VOL_DOWN */
@@ -511,11 +422,6 @@ struct pm8xxx_keypad_platform_data *zeus_keypad_data(void)
 	return &surf_keypad_data;
 }
 
-static struct pm8058_pwm_pdata pm8058_pwm_data = {
-	.config         = pm8058_pwm_config,
-	.enable         = pm8058_pwm_enable,
-};
-
 static struct pm8xxx_irq_platform_data pm8xxx_irq_pdata = {
 	.irq_base		= PMIC8058_IRQ_BASE,
 	.devirq			= MSM_GPIO_TO_INT(PMIC_GPIO_INT),
@@ -540,7 +446,6 @@ static struct pm8058_platform_data pm8058_7x30_data = {
 	.irq_pdata		= &pm8xxx_irq_pdata,
 	.gpio_pdata		= &pm8xxx_gpio_pdata,
 	.mpp_pdata		= &pm8xxx_mpp_pdata,
-	.pwm_pdata		= &pm8058_pwm_data,
 	.vibrator_pdata		= &pm8xxx_vibrator_pdata,
 };
 
