@@ -92,6 +92,9 @@
 
 #include <linux/max17040.h>
 #include <mach/semc_battery_data.h>
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+#include <mach/semc_charger_usb.h>
+#endif
 
 #ifdef CONFIG_SENSORS_AKM8975
 #include <linux/i2c/akm8975.h>
@@ -1753,14 +1756,20 @@ static void cypress_touch_gpio_init(void)
 }
 #endif
 
-/* Driver(s) to be notified upon change in bdata */
-static char *bdata_supplied_to[] = {
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+static char *semc_chg_usb_supplied_to[] = {
+	MAX17040_NAME,
+};
+#endif
+
+#ifdef CONFIG_BATTERY_ZEUS
+static char *semc_bdata_supplied_to[] = {
 	MAX17040_NAME,
 };
 
 static struct semc_battery_platform_data semc_battery_platform_data = {
-	.supplied_to = bdata_supplied_to,
-	.num_supplicants = ARRAY_SIZE(bdata_supplied_to),
+	.supplied_to = semc_bdata_supplied_to,
+	.num_supplicants = ARRAY_SIZE(semc_bdata_supplied_to),
 };
 
 static struct platform_device bdata_driver = {
@@ -1805,11 +1814,7 @@ static struct max17040_platform_data max17040_platform_data = {
 	.chg_max_temp = 550,
 	.chg_min_temp = 50,
 };
-
-/* Driver(s) to be notified upon change in USB */
-static char *hsusb_chg_supplied_to[] = {
-	MAX17040_NAME,
-};
+#endif
 
 #ifdef CONFIG_SENSORS_AKM8975
 static struct msm_gpio akm8975_gpio_config_data[] = {
@@ -1844,10 +1849,12 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.platform_data = &as3676_platform_data,
 	},
 #endif
+#ifdef CONFIG_BATTERY_ZEUS
 	{
 		I2C_BOARD_INFO(MAX17040_NAME, 0x6C >> 1),
 		.platform_data = &max17040_platform_data,
 	},
+#endif
 #ifdef CONFIG_INPUT_BMA150_NG
 	{
 		I2C_BOARD_INFO("bma150", 0x70 >> 1),
@@ -2198,12 +2205,16 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.cdr_autoreset		 = CDR_AUTO_RESET_DISABLE,
 	.drv_ampl		 = HS_DRV_AMPLITUDE_DEFAULT,
 	.se1_gating		 = SE1_GATING_DISABLE,
-	.chg_vbus_draw		 = hsusb_chg_vbus_draw,
-	.chg_connected		 = hsusb_chg_connected,
-	.chg_init		 = hsusb_chg_init,
 	.ldo_enable		 = msm_hsusb_ldo_enable,
 	.ldo_init		 = msm_hsusb_ldo_init,
 	.ldo_set_voltage	 = msm_hsusb_ldo_set_voltage,
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+	.chg_vbus_draw		 = semc_charger_usb_vbus_draw,
+	.chg_connected		 = semc_charger_usb_connected,
+	.chg_init		 = semc_charger_usb_init,
+#endif
+	.phy_can_powercollapse	 = 1,
+	.chg_drawable_ida	 = USB_IDCHG_MAX,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -3336,9 +3347,6 @@ static void __init zeus_temp_fixups(void)
 	vreg_helper_off("gp5");	/* L23 */
 	vreg_helper_on("wlan", 1800);	/* L13: touchpad VDIO */
 	vreg_helper_on("gp10", 2800);	/* L16: touchpad */
-
-	/* This should be moved to the driver instead */
-	cypress_touch_gpio_init();
 }
 
 static void __init msm7x30_init_nand(void)
@@ -3448,8 +3456,6 @@ static void __init msm7x30_init(void)
 		pr_debug("%s: SOC Version:2.(1 or more)\n", __func__);
 		msm_otg_pdata.ldo_set_voltage = 0;
 	}
-	hsusb_chg_set_supplicants(hsusb_chg_supplied_to,
-				  ARRAY_SIZE(hsusb_chg_supplied_to));
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =
@@ -3471,6 +3477,10 @@ static void __init msm7x30_init(void)
 			     msm_num_footswitch_devices);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 	zeus_temp_fixups();
+#ifdef CONFIG_SEMC_CHARGER_USB_ARCH
+	semc_chg_usb_set_supplicants(semc_chg_usb_supplied_to,
+				  ARRAY_SIZE(semc_chg_usb_supplied_to));
+#endif
 #ifdef CONFIG_USB_EHCI_MSM_72K
 	msm_add_host(0, &msm_usb_host_pdata);
 #endif
@@ -3493,6 +3503,9 @@ static void __init msm7x30_init(void)
 	snddev_hsed_voltage_init();
 	aux_pcm_gpio_init();
 #endif
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300
+	cypress_touch_gpio_init();
+#endif /* CONFIG_TOUCHSCREEN_CY8CTMA300 */
 
 	i2c_register_board_info(0, msm_i2c_board_info,
 			ARRAY_SIZE(msm_i2c_board_info));
