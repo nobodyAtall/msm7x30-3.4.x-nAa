@@ -2356,11 +2356,6 @@ config CRADLE_SUPPORT
 	  Provides support for docking cradle. Depends on simple remote
 	  HW specific driver.
 
-config USE_PMIC_CHARGING_ON_AMSS
-	bool "Charging functionality on PMIC on AMSS"
-	depends on ARCH_MSM7X30
-	default n
-
 config SEMC_BATTERY_SHOW_HEALTH
 	bool "Enable battery health support"
 	depends on BATTERY_SEMC_ARCH
