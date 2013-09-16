@@ -82,7 +82,7 @@
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
 
-#include "board-semc_mogami-gpio.h"
+#include "gpio-semc.h"
 #include "keypad-semc.h"
 #include "board-semc_mogami-touch.h"
 

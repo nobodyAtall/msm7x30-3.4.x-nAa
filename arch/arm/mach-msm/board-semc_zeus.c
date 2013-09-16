@@ -83,6 +83,7 @@
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
 
+#include "gpio-semc.h"
 #include "keypad-semc.h"
 
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
@@ -2088,23 +2089,16 @@ static struct platform_device qsd_device_spi = {
 	.resource	= qsd_spi_resources,
 };
 
-static struct msm_gpio qsd_spi_gpio_config_data[] = {
-	{ GPIO_CFG(45, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_6MA), "spi_clk" },
-	{ GPIO_CFG(46, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_6MA), "spi_cs0" },
-	{ GPIO_CFG(47, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_6MA), "spi_mosi" },
-	{ GPIO_CFG(48, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA), "spi_miso" },
-};
-
 static int msm_qsd_spi_gpio_config(void)
 {
 	return msm_gpios_request_enable(qsd_spi_gpio_config_data,
-		ARRAY_SIZE(qsd_spi_gpio_config_data));
+					qsd_spi_gpio_config_data_size);
 }
 
 static void msm_qsd_spi_gpio_release(void)
 {
 	msm_gpios_disable_free(qsd_spi_gpio_config_data,
-		ARRAY_SIZE(qsd_spi_gpio_config_data));
+			       qsd_spi_gpio_config_data_size);
 }
 
 static struct msm_spi_platform_data qsd_spi_pdata = {
@@ -2832,25 +2826,6 @@ static struct platform_device *devices[] __initdata = {
 	&msm_adsp_device,
 };
 
-static struct msm_gpio msm_i2c_gpios_hw[] = {
-	{ GPIO_CFG(70, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_scl" },
-	{ GPIO_CFG(71, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_sda" },
-};
-
-static struct msm_gpio msm_i2c_gpios_io[] = {
-	{ GPIO_CFG(70, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_scl" },
-	{ GPIO_CFG(71, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "i2c_sda" },
-};
-
-static struct msm_gpio qup_i2c_gpios_io[] = {
-	{ GPIO_CFG(16, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_scl" },
-	{ GPIO_CFG(17, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_sda" },
-};
-static struct msm_gpio qup_i2c_gpios_hw[] = {
-	{ GPIO_CFG(16, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_scl" },
-	{ GPIO_CFG(17, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA), "qup_sda" },
-};
-
 static void
 msm_i2c_gpio_config(int adap_id, int config_type)
 {
@@ -2896,7 +2871,7 @@ static struct msm_i2c_platform_data msm_i2c_pdata = {
 
 static void __init msm_device_i2c_init(void)
 {
-	if (msm_gpios_request(msm_i2c_gpios_hw, ARRAY_SIZE(msm_i2c_gpios_hw)))
+	if (msm_gpios_request(msm_i2c_gpios_hw, msm_i2c_gpios_hw_size))
 		pr_err("failed to request I2C gpios\n");
 
 	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
@@ -2921,7 +2896,7 @@ static struct msm_i2c_platform_data qup_i2c_pdata = {
 
 static void __init qup_device_i2c_init(void)
 {
-	if (msm_gpios_request(qup_i2c_gpios_hw, ARRAY_SIZE(qup_i2c_gpios_hw)))
+	if (msm_gpios_request(qup_i2c_gpios_hw, qup_i2c_gpios_hw_size))
 		pr_err("failed to request I2C gpios\n");
 
 	qup_device_i2c.dev.platform_data = &qup_i2c_pdata;
