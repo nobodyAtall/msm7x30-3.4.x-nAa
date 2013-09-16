@@ -104,10 +104,6 @@
 #include <mach/semc_charger_usb.h>
 #endif
 
-#ifdef CONFIG_MOGAMI_SLIDER
-#include <linux/gpio_event.h>
-#endif
-
 #ifdef CONFIG_SENSORS_AKM8975
 #include <linux/i2c/akm8975.h>
 #endif
@@ -349,40 +345,6 @@ static void __init hw_id_class_init(void)
 		class_unregister(&hwid_class);
 	}
 }
-
-#ifdef CONFIG_MOGAMI_SLIDER
-
-static const struct gpio_event_direct_entry slider_mogami_gpio_map[] = {
-	{180, SW_LID},
-};
-
-static struct gpio_event_input_info slider_gpio_info = {
-	.info.func = gpio_event_input_func,
-	.flags = 0, /* GPIO event active low*/
-	.type = EV_SW,
-	.keymap = slider_mogami_gpio_map,
-	.keymap_size = ARRAY_SIZE(slider_mogami_gpio_map),
-};
-
-static struct gpio_event_info *slider_info[] = {
-	&slider_gpio_info.info,
-};
-
-static struct gpio_event_platform_data slider_data = {
-	.name		= "slider-mogami",
-	.info		= slider_info,
-	.info_count	= ARRAY_SIZE(slider_info),
-};
-
-struct platform_device slider_device_mogami = {
-	.name	= GPIO_EVENT_DEV_NAME,
-	.id	= -1,
-	.dev	= {
-		.platform_data	= &slider_data,
-	},
-};
-
-#endif /* CONFIG_MOGAMI_SLIDER */
 
 static struct input_dev *input_dev_pwr_key = NULL;
 static void msm_pmic_pwr_key_rpc_callback(uint32_t key, uint32_t event)
@@ -3703,9 +3665,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #if defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
 	&mddi_auo_hvga_display_device,
-#endif
-#ifdef CONFIG_MOGAMI_SLIDER
-	&slider_device_mogami,
 #endif
 #ifdef CONFIG_BT
 	&mogami_device_rfkill,

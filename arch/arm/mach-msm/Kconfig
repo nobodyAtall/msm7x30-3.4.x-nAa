@@ -1895,13 +1895,6 @@ config SURF_FFA_GPIO_KEYPAD
 	help
 	  Select if the GPIO keypad is attached.
 
-config MOGAMI_SLIDER
-	bool "Mogami slider"
-	depends on INPUT_GPIO = "y"
-	default n
-	help
-	  Select if GPIO slider switch is attached.
-
 config MSM_SLEEP_TIME_OVERRIDE
 	bool "Allow overriding suspend/sleep time with PM module parameter"
 	default y

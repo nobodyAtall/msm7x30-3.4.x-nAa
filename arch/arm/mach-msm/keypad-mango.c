@@ -11,6 +11,9 @@
 
 #include <linux/mfd/pmic8058.h>
 #include "keypad-semc.h"
+/* mango GPIO slider - start */
+#include <linux/gpio_event.h>
+/* mango GPIO slider - end */
 
 static const unsigned int pm8xxx_keymap[] = {
 	KEY(0, 1, KEY_CAMERA_FOCUS),        /* camera AF */
@@ -87,3 +90,51 @@ struct pm8xxx_keypad_platform_data pm8xxx_keypad_data = {
 	.wakeup			= 1,
 	.keymap_data		= &pm8xxx_keymap_data,
 };
+
+/* mango GPIO slider - start */
+#define SLIDE_CLOSED_N_GPIO	180
+
+static struct gpio_event_direct_entry gpio_switch_map[] = {
+	{SLIDE_CLOSED_N_GPIO, SW_LID},
+};
+
+static struct gpio_event_input_info gpio_switch_info = {
+	.info.func = gpio_event_input_func,
+	.flags = 0,
+	.type = EV_SW,
+	.keymap = gpio_switch_map,
+	.keymap_size = ARRAY_SIZE(gpio_switch_map),
+	.info.no_suspend = true,
+};
+
+static struct gpio_event_info *slider_info[] = {
+	&gpio_switch_info.info,
+};
+
+static struct gpio_event_platform_data gpio_slider_data = {
+	.name		= "gpio-slider",
+	.info		= slider_info,
+	.info_count	= ARRAY_SIZE(slider_info),
+};
+
+struct platform_device gpio_slider_device = {
+	.name	= GPIO_EVENT_DEV_NAME,
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &gpio_slider_data,
+	},
+};
+
+static int __init gpio_slider_device_init(void)
+{
+	return platform_device_register(&gpio_slider_device);
+}
+
+static void __exit gpio_slider_device_exit(void)
+{
+	platform_device_unregister(&gpio_slider_device);
+}
+
+module_init(gpio_slider_device_init);
+module_exit(gpio_slider_device_exit);
+/* mango GPIO slider - end */
