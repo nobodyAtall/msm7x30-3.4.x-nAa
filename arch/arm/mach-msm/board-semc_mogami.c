@@ -15,7 +15,6 @@
 #include <linux/kernel.h>
 #include <linux/irq.h>
 #include <linux/gpio.h>
-#include <linux/gpio_event.h>
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/bootmem.h>
@@ -84,7 +83,7 @@
 #include "pm.h"
 
 #include "board-semc_mogami-gpio.h"
-#include "board-semc_mogami-keypad.h"
+#include "keypad-semc.h"
 #include "board-semc_mogami-touch.h"
 
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
@@ -103,6 +102,10 @@
 #endif
 #ifdef CONFIG_SEMC_CHARGER_USB_ARCH
 #include <mach/semc_charger_usb.h>
+#endif
+
+#ifdef CONFIG_MOGAMI_SLIDER
+#include <linux/gpio_event.h>
 #endif
 
 #ifdef CONFIG_SENSORS_AKM8975
@@ -1262,7 +1265,7 @@ static int __init buses_init(void)
 		pr_err("%s: gpio_tlmm_config (gpio=%d) failed\n",
 		       __func__, PMIC_GPIO_INT);
 
-	pm8058_7x30_data.keypad_pdata = mogami_keypad_data();
+	pm8058_7x30_data.keypad_pdata = &pm8xxx_keypad_data;
 
 	return 0;
 }

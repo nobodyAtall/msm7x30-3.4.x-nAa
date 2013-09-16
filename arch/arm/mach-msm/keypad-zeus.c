@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/keypad-urushi.c
+/* arch/arm/mach-msm/keypad-zeus.c
  *
  * Copyright (C) [2010] Sony Ericsson Mobile Communications AB.
  * Adapted for SEMC 2011 devices by Michael Bestas (mikeioannina@gmail.com)
@@ -13,11 +13,10 @@
 #include "keypad-semc.h"
 
 static const unsigned int pm8xxx_keymap[] = {
-	KEY(0, 0, KEY_BACK),
-	KEY(0, 1, KEY_HOME),
-	KEY(0, 2, KEY_MENU),
-	KEY(0, 3, KEY_VOLUMEUP),
-	KEY(0, 4, KEY_VOLUMEDOWN),
+	KEY(7, 0, KEY_VOLUMEUP),
+	KEY(7, 1, KEY_VOLUMEDOWN),
+	KEY(7, 2, BTN_SELECT),
+	KEY(7, 3, KEY_ENTER),
 };
 
 static struct matrix_keymap_data pm8xxx_keymap_data = {
@@ -28,13 +27,13 @@ static struct matrix_keymap_data pm8xxx_keymap_data = {
 struct pm8xxx_keypad_platform_data pm8xxx_keypad_data = {
 	.input_name		= "pm8xxx-keypad",
 	.input_phys_device	= "pm8xxx-keypad/input0",
-	.num_rows		= 1,
-	.num_cols		= 5,
+	.num_rows		= 8,
+	.num_cols		= 8,
 	.rows_gpio_start	= PM8058_GPIO_PM_TO_SYS(8),
 	.cols_gpio_start	= PM8058_GPIO_PM_TO_SYS(0),
 	.debounce_ms		= 10,
-	.scan_delay_ms		= 2,
-	.row_hold_ns		= 122000,
+	.scan_delay_ms		= 32,
+	.row_hold_ns		= 91500,
 	.wakeup			= 1,
 	.keymap_data		= &pm8xxx_keymap_data,
 };

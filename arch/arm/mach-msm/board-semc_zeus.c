@@ -83,6 +83,8 @@
 #include "board-msm7x30-regulator.h"
 #include "pm.h"
 
+#include "keypad-semc.h"
+
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 #include <mach/simple_remote_msm7x30_pf.h>
 #endif
@@ -386,39 +388,6 @@ static struct platform_device msm_proccomm_regulator_dev = {
 	}
 };
 #endif
-
-static const unsigned int keymap_game[] = {
-	KEY(7, 0, KEY_VOLUMEUP),   /* DBZ2, VOL_UP */
-	KEY(7, 1, KEY_VOLUMEDOWN), /* DBZ2, VOL_DOWN */
-#ifdef CONFIG_INPUT_JOYSTICK
-	KEY(7, 2, BTN_SELECT),     /* DBZ2, S1 */
-	KEY(7, 3, KEY_ENTER),      /* DBZ2, S2 */
-#endif
-};
-
-static struct matrix_keymap_data keymap_game_data = {
-	.keymap_size	= ARRAY_SIZE(keymap_game),
-	.keymap		= keymap_game,
-};
-
-static struct pm8xxx_keypad_platform_data surf_keypad_data = {
-	.input_name		= "keypad-game-zeus",
-	.input_phys_device	= "keypad-game-zeus/input0",
-	.num_rows		= 8,
-	.num_cols		= 8,
-	.rows_gpio_start	= PM8058_GPIO_PM_TO_SYS(8),
-	.cols_gpio_start	= PM8058_GPIO_PM_TO_SYS(0),
-	.debounce_ms		= 10, //{8, 10},
-	.scan_delay_ms		= 32,
-	.row_hold_ns		= 91500,
-	.wakeup			= 1,
-	.keymap_data		= &keymap_game_data,
-};
-
-struct pm8xxx_keypad_platform_data *zeus_keypad_data(void)
-{
-	return &surf_keypad_data;
-}
 
 static struct pm8xxx_irq_platform_data pm8xxx_irq_pdata = {
 	.irq_base		= PMIC8058_IRQ_BASE,
@@ -1225,7 +1194,7 @@ static int __init buses_init(void)
 		pr_err("%s: gpio_tlmm_config (gpio=%d) failed\n",
 		       __func__, PMIC_GPIO_INT);
 
-	pm8058_7x30_data.keypad_pdata = zeus_keypad_data();
+	pm8058_7x30_data.keypad_pdata = &pm8xxx_keypad_data;
 
 	return 0;
 }
