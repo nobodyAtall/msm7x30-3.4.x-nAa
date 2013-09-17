@@ -315,7 +315,7 @@ obj-$(CONFIG_MACH_SEMC_URUSHI)   += mogami.o charger-urushi.o   gpio-urushi.o   
 
 zeus-objs = board-semc_zeus.o gpio-zeus.o leds-zeus.o
 obj-$(CONFIG_MACH_SEMC_ZEUS)     += zeus.o keypad-zeus.o
-obj-$(CONFIG_MACH_SEMC_PHOENIX)  += zeus.o
+obj-$(CONFIG_MACH_SEMC_PHOENIX)  += zeus.o keypad-phoenix.o
 
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire.o board-sapphire-gpio.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
