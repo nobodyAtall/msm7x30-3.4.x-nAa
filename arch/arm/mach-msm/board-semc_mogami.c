@@ -144,10 +144,6 @@
 #if defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
 #include <linux/mddi_auo_s6d05a1_hvga.h>
 #endif
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-#include <linux/uio_driver.h>
-#include <linux/i2c/sii9024.h>
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
 #include <linux/spi/cy8ctma300_touch.h>
@@ -209,13 +205,7 @@
 #endif
 #endif
 
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-#define MSM_FB_EXT_BUF_SIZE    0x30000
-#else
-#define MSM_FB_EXT_BUF_SIZE    0
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
-
-#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE + MSM_FB_EXT_BUF_SIZE, 4096)
+#define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE, 4096)
 
 #ifdef CONFIG_SEMC_CAMERA_8MP
 #define MSM_PMEM_ADSP_SIZE      0x2500000
@@ -1785,231 +1775,6 @@ static struct platform_device novatek_device = {
 };
 #endif
 
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-static struct msm_gpio sii9024_gpio_config_data_enable[] = {
-	{ GPIO_CFG(90, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA),
-		"HDMI_INT" },
-	{ GPIO_CFG(93, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"HDMI_5V_EN" },
-	{ GPIO_CFG(102, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"HDMI_PWR_EN" },
-	{ GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"HDMI_RESET_N" },
-
-	{ GPIO_CFG(124, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA),
-		"DTV_PCLK" },
-	{ GPIO_CFG(125, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_EN" },
-	{ GPIO_CFG(126, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_VSYNC" },
-	{ GPIO_CFG(127, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_HSYNC" },
-
-	{ GPIO_CFG(128, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA0" },
-	{ GPIO_CFG(129, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA1" },
-	{ GPIO_CFG(130, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA2" },
-	{ GPIO_CFG(131, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA3" },
-	{ GPIO_CFG(132, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA4" },
-	{ GPIO_CFG(160, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA5" },
-	{ GPIO_CFG(161, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA6" },
-	{ GPIO_CFG(162, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA7" },
-	{ GPIO_CFG(163, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA8" },
-	{ GPIO_CFG(164, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA9" },
-	{ GPIO_CFG(165, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA10" },
-	{ GPIO_CFG(166, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA11" },
-	{ GPIO_CFG(167, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA12" },
-	{ GPIO_CFG(168, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA13" },
-	{ GPIO_CFG(169, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA14" },
-	{ GPIO_CFG(170, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA15" },
-	{ GPIO_CFG(171, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA16" },
-	{ GPIO_CFG(172, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA17" },
-	{ GPIO_CFG(173, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA18" },
-	{ GPIO_CFG(174, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA19" },
-	{ GPIO_CFG(175, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA20" },
-	{ GPIO_CFG(176, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA21" },
-	{ GPIO_CFG(177, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA22" },
-	{ GPIO_CFG(178, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-		"DTV_DATA23" },
-};
-
-static struct msm_gpio sii9024_gpio_config_data_disable[] = {
-	{ GPIO_CFG(90, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"HDMI_INT" },
-	{ GPIO_CFG(93, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"HDMI_5V_EN" },
-	{ GPIO_CFG(102, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"HDMI_PWR_EN" },
-	{ GPIO_CFG(105, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-		"HDMI_RESET_N" },
-
-	{ GPIO_CFG(124, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_PCLK" },
-	{ GPIO_CFG(125, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_EN" },
-	{ GPIO_CFG(126, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_VSYNC" },
-	{ GPIO_CFG(127, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_HSYNC" },
-
-	{ GPIO_CFG(128, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA0" },
-	{ GPIO_CFG(129, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA1" },
-	{ GPIO_CFG(130, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA2" },
-	{ GPIO_CFG(131, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA3" },
-	{ GPIO_CFG(132, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA4" },
-	{ GPIO_CFG(160, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA5" },
-	{ GPIO_CFG(161, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA6" },
-	{ GPIO_CFG(162, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA7" },
-	{ GPIO_CFG(163, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA8" },
-	{ GPIO_CFG(164, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA9" },
-	{ GPIO_CFG(165, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA10" },
-	{ GPIO_CFG(166, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA11" },
-	{ GPIO_CFG(167, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA12" },
-	{ GPIO_CFG(168, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA13" },
-	{ GPIO_CFG(169, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA14" },
-	{ GPIO_CFG(170, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA15" },
-	{ GPIO_CFG(171, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA16" },
-	{ GPIO_CFG(172, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA17" },
-	{ GPIO_CFG(173, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA18" },
-	{ GPIO_CFG(174, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA19" },
-	{ GPIO_CFG(175, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA20" },
-	{ GPIO_CFG(176, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA21" },
-	{ GPIO_CFG(177, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA22" },
-	{ GPIO_CFG(178, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-		"DTV_DATA23" },
-};
-
-static int hdmi_sii_panel_power(int on)
-{
-	int flag_on = !!on;
-	static int dtv_power_save_on;
-	struct vreg *vreg_ldo23;
-	int rc;
-	if (dtv_power_save_on == flag_on)
-		return 0;
-
-	dtv_power_save_on = flag_on;
-
-	if (on) {
-		rc = msm_gpios_request_enable(sii9024_gpio_config_data_enable,
-				ARRAY_SIZE(sii9024_gpio_config_data_enable));
-		if (rc < 0) {
-			printk(KERN_ERR "%s: gpio config failed: %d\n",
-				__func__, rc);
-			return rc;
-		}
-	} else {
-		rc = msm_gpios_enable(sii9024_gpio_config_data_disable,
-				ARRAY_SIZE(sii9024_gpio_config_data_disable));
-		msm_gpios_free(sii9024_gpio_config_data_disable,
-				ARRAY_SIZE(sii9024_gpio_config_data_disable));
-	}
-
-	/*  -- LDO23 for HDMI */
-	vreg_ldo23 = vreg_get(NULL, "gp5");
-
-	if (IS_ERR(vreg_ldo23)) {
-		printk(KERN_ERR "%s:  vreg23 get failed (%ld)\n",
-			__func__, PTR_ERR(vreg_ldo23));
-		return rc;
-	}
-
-	rc = vreg_set_level(vreg_ldo23, 1200);
-	if (rc) {
-		printk(KERN_ERR "%s: vreg LDO23 set level failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
-
-	if (on)
-		rc = vreg_enable(vreg_ldo23);
-	else
-		rc = vreg_disable(vreg_ldo23);
-
-	if (rc) {
-		printk(KERN_ERR "%s: LDO23 vreg enable failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
-
-	mdelay(5);		/* ensure power is stable */
-
-	return rc;
-}
-
-static struct platform_device hdmi_sii9024a_panel_device = {
-	.name   = "sii9024a",
-	.id     = 2,
-};
-
-static struct sii9024_platform_data sii9024_platform_data = {
-	.setchippower        = hdmi_sii_panel_power,
-	/* set panel_info */
-	.xres               = 1280,
-	.yres               = 720,
-	.type               = 7, /* DTV_PANEL */
-	.pdest              = 1, /* DISPLAY_2 */
-	.wait_cycle         = 0,
-	.bpp                = 24,
-	.fb_num             = 1,
-	.clk_rate           = 74250000,
-	.lcdc_h_back_porch  = 220,
-	.lcdc_h_front_porch = 110,
-	.lcdc_h_pulse_width = 40,
-	.lcdc_v_back_porch  = 20,
-	.lcdc_v_front_porch = 5,
-	.lcdc_v_pulse_width = 5,
-	.lcdc_border_clr    = 0, /* blk */
-	.lcdc_underflow_clr = 0xff, /* blue */
-	.lcdc_hsync_skew    = 0,
-};
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
-
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_SII_HVGA_LCD) || \
@@ -2958,13 +2723,6 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.type = APDS9702_NAME,
 	},
 #endif
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-	{
-		I2C_BOARD_INFO("sii9024a", 0x76 >> 1),
-		.platform_data = &sii9024_platform_data,
-		.type = "sii9024a"
-	},
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 #ifdef CONFIG_SENSORS_AKM8975
 	{
 		I2C_BOARD_INFO(AKM8975_I2C_NAME, 0x18 >> 1),
@@ -3397,42 +3155,6 @@ static struct platform_device android_pmem_device = {
 	.dev = { .platform_data = &android_pmem_pdata },
 };
 
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-static struct resource sii_uio_resources[] = {
-	[0] = {
-		.start  = MSM_GPIO_TO_INT(90),
-		.end    = MSM_GPIO_TO_INT(90),
-		.flags  = IORESOURCE_IRQ,
-	},
-};
-
-static struct uio_info sii_uio_pdata = {
-	.name	=  "sii9024a_uio",
-	.version = "0.001",
-	.mem = {
-		{
-			.memtype = UIO_MEM_NONE,
-			.size    = 0
-		}
-	},
-	.irq       = MSM_GPIO_TO_INT(90),
-	.irq_flags = IRQF_TRIGGER_LOW,
-};
-
-static struct platform_device sii_uio_dev = {
-	.name           = "uio_pdrv_genirq",
-	.id             = -1,
-	.num_resources  = ARRAY_SIZE(sii_uio_resources),
-	.resource       = sii_uio_resources,
-	.dev            = {
-		.platform_data = &sii_uio_pdata,
-	},
-};
-
-static struct lcdc_platform_data dtv_pdata = {
-};
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
-
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
@@ -3444,22 +3166,7 @@ static struct resource msm_fb_resources[] = {
 	}
 };
 
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-static int msm_fb_detect_panel(const char *name)
-{
-	if (!strcmp(name, "sii9024a")) {
-		printk(KERN_ERR
-			"[HDMI] msm_fb_detect_panel() : name(%s)\n", name);
-		return 0;
-	}
-	return -ENODEV;
-}
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
-
 static struct msm_fb_platform_data msm_fb_pdata = {
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-	.detect_client = msm_fb_detect_panel,
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 	.mddi_prescan = 1,
 };
 
@@ -3885,9 +3592,6 @@ static void __init msm_fb_add_devices(void)
 {
 	msm_fb_register_device("mdp", &mdp_pdata);
 	msm_fb_register_device("pmdh", &mddi_pdata);
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-	msm_fb_register_device("dtv", &dtv_pdata);
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 }
 
 static char *msm_adc_surf_device_names[] = {
@@ -3948,10 +3652,6 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_MSM_ROTATOR
 	&msm_rotator_device,
 #endif
-#ifdef CONFIG_FB_MSM_HDMI_SII9024A_PANEL
-	&hdmi_sii9024a_panel_device,
-	&sii_uio_dev,
-#endif /* CONFIG_FB_MSM_HDMI_SII9024A_PANEL */
 	&android_pmem_adsp_device,
 	&msm_device_i2c,
 	&msm_device_i2c_2,
