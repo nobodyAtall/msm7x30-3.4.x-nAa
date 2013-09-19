@@ -149,41 +149,41 @@
 #endif
 
 #ifdef CONFIG_CHARGER_BQ24185
-#define BQ24185_GPIO_IRQ		(31)
+#define BQ24185_GPIO_IRQ		31
 #endif
 
 #ifdef CONFIG_SENSORS_AKM8975
-#define AKM8975_GPIO			(92)
+#define AKM8975_GPIO			92
 #endif
 #ifdef CONFIG_INPUT_BMA150_NG
-#define BMA150_GPIO			(51)
+#define BMA150_GPIO			51
 #endif
 #ifdef CONFIG_INPUT_BMA250
-#define BMA250_GPIO		51
-#define BMA250_DEFAULT_RATE	50
+#define BMA250_GPIO			51
+#define BMA250_DEFAULT_RATE		50
 #endif
 
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
-#define LM356X_HW_RESET_GPIO 2
+#define LM356X_HW_RESET_GPIO		2
 #endif
 
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
-#define NOVATEK_GPIO_RESET              (157)
+#define NOVATEK_GPIO_RESET		157
 #endif
 
 #if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_SII_HVGA_LCD) || \
 	defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
-#define GPIO_MSM_MDDI_XRES		(157)
+#define GPIO_MSM_MDDI_XRES		157
 #endif
 
-#define CYPRESS_TOUCH_GPIO_RESET	(40)
-#define CYPRESS_TOUCH_GPIO_IRQ		(42)
+#define CYPRESS_TOUCH_GPIO_RESET	40
+#define CYPRESS_TOUCH_GPIO_IRQ		42
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
-#define SYNAPTICS_TOUCH_GPIO_IRQ	(42)
+#define SYNAPTICS_TOUCH_GPIO_IRQ	42
 #endif
-#define CYPRESS_TOUCH_GPIO_SPI_CS	(46)
+#define CYPRESS_TOUCH_GPIO_SPI_CS	46
 
 #ifdef CONFIG_FB_MSM_HDPI
 #define MSM_PMEM_SF_SIZE  0x2500000
@@ -244,7 +244,6 @@ static unsigned int phys_add = DDR2_BANK_BASE;
 unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
 EXPORT_SYMBOL(ebi1_phys_offset);
 
-
 static int vreg_helper_on(const char *pzName, unsigned mv)
 {
 	struct vreg *reg = NULL;
@@ -295,10 +294,8 @@ static void vreg_helper_off(const char *pzName)
 	printk(KERN_INFO "Disabled VREG \"%s\"\n", pzName);
 }
 
-
 static ssize_t hw_id_get_mask(struct class *class, struct class_attribute *attr, char *buf)
 {
-
 	char hwid;
 	unsigned int i;
 	unsigned cfg;
@@ -576,7 +573,6 @@ static const struct panel_id *novatek_panels[] = {
 #ifdef CONFIG_MDDI_NOVATEK_PANEL_TMD_LT033MDV1000
 	&novatek_panel_id_tmd_lt033mdv1000,
 #endif
-	NULL,
 };
 
 struct novatek_i2c_pdata novatek_i2c_pdata = {
@@ -639,14 +635,6 @@ static uint32_t camera_off_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	/* RST */
 	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-#if !defined(CONFIG_SEMC_CAMERA_MODULE)
-#if !defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	/* DAT2 */
-	GPIO_CFG(2,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* DAT3 */
-	GPIO_CFG(3,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-#endif
-#endif
 #if defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
 	/* DAT4 */
 	GPIO_CFG(4,  0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
@@ -687,14 +675,6 @@ static uint32_t camera_on_gpio_table[] = {
 	/* parallel CAMERA interfaces */
 	/* RST */
 	GPIO_CFG(0,  0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-#if !defined(CONFIG_SEMC_CAMERA_MODULE)
-#if !defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	/* DAT2 */
-	GPIO_CFG(2,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-	/* DAT3 */
-	GPIO_CFG(3,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-#endif
-#endif
 #if defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
 	/* DAT4 */
 	GPIO_CFG(4,  1, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
@@ -2922,38 +2902,6 @@ static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 		(void)bq24185_set_opa_mode(CHARGER_BOOST_MODE);
 	else
 		(void)bq24185_set_opa_mode(CHARGER_CHARGER_MODE);
-#else
-        int rc;
-        static int vbus_is_on;
-	struct pm8xxx_gpio_init_info usb_vbus = {
-		PM8058_GPIO_PM_TO_SYS(36),
-		{
-			.direction      = PM_GPIO_DIR_OUT,
-			.pull           = PM_GPIO_PULL_NO,
-			.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-			.output_value   = 1,
-			.vin_sel        = 2,
-			.out_strength   = PM_GPIO_STRENGTH_MED,
-			.function       = PM_GPIO_FUNC_NORMAL,
-			.inv_int_pol    = 0,
-		},
-	};
-
-        /* If VBUS is already on (or off), do nothing. */
-        if (unlikely(on == vbus_is_on))
-                return;
-
-        if (on) {
-		rc = pm8xxx_gpio_config(usb_vbus.gpio, &usb_vbus.config);
-		if (rc) {
-                        pr_err("%s PMIC GPIO 36 write failed\n", __func__);
-                        return;
-                }
-	} else {
-		gpio_set_value_cansleep(PM8058_GPIO_PM_TO_SYS(36), 0);
-	}
-
-        vbus_is_on = on;
 #endif
 }
 
@@ -3700,10 +3648,7 @@ msm_i2c_gpio_config(int adap_id, int config_type)
 		msm_i2c_table = &msm_i2c_gpios_io[adap_id*2];
 	msm_gpios_enable(msm_i2c_table, 2);
 }
-/*This needs to be enabled only for OEMS*/
-#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
-static struct regulator *qup_vreg;
-#endif
+
 static void
 qup_i2c_gpio_config(int adap_id, int config_type)
 {
@@ -3719,21 +3664,6 @@ qup_i2c_gpio_config(int adap_id, int config_type)
 	rc = msm_gpios_enable(qup_i2c_table, 2);
 	if (rc < 0)
 		printk(KERN_ERR "QUP GPIO enable failed: %d\n", rc);
-#if !defined(CONFIG_SEMC_CAMERA_MODULE) && \
-	!defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
-	if (qup_vreg) {
-		int rc = vreg_set_level(qup_vreg, 1800);
-		if (rc) {
-			pr_err("%s: vreg LVS1 set level failed (%d)\n",
-			       __func__, rc);
-		}
-		rc = vreg_enable(qup_vreg);
-		if (rc) {
-			pr_err("%s: vreg_enable() = %d \n",
-				__func__, rc);
-		}
-	}
-#endif
 }
 
 static struct msm_i2c_platform_data msm_i2c_pdata = {
@@ -3766,11 +3696,7 @@ static void __init msm_device_i2c_2_init(void)
 }
 
 static struct msm_i2c_platform_data qup_i2c_pdata = {
-#if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
 	.clk_freq = 100000,
-#else
-	.clk_freq = 384000,
-#endif
 	.msm_i2c_config_gpio = qup_i2c_gpio_config,
 };
 
@@ -3780,15 +3706,6 @@ static void __init qup_device_i2c_init(void)
 		pr_err("failed to request I2C gpios\n");
 
 	qup_device_i2c.dev.platform_data = &qup_i2c_pdata;
-	/*This needs to be enabled only for OEMS*/
-#ifndef CONFIG_QUP_EXCLUSIVE_TO_CAMERA
-	qup_vreg = regulator_get(&qup_device_i2c.dev, "lvsw1");
-	if (IS_ERR(qup_vreg)) {
-		dev_err(&qup_device_i2c.dev,
-			"%s: regulator_get failed: %ld\n",
-			__func__, PTR_ERR(qup_vreg));
-	}
-#endif
 }
 
 #ifdef CONFIG_I2C_SSBI
@@ -4169,8 +4086,6 @@ out3:
  */
 static void __init mogami_temp_fixups(void)
 {
-	vreg_helper_off("gp3");	/* L0 */
-	vreg_helper_off("gp5");	/* L23 */
 	gpio_set_value(46, 1);	/* SPI_CS0_N */
 	gpio_set_value(134, 1);	/* UART1DM_RFR_N */
 	gpio_set_value(137, 1);	/* UART1DM_TXD */

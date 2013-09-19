@@ -131,24 +131,24 @@
 #endif
 
 #ifdef CONFIG_SENSORS_AKM8975
-#define AKM8975_GPIO			(92)
+#define AKM8975_GPIO			92
 #endif
 #ifdef CONFIG_INPUT_BMA150_NG
-#define BMA150_GPIO			(51)
+#define BMA150_GPIO			51
 #endif
 #ifdef CONFIG_INPUT_GP2A_SEMC
-#define GP2A_GPIO			(20)
+#define GP2A_GPIO			20
 #endif
 
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
-#define NOVATEK_GPIO_RESET              (157)
+#define NOVATEK_GPIO_RESET		157
 #endif
 
-#define CYPRESS_TOUCH_GPIO_RESET	(40)
-#define CYPRESS_TOUCH_GPIO_IRQ		(42)
+#define CYPRESS_TOUCH_GPIO_RESET	40
+#define CYPRESS_TOUCH_GPIO_IRQ		42
 
 #ifdef CONFIG_JOYSTICK_SYNAPTICS
-#define SYNAPTICS_TOUCHPAD_GPIO		(33)
+#define SYNAPTICS_TOUCHPAD_GPIO		33
 #endif
 
 #define MSM_PMEM_SF_SIZE  0x2500000
@@ -444,7 +444,6 @@ static const struct panel_id *novatek_panels[] = {
 	&novatek_panel_id_sharp_ls040t8lx01_rev_c,
 	&novatek_panel_id_sharp_ls040t8lx01_rev_d,
 #endif
-	NULL,
 };
 
 struct novatek_i2c_pdata novatek_i2c_pdata = {
@@ -2116,39 +2115,6 @@ static void __init msm_qsd_spi_init(void)
 #ifdef CONFIG_USB_EHCI_MSM_72K
 static void msm_hsusb_vbus_power(unsigned phy_info, int on)
 {
-#ifndef CONFIG_BATTERY_ZEUS
-        int rc;
-        static int vbus_is_on;
-	struct pm8xxx_gpio_init_info usb_vbus = {
-		PM8058_GPIO_PM_TO_SYS(36),
-		{
-			.direction      = PM_GPIO_DIR_OUT,
-			.pull           = PM_GPIO_PULL_NO,
-			.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
-			.output_value   = 1,
-			.vin_sel        = 2,
-			.out_strength   = PM_GPIO_STRENGTH_MED,
-			.function       = PM_GPIO_FUNC_NORMAL,
-			.inv_int_pol    = 0,
-		},
-	};
-
-        /* If VBUS is already on (or off), do nothing. */
-        if (unlikely(on == vbus_is_on))
-                return;
-
-        if (on) {
-		rc = pm8xxx_gpio_config(usb_vbus.gpio, &usb_vbus.config);
-		if (rc) {
-                        pr_err("%s PMIC GPIO 36 write failed\n", __func__);
-                        return;
-                }
-	} else {
-		gpio_set_value_cansleep(PM8058_GPIO_PM_TO_SYS(36), 0);
-	}
-
-        vbus_is_on = on;
-#endif
 }
 
 static struct msm_usb_host_platform_data msm_usb_host_pdata = {
@@ -3321,8 +3287,6 @@ static void __init zeus_temp_fixups(void)
 	/* Since the sequencing for AKM & BMA needs to be L10 -> L8 */
 	vreg_helper_on("gp4", 2850);	/* L10 */
 
-	vreg_helper_off("gp3");	/* L0 */
-	vreg_helper_off("gp5");	/* L23 */
 	vreg_helper_on("wlan", 1800);	/* L13: touchpad VDIO */
 	vreg_helper_on("gp10", 2800);	/* L16: touchpad */
 }
