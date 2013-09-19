@@ -763,13 +763,8 @@ struct msm_camera_device_platform_data msm_camera_device_data = {
 	.ioext.csiphy = 0xA6100000,
 	.ioext.csisz  = 0x00000400,
 	.ioext.csiirq = INT_CSI,
-#if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
 	.ioclk.mclk_clk_rate = 8000000,
 	.ioclk.vfe_clk_rate  = 192000000,
-#else
-	.ioclk.mclk_clk_rate = 24000000,
-	.ioclk.vfe_clk_rate  = 147456000,
-#endif
 };
 
 #if defined(CONFIG_SEMC_CAMERA_MODULE) || defined(CONFIG_SEMC_SUB_CAMERA_MODULE)
