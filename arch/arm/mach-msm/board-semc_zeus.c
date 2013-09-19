@@ -114,7 +114,7 @@
 
 #ifdef CONFIG_LEDS_AS3676
 #include <linux/leds-as3676.h>
-#include "board-semc_mogami-leds.h"
+#include "leds-semc.h"
 #endif
 
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA

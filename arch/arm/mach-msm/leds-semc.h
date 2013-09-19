@@ -1,4 +1,4 @@
-/* /kernel/arch/arm/mach-msm/board-semc_mogami-leds.h
+/* /kernel/arch/arm/mach-msm/leds-semc.h
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
