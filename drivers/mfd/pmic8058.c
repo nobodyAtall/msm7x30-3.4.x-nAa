@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2011, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 Sony Ericsson Mobile Communications AB
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -403,6 +404,13 @@ static struct mfd_cell gpio_cell __devinitdata = {
 	.num_resources	= ARRAY_SIZE(gpio_cell_resources),
 };
 
+#if defined(CONFIG_MACH_SEMC_ZEUS) || defined(CONFIG_MACH_SEMC_PHOENIX)
+static struct mfd_cell keypad_pmic_cell __devinitdata = {
+	.name = KP_NAME,
+	.id = -1,
+};
+#endif
+
 static int __devinit
 pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 				struct pm8058_chip *pmic)
@@ -668,6 +676,21 @@ pm8058_add_subdevices(const struct pm8058_platform_data *pdata,
 			goto bail;
 		}
 	}
+
+#if defined(CONFIG_MACH_SEMC_ZEUS) || defined(CONFIG_MACH_SEMC_PHOENIX)
+	if (pdata->keypad_pmic_pdata) {
+		keypad_pmic_cell.platform_data = pdata->keypad_pmic_pdata;
+		keypad_pmic_cell.pdata_size =
+			sizeof(struct keypad_pmic_platform_data);
+		rc = mfd_add_devices(pmic->dev, 0, &keypad_pmic_cell,
+						1, NULL, irq_base);
+		if (rc) {
+			pr_err("Failed to add keypad pmic subdevice"
+			       "ret=%d\n", rc);
+			goto bail;
+		}
+	}
+#endif
 
 	rc = mfd_add_devices(pmic->dev, 0, &debugfs_cell, 1, NULL, irq_base);
 	if (rc) {

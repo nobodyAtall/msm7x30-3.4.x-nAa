@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2011, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2012 Sony Ericsson Mobile Communications AB
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -107,6 +108,26 @@ struct pmic8058_charger_data {
 	bool charger_data_valid;
 };
 
+#if defined(CONFIG_MACH_SEMC_ZEUS) || defined(CONFIG_MACH_SEMC_PHOENIX)
+#define KP_NAME "keypad-pmic"
+#define KP_DEVICE "dev/keypad-pmic"
+
+struct keypad_pmic_key {
+	unsigned int code;
+	int irq;
+	int gpio;
+	int wake;
+	ktime_t debounce_time;
+};
+
+struct keypad_pmic_platform_data {
+	struct keypad_pmic_key *keymap;
+	int keymap_size;
+	char *input_name;
+	struct pm_gpio *pm_gpio_config;
+};
+#endif
+
 struct pm8058_platform_data {
 	struct pm8xxx_mpp_platform_data		*mpp_pdata;
 	struct pm8xxx_keypad_platform_data      *keypad_pdata;
@@ -126,6 +147,9 @@ struct pm8058_platform_data {
 	struct pm8058_xo_pdata			*xo_buffer_pdata;
 	int					num_xo_buffers;
 	struct pmic8058_charger_data		*charger_pdata;
+#if defined(CONFIG_MACH_SEMC_ZEUS) || defined(CONFIG_MACH_SEMC_PHOENIX)
+	struct keypad_pmic_platform_data	*keypad_pmic_pdata;
+#endif
 };
 
 #endif  /* __MFD_PMIC8058_H__ */
