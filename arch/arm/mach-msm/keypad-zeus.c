@@ -43,6 +43,69 @@ struct pm8xxx_keypad_platform_data pm8xxx_keypad_data = {
 	.keymap_data		= &pm8xxx_keymap_data,
 };
 
+/* zeus PMIC keypad - start */
+#define BACK_GPIO		17
+#define HOME_GPIO		18
+#define MENU_GPIO		19
+#define SEARCH_GPIO		26
+
+#define NO_BATT_COV_N_GPIO	31
+
+static struct pm_gpio pm_gpio_config = {
+	.direction    = PM_GPIO_DIR_IN,
+	.pull         = PM_GPIO_PULL_UP_31P5,
+	.vin_sel      = PM8058_GPIO_VIN_S3,
+	.out_strength = PM_GPIO_STRENGTH_LOW,
+	.function     = PM_GPIO_FUNC_NORMAL,
+	.inv_int_pol  = 0,
+};
+
+static struct keypad_pmic_key pmic_keypad_map[] = {
+	{
+		.code = KEY_BACK,
+		.irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, BACK_GPIO - 1),
+		.gpio = BACK_GPIO,
+		.wake = 0,
+		.debounce_time.tv64 = 10 * NSEC_PER_MSEC,
+	},
+	{
+		.code = KEY_HOME,
+		.irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, HOME_GPIO - 1),
+		.gpio = HOME_GPIO,
+		.wake = 1,
+		.debounce_time.tv64 = 10 * NSEC_PER_MSEC,
+	},
+	{
+		.code = KEY_MENU,
+		.irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, MENU_GPIO - 1),
+		.gpio = MENU_GPIO,
+		.wake = 0,
+		.debounce_time.tv64 = 10 * NSEC_PER_MSEC,
+	},
+	{
+		.code = KEY_SEARCH,
+		.irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, SEARCH_GPIO - 1),
+		.gpio = SEARCH_GPIO,
+		.wake = 0,
+		.debounce_time.tv64 = 10 * NSEC_PER_MSEC,
+	},
+	{
+		.code = KEY_VENDOR,
+		.irq  = PM8058_GPIO_IRQ(PM8058_IRQ_BASE, NO_BATT_COV_N_GPIO - 1),
+		.gpio = NO_BATT_COV_N_GPIO,
+		.wake = 1,
+		.debounce_time.tv64 = 10 * NSEC_PER_MSEC,
+	},
+};
+
+struct keypad_pmic_platform_data pmic_keypad_data = {
+	.keymap = pmic_keypad_map,
+	.keymap_size = ARRAY_SIZE(pmic_keypad_map),
+	.input_name = "pmic-keypad",
+	.pm_gpio_config = &pm_gpio_config,
+};
+/* zeus PMIC keypad - end */
+
 /* zeus GPIO keypad - start */
 #define KEY_L_GPIO		19
 #define KEY_R_GPIO		88

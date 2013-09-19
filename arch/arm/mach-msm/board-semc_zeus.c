@@ -1195,6 +1195,7 @@ static int __init buses_init(void)
 		       __func__, PMIC_GPIO_INT);
 
 	pm8058_7x30_data.keypad_pdata = &pm8xxx_keypad_data;
+	pm8058_7x30_data.keypad_pmic_pdata = &pmic_keypad_data;
 
 	return 0;
 }
