@@ -10,7 +10,7 @@
 
 #include <linux/input.h>
 #include <linux/cyttsp.h>
-#include "board-semc_mogami-touch.h"
+#include "touch-semc.h"
 
 struct cyttsp_platform_data cyttsp_data = {
 	.wakeup = cyttsp_wakeup,

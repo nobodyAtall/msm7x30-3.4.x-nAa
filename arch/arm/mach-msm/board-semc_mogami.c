@@ -55,7 +55,6 @@
 #include <mach/rpc_server_handset.h>
 #include <mach/socinfo.h>
 #include <mach/msm_memtypes.h>
-#include <linux/cyttsp-qc.h>
 
 #include <asm/mach/mmc.h>
 #include <asm/mach/flash.h>
@@ -84,7 +83,6 @@
 
 #include "gpio-semc.h"
 #include "keypad-semc.h"
-#include "board-semc_mogami-touch.h"
 
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 #include <mach/simple_remote_msm7x30_pf.h>
@@ -141,6 +139,10 @@
 #include <linux/mddi_auo_s6d05a1_hvga.h>
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_CYTTSP_SPI
+#include <linux/cyttsp.h>
+#include "touch-semc.h"
+#endif
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
 #include <linux/spi/cy8ctma300_touch.h>
 #endif

@@ -1,4 +1,4 @@
-/* arch/arm/mach-msm/board-semc_mogami-touch.h
+/* arch/arm/mach-msm/touch-semc.h
  *
  * Copyright (C) 2011 Sony Ericsson Mobile Communications AB.
  *
@@ -8,8 +8,8 @@
  * of the License, or (at your option) any later version.
  */
 
-#ifndef _BOARD_SEMC_MOGAMI_TOUCH_H
-#define _BOARD_SEMC_MOGAMI_TOUCH_H
+#ifndef _TOUCH_SEMC_H
+#define _TOUCH_SEMC_H
 
 #ifdef CONFIG_TOUCHSCREEN_CYTTSP_SPI
 extern int cyttsp_xres(void);
