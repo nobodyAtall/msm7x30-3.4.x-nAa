@@ -92,9 +92,15 @@
 #ifdef CONFIG_CHARGER_BQ24185
 #include <linux/i2c/bq24185_charger.h>
 #endif
+#ifdef CONFIG_BATTERY_BQ27520_SEMC
 #include <linux/i2c/bq27520_battery.h>
+#endif
+#ifdef CONFIG_BATTERY_CHARGALG
 #include <linux/battery_chargalg.h>
+#endif
+#ifdef CONFIG_BATTERY_SEMC_ARCH
 #include <mach/semc_battery_data.h>
+#endif
 #ifdef CONFIG_USB_MSM_OTG_72K
 #include <mach/msm72k_otg.h>
 #endif
@@ -2259,6 +2265,7 @@ static char *semc_chg_usb_supplied_to[] = {
 };
 #endif
 
+#ifdef CONFIG_BATTERY_SEMC_ARCH
 static char *semc_bdata_supplied_to[] = {
 	BQ27520_NAME,
 	BATTERY_CHARGALG_NAME,
@@ -2276,7 +2283,9 @@ static struct platform_device bdata_driver = {
 		.platform_data = &semc_battery_platform_data,
 	},
 };
+#endif
 
+#ifdef CONFIG_BATTERY_BQ27520_SEMC
 #define GPIO_BQ27520_SOC_INT 20
 #define LIPO_BAT_MAX_VOLTAGE 4200
 #define LIPO_BAT_MIN_VOLTAGE 3000
@@ -2323,6 +2332,7 @@ struct bq27520_platform_data bq27520_platform_data = {
 	.disable_algorithm = battery_chargalg_disable,
 #endif
 };
+#endif
 
 #ifdef CONFIG_CHARGER_BQ24185
 static char *bq24185_supplied_to[] = {
@@ -2349,6 +2359,7 @@ struct bq24185_platform_data bq24185_platform_data = {
 };
 #endif
 
+#ifdef CONFIG_BATTERY_CHARGALG
 static char *battery_chargalg_supplied_to[] = {
 	SEMC_BDATA_NAME,
 };
@@ -2393,6 +2404,7 @@ static struct platform_device battery_chargalg_platform_device = {
 		.platform_data = &battery_chargalg_platform_data,
 	},
 };
+#endif
 
 #if defined(CONFIG_LM3560) || defined(CONFIG_LM3561)
 int lm356x_request_gpio_pins(void)
@@ -2621,12 +2633,14 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 		.platform_data = &as3676_platform_data,
 	},
 #endif
+#ifdef CONFIG_BATTERY_BQ27520_SEMC
 	{
 		I2C_BOARD_INFO(BQ27520_NAME, 0xAA >> 1),
 		.irq = MSM_GPIO_TO_INT(GPIO_BQ27520_SOC_INT),
 		.platform_data = &bq27520_platform_data,
 		.type = BQ27520_NAME,
 	},
+#endif
 #ifdef CONFIG_CHARGER_BQ24185
 	{
 		I2C_BOARD_INFO(BQ24185_NAME, 0xD6 >> 1),
@@ -2994,9 +3008,9 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 #endif
 #ifdef CONFIG_CHARGER_BQ24185
 	.chg_is_initialized	 = bq24185_charger_initialized,
+	.chg_drawable_ida	 = USB_IDCHG_MAX,
 #endif
 	.phy_can_powercollapse	 = 1,
-	.chg_drawable_ida	 = USB_IDCHG_MAX,
 };
 
 #ifdef CONFIG_USB_GADGET
@@ -3591,8 +3605,12 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_MSM_VPE_STANDALONE
 	&msm_vpe_standalone_device,
 #endif
+#ifdef CONFIG_BATTERY_SEMC_ARCH
 	&bdata_driver,
+#endif
+#ifdef CONFIG_BATTERY_CHARGALG
 	&battery_chargalg_platform_device,
+#endif
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 	&simple_remote_pf_device,
 #endif
