@@ -448,7 +448,7 @@ static int pm8058_gpios_init(void)
 			.vin_sel        = PM8058_GPIO_VIN_L5,
 			.function       = PM_GPIO_FUNC_NORMAL,
 			.inv_int_pol    = 0,
-			.out_strength   = PM_GPIO_STRENGTH_LOW,
+			.out_strength   = PM_GPIO_STRENGTH_HIGH,
 			.output_value   = 0,
 		},
 	};
@@ -3986,7 +3986,7 @@ static uint32_t wifi_setup_power(struct device *dv, unsigned int vdd)
 
 static struct mmc_platform_data msm7x30_sdc3_data = {
 #ifdef CONFIG_MSM_UNDERVOLT_WIFI
-	.ocr_mask	= MMC_VDD_20_21 | MMC_VDD_21_22,
+	.ocr_mask	= MMC_VDD_165_195, /* 1.8v */
 #else
 	.ocr_mask	= MMC_VDD_27_28 | MMC_VDD_28_29,
 #endif
@@ -3999,8 +3999,10 @@ static struct mmc_platform_data msm7x30_sdc3_data = {
 	.nonremovable	= 1,
 };
 
+#define MOGAMI_WIFI_EN_GPIO	57
+
 static unsigned wifi_init_gpio_en[] = {
-	GPIO_CFG(57, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),  /* WLAN EN */
+	GPIO_CFG(MOGAMI_WIFI_EN_GPIO, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),  /* WLAN EN */
 };
 
 static void wlan_init_seq(void)
@@ -4013,17 +4015,16 @@ static void wlan_init_seq(void)
 	/* than we have far bigger issues as this is the base call for */
 	/* config of gpio's */
 	if (rc)
-		printk(KERN_ERR
-		        "%s: gpio_tlmm_config(%#x)=%d\n",
-		        __func__, wifi_init_gpio_en[0], rc);
+		pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
+			__func__, wifi_init_gpio_en[0], rc);
 
 	/* Set device in low VIO-leakage state according to spec */
 	/* This is done by toggle WLAN_EN OFF/ON/OFF (pulse width > 10ms) */
-	gpio_set_value(57, 0);
+	gpio_set_value(MOGAMI_WIFI_EN_GPIO, 0);
 	mdelay(1);
-	gpio_set_value(57, 1);
+	gpio_set_value(MOGAMI_WIFI_EN_GPIO, 1);
 	mdelay(12);
-	gpio_set_value(57, 0);
+	gpio_set_value(MOGAMI_WIFI_EN_GPIO, 0);
 }
 #endif
 
