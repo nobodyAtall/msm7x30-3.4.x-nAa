@@ -281,6 +281,10 @@ static int vreg_helper_on(const char *pzName, unsigned mv)
 	return rc;
 }
 
+#if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA_LCD) || \
+	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA_LCD) || \
+	defined(CONFIG_FB_MSM_MDDI_SII_HVGA_LCD) || \
+	defined(CONFIG_FB_MSM_MDDI_AUO_HVGA_LCD)
 static void vreg_helper_off(const char *pzName)
 {
 	struct vreg *reg = NULL;
@@ -301,6 +305,7 @@ static void vreg_helper_off(const char *pzName)
 
 	printk(KERN_INFO "Disabled VREG \"%s\"\n", pzName);
 }
+#endif
 
 static ssize_t hw_id_get_mask(struct class *class, struct class_attribute *attr, char *buf)
 {
@@ -2203,6 +2208,52 @@ int cyttsp_key_rpc_callback(u8 data[], int size)
 #endif /* CONFIG_TOUCHSCREEN_CYTTSP_SPI */
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
+#ifdef CONFIG_MSM_UNDERVOLT_TOUCH
+#define CLEARPAD_VDD_VOLTAGE 2800000
+#else
+#define CLEARPAD_VDD_VOLTAGE 3050000
+#endif
+
+static struct regulator *vreg_touch_vdd;
+
+static int clearpad_vreg_configure(int enable)
+{
+	int rc = 0;
+
+	vreg_touch_vdd = regulator_get(NULL, "gp13");
+	if (IS_ERR(vreg_touch_vdd)) {
+		pr_err("%s: get vdd failed\n", __func__);
+		return -ENODEV;
+	}
+
+	if (enable) {
+		rc = regulator_set_voltage(vreg_touch_vdd, CLEARPAD_VDD_VOLTAGE, CLEARPAD_VDD_VOLTAGE);
+		if (rc) {
+			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
+			goto clearpad_vreg_configure_err;
+		}
+		rc = regulator_enable(vreg_touch_vdd);
+		if (rc) {
+			pr_err("%s: enable vdd failed, rc=%d\n", __func__, rc);
+			goto clearpad_vreg_configure_err;
+		}
+	} else {
+		rc = regulator_set_voltage(vreg_touch_vdd, 0, CLEARPAD_VDD_VOLTAGE);
+		if (rc) {
+			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
+			goto clearpad_vreg_configure_err;
+		}
+		rc = regulator_disable(vreg_touch_vdd);
+		if (rc)
+			pr_err("%s: disable vdd failed, rc=%d\n",
+								__func__, rc);
+	}
+	return rc;
+clearpad_vreg_configure_err:
+	regulator_put(vreg_touch_vdd);
+	return rc;
+}
+
 static struct msm_gpio clearpad_gpio_config_data[] = {
 	{ GPIO_CFG(SYNAPTICS_TOUCH_GPIO_IRQ, 0, GPIO_CFG_INPUT,
 		   GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "clearpad3000_irq" },
@@ -2241,20 +2292,11 @@ static struct synaptics_funcarea clearpad_funcarea_array[] = {
 	{ .func = SYN_FUNCAREA_END }
 };
 
-static void clearpad_vreg_off(void)
-{
-	int i;
-
-	vreg_helper_off(VREG_L20);
-	for (i = 0; i < 500; i++)
-		udelay(1000);
-}
-
 static struct clearpad_platform_data clearpad_platform_data = {
 	.irq = MSM_GPIO_TO_INT(SYNAPTICS_TOUCH_GPIO_IRQ),
 	.funcarea = clearpad_funcarea_array,
+	.vreg_configure = clearpad_vreg_configure,
 	.gpio_configure = clearpad_gpio_configure,
-	.vreg_off = clearpad_vreg_off,
 };
 #endif
 
@@ -4109,10 +4151,12 @@ static void __init mogami_temp_fixups(void)
 
 static void __init shared_vreg_on(void)
 {
+#ifndef CONFIG_TOUCHSCREEN_CLEARPAD
 #ifdef CONFIG_MSM_UNDERVOLT_TOUCH
 	vreg_helper_on(VREG_L20, 2800);
 #else
 	vreg_helper_on(VREG_L20, 3050);
+#endif
 #endif
 	vreg_helper_on(VREG_L10, 2600);
 #ifdef CONFIG_MSM_UNDERVOLT_LCD
