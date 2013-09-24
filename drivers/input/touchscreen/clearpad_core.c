@@ -10,8 +10,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/slab.h>
-#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/irq.h>
 #include <linux/input.h>
@@ -24,6 +22,8 @@
 #include <mach/gpio.h>
 #include <linux/ctype.h>
 #include <linux/firmware.h>
+#include <linux/slab.h>
+#include <linux/sched.h>
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
@@ -1893,12 +1893,21 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 		goto err_free;
 	}
 
+	if (this->pdata->vreg_configure) {
+		rc = this->pdata->vreg_configure(1);
+		if (rc) {
+			dev_err(&this->pdev->dev,
+			       "failed vreg init\n");
+			goto err_free;
+		}
+	}
+
 	if (this->pdata->gpio_configure) {
 		rc = this->pdata->gpio_configure(1);
 		if (rc) {
 			dev_err(&this->pdev->dev,
 			       "failed gpio init\n");
-			goto err_free;
+			goto err_vreg_teardown;
 		}
 	}
 
@@ -1969,6 +1978,9 @@ err_input_unregister:
 err_gpio_teardown:
 	if (this->pdata->gpio_configure)
 		this->pdata->gpio_configure(0);
+err_vreg_teardown:
+	if (this->pdata->vreg_configure)
+		this->pdata->vreg_configure(0);
 err_free:
 	dev_set_drvdata(&pdev->dev, NULL);
 	kfree(this);
@@ -1986,19 +1998,13 @@ static int __devexit clearpad_remove(struct platform_device *pdev)
 
 	if (this->pdata->gpio_configure)
 		this->pdata->gpio_configure(0);
-
+	if (this->pdata->vreg_configure)
+		this->pdata->vreg_configure(0);
 	kfree(this);
 
 	return 0;
 }
 
-static void clearpad_shutdown(struct platform_device *pdev)
-{
-	struct synaptics_clearpad *this = dev_get_drvdata(&pdev->dev);
-
-	if (this->pdata->vreg_off)
-		this->pdata->vreg_off();
-}
 
 static const struct dev_pm_ops synaptics_clearpad_pm = {
 #ifndef CONFIG_HAS_EARLYSUSPEND
@@ -2015,7 +2021,6 @@ static struct platform_driver clearpad_driver = {
 	},
 	.probe		= clearpad_probe,
 	.remove		= __devexit_p(clearpad_remove),
-	.shutdown	= clearpad_shutdown
 };
 
 static int __init clearpad_init(void)

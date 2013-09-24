@@ -45,8 +45,8 @@ struct synaptics_button {
 struct clearpad_platform_data {
 	int irq;
 	struct synaptics_funcarea *funcarea; /* last one = SYN_FUNCAREA_END */
+	int (*vreg_configure)(int);
 	int (*gpio_configure)(int);
-	void (*vreg_off)(void);
 };
 
 struct clearpad_bus_data {
