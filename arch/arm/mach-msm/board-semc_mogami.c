@@ -27,7 +27,6 @@
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
-#include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
 #include <linux/msm_adc.h>
 #include <linux/dma-mapping.h>
@@ -229,24 +228,12 @@
 #define PM8058_MPP_BASE			   PM8058_GPIO_PM_TO_SYS(PM8058_GPIOS)
 #define PM8058_MPP_PM_TO_SYS(pm_gpio)	   (pm_gpio + PM8058_MPP_BASE)
 
-#define PMIC_GPIO_QUICKVX_CLK 37 /* PMIC GPIO 38 */
-
 #define DDR0_BANK_BASE PHYS_OFFSET
 #define DDR0_BANK_SIZE 0X03C00000
 #define DDR1_BANK_BASE 0x07000000
 #define DDR1_BANK_SIZE 0x09000000
 #define DDR2_BANK_BASE 0X40000000
 #define DDR2_BANK_SIZE 0X10000000
-
-/* Platform-specific regulator name mappings according to conf. spec. */
-#define VREG_L8	"gp7"	/* BMA150, AK8975B, LCD, Touch, HDMI */
-#define VREG_L10	"gp4"	/* BMA150, AK8975B */
-#define VREG_L15	"gp6"	/* LCD */
-#define VREG_L20	"gp13"	/* Touch */
-
-
-/* Platform specific HW-ID GPIO mask */
-static const u8 hw_id_gpios[] = {150, 149, 148, 43};
 
 static unsigned int phys_add = DDR2_BANK_BASE;
 unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
@@ -306,6 +293,9 @@ static void vreg_helper_off(const char *pzName)
 	printk(KERN_INFO "Disabled VREG \"%s\"\n", pzName);
 }
 #endif
+
+/* Platform specific HW-ID GPIO mask */
+static const u8 hw_id_gpios[] = {150, 149, 148, 43};
 
 static ssize_t hw_id_get_mask(struct class *class, struct class_attribute *attr, char *buf)
 {
@@ -1232,7 +1222,6 @@ static unsigned int msm_marimba_setup_power(void)
 
 	return 0;
 
-	regulator_disable(vreg_marimba_2);
 disable_marimba_1:
 	regulator_disable(vreg_marimba_1);
 out:
@@ -1629,7 +1618,6 @@ static struct platform_device msm_device_adspdec = {
 		.platform_data = &msm_device_adspdec_database
 	},
 };
-
 
 #ifdef CONFIG_USB_G_ANDROID
 #define PID_MAGIC_ID		0x71432909
@@ -2739,29 +2727,29 @@ static struct i2c_board_info msm_i2c_board_info[] = {
 #endif
 };
 
-static struct spi_board_info spi_board_info[] __initdata = {
+static struct spi_board_info msm_spi_board_info[] __initdata = {
 #ifdef CONFIG_TOUCHSCREEN_CY8CTMA300_SPI
 	{
-		.modalias       = "cypress_touchscreen",
-		.mode           = SPI_MODE_0,
-		.platform_data  = &cypress_touch_data,
-		.bus_num        = 0,
-		.chip_select    = 0,
-		.max_speed_hz   = 1 * 1000 * 1000,
+		.modalias	= "cypress_touchscreen",
+		.mode		= SPI_MODE_0,
+		.platform_data	= &cypress_touch_data,
+		.bus_num	= 0,
+		.chip_select	= 0,
+		.max_speed_hz	= 1 * 1000 * 1000,
 		.irq		= MSM_GPIO_TO_INT(CYPRESS_TOUCH_GPIO_IRQ),
 	},
 #endif
 #ifdef CONFIG_TOUCHSCREEN_CYTTSP_SPI
-        {
-                .modalias       = CY_SPI_NAME,
-                .mode           = SPI_MODE_0,
-                .irq            = MSM_GPIO_TO_INT(CYPRESS_TOUCH_GPIO_IRQ),
-                .platform_data  = &cyttsp_data,
-                .bus_num        = 0,
-                .chip_select    = 0,
-                .max_speed_hz   = 1 * 1000 * 1000,
-        },
-#endif /* CONFIG_TOUCHSCREEN_CYTTSP_SPI */
+	{
+		.modalias	= CY_SPI_NAME,
+		.mode		= SPI_MODE_0,
+		.platform_data	= &cyttsp_data,
+		.bus_num	= 0,
+		.chip_select	= 0,
+		.max_speed_hz	= 1 * 1000 * 1000,
+		.irq		= MSM_GPIO_TO_INT(CYPRESS_TOUCH_GPIO_IRQ),
+	},
+#endif
 };
 
 static struct i2c_board_info msm_marimba_board_info[] = {
@@ -3129,7 +3117,13 @@ static struct resource msm_fb_resources[] = {
 	}
 };
 
+static int msm_fb_detect_panel(const char *name)
+{
+	return -ENODEV;
+}
+
 static struct msm_fb_platform_data msm_fb_pdata = {
+	.detect_client = msm_fb_detect_panel,
 	.mddi_prescan = 1,
 };
 
@@ -3287,8 +3281,10 @@ static struct platform_device qcedev_device = {
 };
 #endif
 
-static unsigned char quickvx_mddi_client = 1, other_mddi_client = 1;
-static struct regulator *mddi_ldo16;
+static int display_power(int on)
+{
+	return 0;
+}
 
 static int msm_fb_mddi_sel_clk(u32 *clk_rate)
 {
@@ -3296,41 +3292,9 @@ static int msm_fb_mddi_sel_clk(u32 *clk_rate)
 	return 0;
 }
 
-static int msm_fb_mddi_client_power(u32 client_id)
-{
-	int rc;
-	printk(KERN_NOTICE "\n client_id = 0x%x", client_id);
-	/* Check if it is Quicklogic client */
-	if (client_id == 0xc5835800) {
-		printk(KERN_NOTICE "\n Quicklogic MDDI client");
-		other_mddi_client = 0;
-		if (IS_ERR(mddi_ldo16)) {
-			rc = PTR_ERR(mddi_ldo16);
-			pr_err("%s: gp10 vreg get failed (%d)\n", __func__, rc);
-			return rc;
-		}
-		rc = regulator_disable(mddi_ldo16);
-		if (rc) {
-			pr_err("%s: LDO16 vreg enable failed (%d)\n",
-							__func__, rc);
-			return rc;
-		}
-
-	} else {
-		printk(KERN_NOTICE "\n Non-Quicklogic MDDI client");
-		quickvx_mddi_client = 0;
-		gpio_set_value(97, 0);
-		gpio_set_value_cansleep(PM8058_GPIO_PM_TO_SYS(
-			PMIC_GPIO_QUICKVX_CLK), 0);
-	}
-
-	return 0;
-}
-
 static struct mddi_platform_data mddi_pdata = {
-	//.mddi_power_save = display_common_power,
+	.mddi_power_save = display_power,
 	.mddi_sel_clk = msm_fb_mddi_sel_clk,
-	.mddi_client_power = msm_fb_mddi_client_power,
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
@@ -3557,11 +3521,14 @@ static void __init msm_fb_add_devices(void)
 	msm_fb_register_device("pmdh", &mddi_pdata);
 }
 
-static char *msm_adc_surf_device_names[] = {
+static char *msm_adc_device_names[] = {
 	"XO_ADC",
 };
 
-static struct msm_adc_platform_data msm_adc_pdata;
+static struct msm_adc_platform_data msm_adc_pdata = {
+	.dev_names = msm_adc_device_names,
+	.num_adc = ARRAY_SIZE(msm_adc_device_names),
+};
 
 static struct platform_device msm_adc_device = {
 	.name   = "msm_adc",
@@ -3782,9 +3749,7 @@ static struct msm_gpio msm_nand_ebi2_cfg_data[] = {
 	{GPIO_CFG(115, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA), "ebi2_busy1"},
 };
 
-#if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
-	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
-	|| defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
+#if (defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC4_SUPPORT))
 
 struct sdcc_gpio {
@@ -4001,7 +3966,6 @@ out:
 	return rc;
 }
 
-
 #endif
 
 #ifdef CONFIG_MMC_MSM_SDC4_SUPPORT
@@ -4144,27 +4108,27 @@ out3:
  */
 static void __init mogami_temp_fixups(void)
 {
-	gpio_set_value(46, 1);	/* SPI_CS0_N */
-	gpio_set_value(134, 1);	/* UART1DM_RFR_N */
-	gpio_set_value(137, 1);	/* UART1DM_TXD */
+	gpio_set_value(46, 1);	/* SPI_CS0_N - Touch */
+	gpio_set_value(134, 1);	/* UART1DM_RFR_N - BT */
+	gpio_set_value(137, 1);	/* UART1DM_TXD - BT */
 }
 
 static void __init shared_vreg_on(void)
 {
 #ifndef CONFIG_TOUCHSCREEN_CLEARPAD
 #ifdef CONFIG_MSM_UNDERVOLT_TOUCH
-	vreg_helper_on(VREG_L20, 2800);
+	vreg_helper_on("gp13", 2800); /* ldo20 - Touch */
 #else
-	vreg_helper_on(VREG_L20, 3050);
+	vreg_helper_on("gp13", 3050); /* ldo20 - Touch */
 #endif
 #endif
-	vreg_helper_on(VREG_L10, 2600);
+	vreg_helper_on("gp4", 2600);  /* ldo10 - BMA150, AK8975B */
 #ifdef CONFIG_MSM_UNDERVOLT_LCD
-	vreg_helper_on(VREG_L15, 2300);
+	vreg_helper_on("gp6", 2300);  /* ldo15 - LCD */
 #else
-	vreg_helper_on(VREG_L15, 2900);
+	vreg_helper_on("gp6", 2900);  /* ldo15 - LCD */
 #endif
-	vreg_helper_on(VREG_L8, 1800);
+	vreg_helper_on("gp7", 1800);  /* ldo08 - BMA150, AK8975B, LCD, Touch, HDMI */
 }
 
 static void __init msm7x30_init_nand(void)
@@ -4190,8 +4154,6 @@ static void __init msm7x30_init_nand(void)
 
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
 static struct msm_gpio uart3_config_data[] = {
-//	{ GPIO_CFG(49, 2, GPIO_CFG_OUTPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), "UART2_RFR"},
-//	{ GPIO_CFG(50, 2, GPIO_CFG_INPUT,   GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), "UART2_CTS"},
 	{ GPIO_CFG(53, 1, GPIO_CFG_INPUT,   GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART3_Rx"},
 	{ GPIO_CFG(54, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_4MA), "UART3_Tx"},
 };
@@ -4269,12 +4231,14 @@ static void __init msm7x30_init(void)
 #endif
 	msm_spm_init(&msm_spm_data, 1);
 	platform_device_register(&msm7x30_device_acpuclk);
+
 #ifdef CONFIG_USB_MSM_OTG_72K
 	if (SOCINFO_VERSION_MAJOR(soc_version) >= 2 &&
 			SOCINFO_VERSION_MINOR(soc_version) >= 1) {
 		pr_debug("%s: SOC Version:2.(1 or more)\n", __func__);
 		msm_otg_pdata.ldo_set_voltage = 0;
 	}
+
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =
@@ -4285,13 +4249,14 @@ static void __init msm7x30_init(void)
 #endif
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(136);
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
-	msm_adc_pdata.dev_names = msm_adc_surf_device_names;
-	msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
+
 	buses_init();
+
 #ifdef CONFIG_MSM_SSBI
 	msm_device_ssbi_pmic1.dev.platform_data =
 				&msm7x30_ssbi_pm8058_pdata;
 #endif
+
 	platform_add_devices(msm_footswitch_devices,
 			     msm_num_footswitch_devices);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
@@ -4340,8 +4305,9 @@ static void __init msm7x30_init(void)
 
 	i2c_register_board_info(4 /* QUP ID */, msm_camera_boardinfo,
 				ARRAY_SIZE(msm_camera_boardinfo));
-	spi_register_board_info(spi_board_info,
-		ARRAY_SIZE(spi_board_info));
+
+	spi_register_board_info(msm_spi_board_info,
+				ARRAY_SIZE(msm_spi_board_info));
 
 #ifdef CONFIG_I2C_SSBI
 	msm_device_ssbi7.dev.platform_data = &msm_i2c_ssbi7_pdata;
