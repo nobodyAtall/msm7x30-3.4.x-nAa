@@ -34,6 +34,10 @@
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
 
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+#include <linux/usb/host_ext_event.h>
+#endif
+
 #define MSM_USB_BASE	(dev->regs)
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
 #define DRIVER_NAME	"msm_otg"
@@ -2142,6 +2146,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_unlock_irqrestore(&dev->lock, flags);
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
 			msm_otg_start_host(dev->phy.otg, REQUEST_STOP);
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+			host_send_uevent(USB_HOST_EXT_EVENT_VBUS_DROP);
+#endif
 			/* Reset both phy and link */
 			otg_reset(&dev->phy, 1);
 		} else if (test_bit(ID, &dev->inputs) &&
@@ -2196,6 +2203,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_unlock_irqrestore(&dev->lock, flags);
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
 			msm_otg_start_host(dev->phy.otg, REQUEST_STOP);
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+			host_send_uevent(USB_HOST_EXT_EVENT_VBUS_DROP);
+#endif
 			/* Reset both phy and link */
 			otg_reset(&dev->phy, 1);
 		} else if ((test_bit(ID, &dev->inputs) &&
@@ -2231,6 +2241,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			dev->phy.state = OTG_STATE_A_VBUS_ERR;
 			spin_unlock_irqrestore(&dev->lock, flags);
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+			host_send_uevent(USB_HOST_EXT_EVENT_VBUS_DROP);
+#endif
 			/* Reset both phy and link */
 			otg_reset(&dev->phy, 1);
 		} else if ((test_bit(ID, &dev->inputs) &&
@@ -2304,6 +2317,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_unlock_irqrestore(&dev->lock, flags);
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
 			msm_otg_start_host(dev->phy.otg, REQUEST_STOP);
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+			host_send_uevent(USB_HOST_EXT_EVENT_VBUS_DROP);
+#endif
 			/* Reset both phy and link */
 			otg_reset(&dev->phy, 1);
 			/* no work */
@@ -2400,6 +2416,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			spin_unlock_irqrestore(&dev->lock, flags);
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
 			msm_otg_start_host(dev->phy.otg, REQUEST_STOP);
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+			host_send_uevent(USB_HOST_EXT_EVENT_VBUS_DROP);
+#endif
 			/* Reset both phy and link */
 			otg_reset(&dev->phy, 1);
 		} else if ((test_bit(ID, &dev->inputs) &&
@@ -2494,6 +2513,9 @@ static void msm_otg_sm_work(struct work_struct *w)
 			dev->pdata->vbus_power(USB_PHY_INTEGRATED, 0);
 			msm_otg_start_peripheral(dev->phy.otg, 0);
 			dev->phy.otg->gadget->is_a_peripheral = 0;
+#ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
+			host_send_uevent(USB_HOST_EXT_EVENT_VBUS_DROP);
+#endif
 			/* HCD was suspended before. Stop it now */
 			msm_otg_start_host(dev->phy.otg, REQUEST_STOP);
 		} else if ((test_bit(ID, &dev->inputs) &&
