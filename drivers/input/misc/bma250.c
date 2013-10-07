@@ -647,9 +647,9 @@ config_error:
 }
 
 #if defined(CONFIG_PM)
-static int bma250_suspend(struct i2c_client *ic_dev, pm_message_t mesg)
+static int bma250_suspend(struct device *ic_dev)
 {
-	struct driver_data *dd = bma250_ic_get_data(ic_dev);
+	struct driver_data *dd = dev_get_drvdata(ic_dev);
 
 	if (dd->ip_dev->users)
 		bma250_power_down(dd);
@@ -659,9 +659,9 @@ static int bma250_suspend(struct i2c_client *ic_dev, pm_message_t mesg)
 	return 0;
 }
 
-static int bma250_resume(struct i2c_client *ic_dev)
+static int bma250_resume(struct device *ic_dev)
 {
-	struct driver_data *dd = bma250_ic_get_data(ic_dev);
+	struct driver_data *dd = dev_get_drvdata(ic_dev);
 	int rc = 0;
 
 	dd->pdata->power_mode(1);
@@ -872,15 +872,19 @@ static const struct i2c_device_id bma250_i2c_id[] = {
 	{}
 };
 
+static struct dev_pm_ops bma250_pm_ops = {
+	.suspend	= bma250_suspend,
+	.resume		= bma250_resume,
+};
+
 static struct i2c_driver bma250_driver = {
 	.driver = {
 		.name  = BMA250_NAME,
 		.owner = THIS_MODULE,
+		.pm	= &bma250_pm_ops,
 	},
 	.probe         = bma250_probe,
 	.remove        = __devexit_p(bma250_remove),
-	.suspend       = bma250_suspend,
-	.resume        = bma250_resume,
 	.id_table      = bma250_i2c_id,
 };
 
