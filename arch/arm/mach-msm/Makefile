@@ -302,7 +302,7 @@ obj-$(CONFIG_ARCH_MSM9625) += board-9625.o board-9625-gpiomux.o
 obj-$(CONFIG_ARCH_MSM8930) += acpuclock-8930.o acpuclock-8627.o acpuclock-8930aa.o acpuclock-8930ab.o
 obj-$(CONFIG_ARCH_MPQ8092) += board-8092.o board-8092-gpiomux.o
 
-mogami-objs = board-semc_mogami.o board-semc_mogami-bluedroid.o board-semc_mogami-rfkill.o board-semc_mogami-wifi.o
+mogami-objs = board-semc_mogami.o board-semc_mogami-bluedroid.o board-semc_mogami-wifi.o
 obj-$(CONFIG_MACH_SEMC_ANZU)     += mogami.o charger-anzu.o     gpio-anzu.o     keypad-anzu.o     leds-anzu.o
 obj-$(CONFIG_MACH_SEMC_COCONUT)  += mogami.o charger-coconut.o  gpio-coconut.o  keypad-coconut.o  leds-coconut.o  touch-coconut.o
 obj-$(CONFIG_MACH_SEMC_HAIDA)    += mogami.o charger-haida.o    gpio-haida.o    keypad-haida.o    leds-haida.o

@@ -3289,43 +3289,6 @@ static struct msm_panel_common_pdata mdp_pdata = {
 	.mem_hid = MEMTYPE_EBI0,
 };
 
-#ifdef CONFIG_BT
-static uint32_t bt_config_on_gpios[] = {
-	GPIO_CFG(134, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-	GPIO_CFG(135, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(136, 1, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(137, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-	GPIO_CFG(103, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-};
-
-static uint32_t bt_config_off_gpios[] = {
-	GPIO_CFG(134, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(135, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(136, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(137, 0, GPIO_CFG_INPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-	GPIO_CFG(103, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-};
-
-static int bluetooth_power(int on)
-{
-	if (on) {
-		config_gpio_table(bt_config_on_gpios,
-				  ARRAY_SIZE(bt_config_on_gpios));
-		gpio_set_value(103, 1);
-	} else {
-		gpio_set_value(103, 0);
-		config_gpio_table(bt_config_off_gpios,
-				  ARRAY_SIZE(bt_config_off_gpios));
-	}
-	return 0;
-}
-
-static struct platform_device mogami_device_rfkill = {
-	.name = "mogami-rfkill",
-	.dev.platform_data = &bluetooth_power,
-};
-#endif
-
 static struct regulator *atv_s4, *atv_ldo9;
 
 static int __init atv_dac_power_init(void)
@@ -3623,9 +3586,6 @@ static struct platform_device *devices[] __initdata = {
 #endif
 #ifdef CONFIG_FB_MSM_MDDI_AUO_HVGA
 	&mddi_auo_hvga_display_device,
-#endif
-#ifdef CONFIG_BT
-	&mogami_device_rfkill,
 #endif
 
 #if defined(CONFIG_CRYPTO_DEV_QCRYPTO) || \
@@ -4248,9 +4208,6 @@ static void __init msm7x30_init(void)
 	msm7x30_init_mmc();
 	msm_qsd_spi_init();
 	msm7x30_init_nand();
-#ifdef CONFIG_BT
-	bluetooth_power(0);
-#endif
 	atv_dac_power_init();
 #ifdef CONFIG_INPUT_KEYRESET
 	platform_device_register(&mogami_reset_keys_device);
