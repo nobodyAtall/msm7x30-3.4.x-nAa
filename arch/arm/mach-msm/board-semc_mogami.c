@@ -87,7 +87,9 @@
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 #include <mach/simple_remote_msm7x30_pf.h>
 #endif
+#ifdef SEMC_RPC_SERVER_HANDSET
 #include <mach/semc_rpc_server_handset.h>
+#endif
 
 #ifdef CONFIG_CHARGER_BQ24185
 #include <linux/i2c/bq24185_charger.h>
@@ -347,6 +349,7 @@ static void __init hw_id_class_init(void)
 	}
 }
 
+#ifdef SEMC_RPC_SERVER_HANDSET
 static struct input_dev *input_dev_pwr_key = NULL;
 static void msm_pmic_pwr_key_rpc_callback(uint32_t key, uint32_t event)
 {
@@ -413,6 +416,7 @@ static struct platform_device semc_rpc_handset_device = {
 		.platform_data = &semc_rpc_hs_data,
 	},
 };
+#endif
 
 struct pm8xxx_gpio_init_info {
 	unsigned			gpio;
@@ -3571,7 +3575,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_i2c,
 	&msm_device_i2c_2,
 	&msm_device_uart_dm1,
+#ifdef SEMC_RPC_SERVER_HANDSET
 	&semc_rpc_handset_device,
+#endif
 	&hs_device,
 #ifdef CONFIG_MSM7KV2_AUDIO
 	&msm_aictl_device,
