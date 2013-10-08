@@ -26,26 +26,6 @@
 
 extern struct irq_chip msm_gpio_irq_extn;
 
-static inline int gpio_get_value(unsigned gpio)
-{
-	return __gpio_get_value(gpio);
-}
-
-static inline void gpio_set_value(unsigned gpio, int value)
-{
-	__gpio_set_value(gpio, value);
-}
-
-static inline int gpio_cansleep(unsigned gpio)
-{
-	return __gpio_cansleep(gpio);
-}
-
-static inline int gpio_to_irq(unsigned gpio)
-{
-	return __gpio_to_irq(gpio);
-}
-
 /**
  * struct msm_gpio - GPIO pin description
  * @gpio_cfg - configuration bitmap, as per gpio_tlmm_config()
