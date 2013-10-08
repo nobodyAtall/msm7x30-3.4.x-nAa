@@ -1,4 +1,4 @@
-/* drivers/video/msm/mddi_nt_panels/mddi_nt_sony_acx424akm.c
+/* drivers/video/msm/mddi_nt_hitachi_dx09d09vm.c
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
@@ -13,7 +13,12 @@
 #include "mddi_nt_panel.h"
 
 static const struct novatek_reg_set novatek_init_regs[] = {
-	{ 0xAE00, 0x0003 },	/* Set MDDI1.2 2Lane */
+	{ 0, 0}
+};
+
+static const struct novatek_reg_set novatek_setup_regs[] = {
+	{ 0x1100, 0x0000 },
+	{ 0x0000,     10 },	/* sleep_ms(10) */
 
 	/* LED PWM */
 	{ 0x22C0, 0x0002 },
@@ -23,25 +28,15 @@ static const struct novatek_reg_set novatek_init_regs[] = {
 	{ 0x5500, 0x0003 },
 
 	/* FTE */
-	{ 0x4400, 0x0000 },	/* SET_TEAR_SCANLINE */
-	{ 0x4401, 0x0000 },	/* SET_TEAR_SCANLINE */
-	{ 0x3500, 0x0000 },	/* SET_TEAR_ON */
+	{ 0x3500, 0x0000 },
+	{ 0x4400, 0x0000 },
+	{ 0x4401, 0x0000 },
 
 	/* Rotation Function */
-	{ 0xC980, 0x0001 },
-	{ 0xA280, 0x0003 },
+	{ 0xCB80, 0x000F },
+	{ 0xA280, 0x0004 },
 
-	/* DDC */
-	{ 0xC980, 0x0001 },
-	{ 0x0980, 0x0034 },
-
-	{ 0x3600, 0x0000 },	/* SET_ADDRESS_MODE */
-	{ 0, 0}
-};
-
-static const struct novatek_reg_set novatek_setup_regs[] = {
-	{ 0x1100, 0x0000 },
-	{ 0x0000,     10 },	/* sleep_ms(10) */
+	{ 0x0000,    120 },	/* sleep_ms(120) */
 	{ 0, 0}
 };
 
@@ -52,13 +47,13 @@ static const struct novatek_reg_set novatek_display_on_regs[] = {
 
 static const struct novatek_reg_set novatek_display_off_regs[] = {
 	{ 0x2800, 0x0000 },	/* SET_DISPLAY_OFF */
-	{ 0x0000,     30 },	/* sleep_ms(30) */
+	{ 0x0000,     68 },	/* sleep_ms(68) TBD */
 	{ 0, 0 }
 };
 
 static const struct novatek_reg_set novatek_takedown_regs[] = {
 	{ 0x1000, 0x0000 },
-	{ 0x0000,    180 },	/* sleep_ms(180) */
+	{ 0x0000,    200 },	/* sleep_ms(200) */
 	{ 0, 0 }
 };
 
@@ -84,7 +79,7 @@ static struct msm_fb_panel_data *get_panel_info(void)
 	novatek_panel_data.panel_info.bl_min = 1;
 	novatek_panel_data.panel_info.fb_num = 2;
 	novatek_panel_data.panel_info.mddi.vdopkt = MDDI_DEFAULT_PRIM_PIX_ATTR;
-	novatek_panel_data.panel_info.lcd.refx100 = 6200;
+	novatek_panel_data.panel_info.lcd.refx100 = 6000;
 	novatek_panel_data.panel_info.lcd.v_back_porch = 12;
 	novatek_panel_data.panel_info.lcd.v_front_porch = 14;
 	novatek_panel_data.panel_info.lcd.v_pulse_width = 0;
@@ -103,26 +98,26 @@ static struct novatek_controller novatek_controller_panel = {
 	.get_panel_info = get_panel_info,
 };
 
-const struct panel_id novatek_panel_id_sony_acx424akm_type1 = {
-	.name = "Sony MDDI Type 1 ACX424AKM",
+const struct panel_id novatek_panel_id_hitachi_dx09d09vm_type1 = {
+	.name = "Hitachi MDDI Type 1 DX09D09VM",
 	.reg_count = 2,
-	.regs = { {0xDB00, 0x80}, {0xDC00, 0x02} },
+	.regs = { {0xDB00, 0x80}, {0xDC00, 0x06} },
 	.pinfo = &novatek_controller_panel,
 	.mddi_type = 1,
 	.width = 46,
 	.height = 82,
 	.suspend_support = 1,
-	.esd_support = 0,
+	.esd_support = 1,
 };
 
-const struct panel_id novatek_panel_id_sony_acx424akm = {
-	.name = "Sony MDDI Type 2 ACX424AKM",
+const struct panel_id novatek_panel_id_hitachi_dx09d09vm = {
+	.name = "Hitachi MDDI Type 2 DX09D09VM",
 	.reg_count = 2,
-	.regs = { {0xDA00, 0x01}, {0xDC00, 0x02} },
+	.regs = { {0xDA00, 0x01}, {0xDC00, 0x06} },
 	.pinfo = &novatek_controller_panel,
+	.mddi_type = 2,
 	.width = 46,
 	.height = 82,
-	.mddi_type = 2,
 	.suspend_support = 1,
 	.esd_support = 1,
 };

@@ -397,7 +397,7 @@ int mddi_host_register_write(uint32 reg_addr,
 		mddi_linked_list_notify_type *llist_notify_ptr;
 		llist_notify_ptr = &llist_extern_notify[host][curr_llist_idx];
 		wait_ret = wait_for_completion_timeout(
-					&(llist_notify_ptr->done_comp), HZ/5);
+					&(llist_notify_ptr->done_comp), HZ / 5);
 
 		if (wait_ret <= 0)
 			ret = -EBUSY;

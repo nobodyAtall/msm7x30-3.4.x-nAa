@@ -1,4 +1,4 @@
-/* drivers/video/msm/mddi_nt_panels/mddi_nt_sony_acx424ak.c
+/* drivers/video/msm/mddi_nt_sony_acx424ak.c
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
@@ -223,4 +223,3 @@ const struct panel_id novatek_panel_id_sony_acx424ak = {
 	.suspend_support = 1,
 	.esd_support = 1,
 };
-

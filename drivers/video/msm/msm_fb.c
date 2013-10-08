@@ -166,7 +166,7 @@ int msm_fb_cursor(struct fb_info *info, struct fb_cursor *cursor)
 
 static int msm_fb_resource_initialized;
 
-#if 0
+#ifndef CONFIG_SEMC_PLATFORM
 #ifndef CONFIG_FB_BACKLIGHT
 static int lcd_backlight_registered;
 
@@ -197,6 +197,7 @@ static struct led_classdev backlight_led = {
 };
 #endif
 #endif
+
 static struct msm_fb_platform_data *msm_fb_pdata;
 unsigned char hdmi_prim_display;
 
@@ -399,7 +400,7 @@ static int msm_fb_probe(struct platform_device *pdev)
 	if (err < 0)
 		printk(KERN_ERR "pm_runtime: fail to set active.\n");
 	pm_runtime_enable(mfd->fbi->dev);
-#if 0
+#ifndef CONFIG_SEMC_PLATFORM
 #ifdef CONFIG_FB_BACKLIGHT
 	msm_fb_config_backlight(mfd);
 #else
@@ -462,7 +463,7 @@ static int msm_fb_remove(struct platform_device *pdev)
 	/* remove /dev/fb* */
 	unregister_framebuffer(mfd->fbi);
 
-#if 0
+#ifndef CONFIG_SEMC_PLATFORM
 #ifdef CONFIG_FB_BACKLIGHT
 	/* remove /sys/class/backlight */
 	backlight_device_unregister(mfd->fbi->bl_dev);
@@ -895,10 +896,8 @@ int calc_fb_offset(struct msm_fb_data_type *mfd, struct fb_info *fbi, int bpp)
 	struct msm_panel_info *panel_info = &mfd->panel_info;
 	int remainder, yres, offset;
 
-    if (!align_buffer)
-    {
-        return fbi->var.xoffset * bpp + fbi->var.yoffset * fbi->fix.line_length;
-    }
+	if (!align_buffer)
+		return fbi->var.xoffset * bpp + fbi->var.yoffset * fbi->fix.line_length;
 
 	if (panel_info->mode2_yres != 0) {
 		yres = panel_info->mode2_yres;

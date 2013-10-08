@@ -1,4 +1,4 @@
-/* drivers/video/msm/mddi_nt_panels/mddi_nt_panel.h
+/* drivers/video/msm/mddi_nt_panel.h
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *

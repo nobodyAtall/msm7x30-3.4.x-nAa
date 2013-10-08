@@ -23,7 +23,7 @@
 #include "msm_fb.h"
 #include "mddihost.h"
 #include "mddihosti.h"
-#include "mddi_nt_panels/mddi_nt_panel.h"
+#include "mddi_nt_panel.h"
 #include "mdp4.h"
 #define write_client_reg(__X, __Y) \
   mddi_queue_register_write(__X, __Y, TRUE, 0)

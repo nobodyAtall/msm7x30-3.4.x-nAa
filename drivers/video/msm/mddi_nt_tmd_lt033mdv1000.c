@@ -1,4 +1,4 @@
-/* drivers/video/msm/mddi_nt_panels/mddi_nt_tmd_lt033mdv1000.c
+/* drivers/video/msm/mddi_nt_tmd_lt033mdv1000.c
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
@@ -211,4 +211,3 @@ const struct panel_id novatek_panel_id_tmd_lt033mdv1000 = {
 	.suspend_support = 1,
 	.esd_support = 1,
 };
-

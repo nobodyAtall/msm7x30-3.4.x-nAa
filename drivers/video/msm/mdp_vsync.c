@@ -503,7 +503,6 @@ uint32 mdp_get_lcd_line_counter(struct msm_fb_data_type *mfd)
 	return lcd_line;
 }
 
-
 void mdp_vsync_config_update(struct msm_panel_info *pinfo)
 {
 	uint32 mdp_vsync_clk_speed_hz;

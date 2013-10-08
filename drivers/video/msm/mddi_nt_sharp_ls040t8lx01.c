@@ -1,4 +1,4 @@
-/* drivers/video/msm/mddi_nt_panels/mddi_nt_sharp_ls040t8lx01.c
+/* drivers/video/msm/mddi_nt_sharp_ls040t8lx01.c
  *
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
@@ -257,4 +257,3 @@ const struct panel_id novatek_panel_id_sharp_ls040t8lx01_rev_d = {
 	.suspend_support = 1,
 	.esd_support = 1,
 };
-

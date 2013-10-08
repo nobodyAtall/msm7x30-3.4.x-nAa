@@ -146,6 +146,11 @@ config FB_MSM_MDDI_TOSHIBA_COMMON_VGA
 	select FB_MSM_MDDI_TOSHIBA_COMMON
 	default n
 
+config FB_MSM_MDDI_NOVATEK_FWVGA
+	bool
+	select FB_MSM_MDDI
+	default n
+
 config FB_MSM_MDDI_ORISE
 	bool
 	select FB_MSM_MDDI
@@ -376,9 +381,8 @@ config FB_MSM_WRITEBACK_MSM_PANEL
         bool "MDP overlay write back panel enable"
 	---help---
 	  Support for MDP4 OVERLAY write back mode
-choice
-	prompt "LCD Panel"
-	default FB_MSM_MDDI_AUTO_DETECT
+
+menu "LCD Panel"
 
 config FB_MSM_LCDC_PRISM_WVGA_PANEL
 	depends on FB_MSM_LCDC_HW
@@ -543,6 +547,104 @@ config FB_MSM_MDDI_TOSHIBA_WVGA
 	---help---
 	  Support for MDDI Toshiba (800x480) WVGA panel
 
+config FB_MSM_MDDI_SONY_HVGA
+	bool "MDDI Sony HVGA Panel"
+	select FB_MSM_MDDI
+	---help---
+	  Support for MDDI Sony HVGA (320x480) panel
+
+config FB_MSM_MDDI_HITACHI_HVGA
+	bool "MDDI Hitachi HVGA Panel"
+	select FB_MSM_MDDI
+	---help---
+	  Support for MDDI Hitachi HVGA (320x480) panel
+
+config FB_MSM_MDDI_SII_HVGA
+	bool "MDDI Sii HVGA Panel"
+	select FB_MSM_MDDI
+	default n
+	---help---
+	  Support for MDDI Sii HVGA (320x480) panel
+
+config FB_MSM_MDDI_AUO_HVGA
+	bool "MDDI Auo HVGA Panel"
+	select FB_MSM_MDDI
+	default n
+	---help---
+	  Support for MDDI Auo HVGA (320x480) panel
+
+config FB_MSM_MDDI_NOVATEK_TMD_MDP42
+	bool "TMD MDP42 Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for TMD MDP42 panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_SHARP_LS040T8LX01
+	bool "SHARP LS040T8LX01 Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for SHARP LS040T8LX01 panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_SHARP_LS042T3LX
+	bool "SHARP LS042T3LX Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for SHARP_LS042T3LX panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_SONY_ACX424AKM
+	bool "SONY ACX424AKM Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for SONY_ACX424AKM panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_SONY_ACX427AK
+	bool "SONY ACX427AK Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for SONY_ACX427AK panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_SONY_ACX424AK
+	bool "SONY ACX424AK Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for SONY_ACX424AK panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_HITACHI_DX09D09VM
+	bool "HITACHI DX09D09VM Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for HITACHI_DX09D09VM panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_SHARP_LS033T3LX01
+	bool "SHARP LS033T3LX01 Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for SHARP_LS033T3LX01 panel connected
+	  to the MDDI Novatek micro controller
+
+config FB_MSM_MDDI_NOVATEK_TMD_LT033MDV1000
+	bool "TMD LT033MDV1000 Panel"
+	select FB_MSM_MDDI_NOVATEK_FWVGA
+	default n
+	---help---
+	  Support for TMD_LT033MDV1000 panel connected
+	  to the MDDI Novatek micro controller
+
 config FB_MSM_MDDI_SHARP_QVGA_128x128
 	bool "MDDI Sharp QVGA Dual Panel"
 	select FB_MSM_MDDI
@@ -617,7 +719,7 @@ config FB_MSM_PANEL_NONE
 	bool "NONE"
 	---help---
 	  This will disable LCD panel
-endchoice
+endmenu
 
 choice
 	prompt "Secondary LCD Panel"
