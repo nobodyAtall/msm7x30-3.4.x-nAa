@@ -20,9 +20,11 @@
 #include <linux/slab.h>
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>
+#include <linux/wakelock.h>
 #define WILINK_UART_DEV_NAME "/dev/ttyHS0"
 
 static int bt_on;
+static struct wake_lock st_wk_lock;
 
 static uint32_t bt_config_on_gpios[] = {
 	GPIO_CFG(134, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
@@ -90,12 +92,14 @@ static int wilink_disable(struct kim_data_s *data)
 static int wilink_awake(struct kim_data_s *data)
 {
 	pr_info("%s\n", __func__);
+	wake_lock(&st_wk_lock);
 	return 0;
 }
 
 static int wilink_asleep(struct kim_data_s *data)
 {
 	pr_info("%s\n", __func__);
+	wake_unlock(&st_wk_lock);
 	return 0;
 }
 
@@ -138,6 +142,7 @@ static struct platform_device wl1271_device = {
 static int __init mogami_bluedroid_init(void)
 {
 	bluetooth_init();
+	wake_lock_init(&st_wk_lock, WAKE_LOCK_SUSPEND, "st_wake_lock");
 	platform_device_register(&wl1271_device);
 	platform_device_register(&btwilink_device);
 	return 0;
