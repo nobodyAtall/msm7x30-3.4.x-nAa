@@ -87,9 +87,7 @@ struct bma150_accel_data {
 	int	temp;
 };
 
-#ifndef CONFIG_INPUT_BMA150_RATE_MSEC
-#define CONFIG_INPUT_BMA150_RATE_MSEC		 33
-#endif
+#define CONFIG_INPUT_BMA150_RATE_MSEC	33
 #define RESOLUTION_MSEC (1000 / HZ)
 
 struct driver_data {

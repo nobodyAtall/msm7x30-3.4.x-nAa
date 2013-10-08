@@ -695,16 +695,6 @@ config INPUT_BMA150_NG_REG_ACCESS
 	help
 	  Enables access to registers from debug fs
 
-config INPUT_BMA150_RATE_MSEC
-	int "Default delay between samples, in msecs"
-	default 33
-	depends on INPUT_BMA150_NG
-	help
-	  Specifies the approximate delay between successive
-	  measurements from the accelerometer.  The value
-	  specified here is a default applied only when
-	  platform data does not provide a per-device setting.
-
 config INPUT_BMA250
 	tristate "Bosch BMA250 accelerometer"
 	default n
