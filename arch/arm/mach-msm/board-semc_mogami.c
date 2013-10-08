@@ -972,12 +972,16 @@ void msm_snddev_tx_route_deconfig(void)
 	pr_debug("%s()\n", __func__);
 }
 
-void msm_hac_amp_on(void)
+void msm_snddev_hac_amp_on(void)
 {
+	gpio_set_value(109, 1);	/* enable HAC amp */
+	pr_debug("%s: power on HAC amplifier\n", __func__);
 }
 
-void msm_hac_amp_off(void)
+void msm_snddev_hac_amp_off(void)
 {
+	gpio_set_value(109, 0);	/* disable HAC amp */
+	pr_debug("%s: power off HAC amplifier\n", __func__);
 }
 
 void msm_snddev_poweramp_on(void)

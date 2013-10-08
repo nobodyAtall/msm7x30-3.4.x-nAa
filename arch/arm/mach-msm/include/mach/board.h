@@ -647,12 +647,12 @@ static inline void msm_hsusb_set_vbus_state(int online) {}
 
 void msm_snddev_init(void);
 void msm_snddev_init_timpani(void);
+void msm_snddev_hac_amp_on(void);
+void msm_snddev_hac_amp_off(void);
 void msm_snddev_poweramp_on(void);
 void msm_snddev_poweramp_off(void);
 void msm_snddev_hsed_voltage_on(void);
 void msm_snddev_hsed_voltage_off(void);
-void msm_hac_amp_on(void);
-void msm_hac_amp_off(void);
 void msm_snddev_tx_route_config(void);
 void msm_snddev_tx_route_deconfig(void);
 
