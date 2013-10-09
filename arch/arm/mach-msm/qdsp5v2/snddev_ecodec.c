@@ -23,7 +23,7 @@
 #include <mach/debug_mm.h>
 #include <linux/slab.h>
 
-static int marimba_eoff = 600;
+static int marimba_eoff = 750;
 
 /* Context for each external codec device */
 struct snddev_ecodec_state {
@@ -415,11 +415,6 @@ static int snddev_ecodec_probe(struct platform_device *pdev)
 	ecodec->sample_rate = 8000; /* Default to 8KHz */
 	 if (pdata->capability & SNDDEV_CAP_RX) {
 		for (i = 0; i < VOC_RX_VOL_ARRAY_NUM; i++) {
-			printk(KERN_WARNING "Marimba vol %s/%d %d..%d %d\n",
-				pdata->name, i,
-				pdata->min_voice_rx_vol[i],
-				pdata->max_voice_rx_vol[i],
-				marimba_eoff);
 			dev_info->max_voc_rx_vol[i] =
 				pdata->max_voice_rx_vol[i];
 			dev_info->min_voc_rx_vol[i] =

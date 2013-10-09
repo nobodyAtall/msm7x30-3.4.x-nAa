@@ -35,7 +35,7 @@
 #include <linux/slab.h>
 #include <mach/cpuidle.h>
 
-static int marimba_ioff = 600;
+static int marimba_ioff = 750;
 
 #define SMPS_AUDIO_PLAYBACK_ID	"AUPB"
 #define SMPS_AUDIO_RECORD_ID	"AURC"
@@ -836,11 +836,6 @@ static int snddev_icodec_probe(struct platform_device *pdev)
 	dev_info->sample_rate = pdata->default_sample_rate;
 	if (pdata->capability & SNDDEV_CAP_RX) {
 		for (i = 0; i < VOC_RX_VOL_ARRAY_NUM; i++) {
-			printk(KERN_WARNING "Marimba vol %s/%d %d..%d %d\n",
-				pdata->name, i,
-				pdata->min_voice_rx_vol[i],
-				pdata->max_voice_rx_vol[i],
-				marimba_ioff);
 			dev_info->max_voc_rx_vol[i] =
 				pdata->max_voice_rx_vol[i];
 			dev_info->min_voc_rx_vol[i] =
