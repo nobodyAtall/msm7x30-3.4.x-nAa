@@ -151,7 +151,7 @@ enum {
 	PCOM_OEM_ENABLE_HSED_ISR,
 	PCOM_OEM_GET_CRADLE_ADC_VALUE,
 	/* END: ID:s for 3.5mm Audio Jack driver */
- 
+
 	PCOM_OEM_LAST = PCOM_OEM_GET_CRADLE_ADC_VALUE,
 };
 

@@ -1452,7 +1452,6 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 
 	if (n & STS_PCI) {
 		msm_hsusb_set_speed(ui);
-
 		if (atomic_read(&ui->configured)) {
 			wake_lock(&ui->wlock);
 
@@ -1466,6 +1465,7 @@ static irqreturn_t usb_interrupt(int irq, void *data)
 		} else {
 			msm_hsusb_set_state(USB_STATE_DEFAULT);
 		}
+
 #ifdef CONFIG_USB_OTG
 		/* notify otg to clear A_BIDL_ADIS timer */
 		if (ui->gadget.is_a_peripheral)
