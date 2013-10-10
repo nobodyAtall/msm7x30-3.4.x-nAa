@@ -41,7 +41,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/module.h>
-#include <mach/gpio.h>
+#include <linux/gpio.h>
 #include <asm/irq.h>
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
