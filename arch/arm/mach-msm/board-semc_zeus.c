@@ -28,7 +28,6 @@
 #include <linux/mfd/marimba.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
-#include <linux/ofn_atlab.h>
 #include <linux/power_supply.h>
 #include <linux/msm_adc.h>
 #include <linux/dma-mapping.h>
@@ -89,12 +88,16 @@
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 #include <mach/simple_remote_msm7x30_pf.h>
 #endif
+#ifdef CONFIG_SEMC_RPC_SERVER_HANDSET
 #include <mach/semc_rpc_server_handset.h>
+#endif
 
 #ifdef CONFIG_BATTERY_ZEUS
 #include <linux/max17040.h>
 #endif
+#ifdef CONFIG_BATTERY_SEMC_ARCH
 #include <mach/semc_battery_data.h>
+#endif
 #ifdef CONFIG_USB_MSM_OTG_72K
 #include <mach/msm72k_otg.h>
 #endif
@@ -144,8 +147,10 @@
 #define NOVATEK_GPIO_RESET		157
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_CY8CTMA300
 #define CYPRESS_TOUCH_GPIO_RESET	40
 #define CYPRESS_TOUCH_GPIO_IRQ		42
+#endif
 
 #ifdef CONFIG_JOYSTICK_SYNAPTICS
 #define SYNAPTICS_TOUCHPAD_GPIO		33
@@ -173,8 +178,6 @@
 #define PM8058_GPIO_SYS_TO_PM(sys_gpio)    (sys_gpio - NR_GPIO_IRQS)
 #define PM8058_MPP_BASE			   PM8058_GPIO_PM_TO_SYS(PM8058_GPIOS)
 #define PM8058_MPP_PM_TO_SYS(pm_gpio)	   (pm_gpio + PM8058_MPP_BASE)
-
-#define PMIC_GPIO_QUICKVX_CLK 37 /* PMIC GPIO 38 */
 
 #define DDR0_BANK_BASE PHYS_OFFSET
 #define DDR0_BANK_SIZE 0X03C00000
@@ -254,6 +257,7 @@ static void vreg_helper_off(const char *pzName)
 	printk(KERN_INFO "Disabled VREG \"%s\"\n", pzName);
 }
 
+#ifdef CONFIG_SEMC_RPC_SERVER_HANDSET
 static struct input_dev *input_dev_pwr_key = NULL;
 static void msm_pmic_pwr_key_rpc_callback(uint32_t key, uint32_t event)
 {
@@ -320,6 +324,7 @@ static struct platform_device semc_rpc_handset_device = {
 		.platform_data = &semc_rpc_hs_data,
 	},
 };
+#endif
 
 struct pm8xxx_gpio_init_info {
 	unsigned			gpio;
@@ -338,7 +343,7 @@ static int pm8058_gpios_init(void)
 			.vin_sel        = PM8058_GPIO_VIN_L5,
 			.function       = PM_GPIO_FUNC_NORMAL,
 			.inv_int_pol    = 0,
-			.out_strength   = PM_GPIO_STRENGTH_LOW,
+			.out_strength   = PM_GPIO_STRENGTH_HIGH,
 			.output_value   = 0,
 		},
 	};
@@ -435,11 +440,11 @@ static struct msm_ssbi_platform_data msm7x30_ssbi_pm8058_pdata = {
 
 #ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
 static const struct panel_id *novatek_panels[] = {
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_TMD_MDP42
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_TMD_MDP42
 	&novatek_panel_id_tmd_mdp42_rev_c,
 	&novatek_panel_id_tmd_mdp42_rev_d,
 #endif
-#ifdef CONFIG_MDDI_NOVATEK_PANEL_SHARP_LS040T8LX01
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_SHARP_LS040T8LX01
 	&novatek_panel_id_sharp_ls040t8lx01_rev_c_x,	/* SP2.1 support */
 	&novatek_panel_id_sharp_ls040t8lx01_rev_c,
 	&novatek_panel_id_sharp_ls040t8lx01_rev_d,
@@ -946,10 +951,6 @@ static int __init snddev_poweramp_gpio_init(void)
 			__func__, HAC_amp_gpio_config, rc);
 	}
 
-	/* Make sure we start with a known state */
-	msm_snddev_poweramp_off();
-	msm_hac_amp_off();
-
 	return rc;
 }
 
@@ -963,16 +964,16 @@ void msm_snddev_tx_route_deconfig(void)
 	pr_debug("%s()\n", __func__);
 }
 
-void msm_hac_amp_on(void)
+void msm_snddev_hac_amp_on(void)
 {
+	gpio_set_value(109, 1);	/* enable HAC amp */
 	pr_debug("%s: power on HAC amplifier\n", __func__);
-	gpio_set_value(109, 1); /* enable HAC poweramp */
 }
 
-void msm_hac_amp_off(void)
+void msm_snddev_hac_amp_off(void)
 {
+	gpio_set_value(109, 0);	/* disable HAC amp */
 	pr_debug("%s: power off HAC amplifier\n", __func__);
-	gpio_set_value(109, 0); /* disable HAC poweramp */
 }
 
 void msm_snddev_poweramp_on(void)
@@ -988,6 +989,7 @@ void msm_snddev_poweramp_off(void)
 }
 
 static struct regulator_bulk_data snddev_regs[] = {
+	{ .supply = "gp4", .min_uV = 2600000, .max_uV = 2600000 },
 	{ .supply = "ncp", .min_uV = 1800000, .max_uV = 1800000 },
 };
 
@@ -1222,7 +1224,6 @@ static unsigned int msm_marimba_setup_power(void)
 
 	return 0;
 
-	regulator_disable(vreg_marimba_2);
 disable_marimba_1:
 	regulator_disable(vreg_marimba_1);
 out:
@@ -1620,7 +1621,6 @@ static struct platform_device msm_device_adspdec = {
 	},
 };
 
-
 #ifdef CONFIG_USB_G_ANDROID
 #define PID_MAGIC_ID		0x71432909
 #define SERIAL_NUM_MAGIC_ID	0x61945374
@@ -1807,7 +1807,7 @@ static char *semc_chg_usb_supplied_to[] = {
 };
 #endif
 
-#ifdef CONFIG_BATTERY_ZEUS
+#ifdef CONFIG_BATTERY_SEMC_ARCH
 static char *semc_bdata_supplied_to[] = {
 	MAX17040_NAME,
 };
@@ -1824,7 +1824,9 @@ static struct platform_device bdata_driver = {
 		.platform_data = &semc_battery_platform_data,
 	},
 };
+#endif
 
+#ifdef CONFIG_BATTERY_ZEUS
 static struct max17040_platform_data max17040_platform_data = {
 	.model_desc = {
 		.ocv_test = { 0xD9, 0x80 },
@@ -2129,16 +2131,7 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 static struct regulator *vreg_3p3;
 static int msm_hsusb_ldo_init(int init)
 {
-	uint32_t version = 0;
 	int def_vol = 3400000;
-
-	version = socinfo_get_version();
-
-	if (SOCINFO_VERSION_MAJOR(version) >= 2 &&
-			SOCINFO_VERSION_MINOR(version) >= 1) {
-		def_vol = 3075000;
-		pr_debug("%s: default voltage:%d\n", __func__, def_vol);
-	}
 
 	if (init) {
 		vreg_3p3 = regulator_get(NULL, "usb");
@@ -2285,7 +2278,13 @@ static struct resource msm_fb_resources[] = {
 	}
 };
 
+static int msm_fb_detect_panel(const char *name)
+{
+	return -ENODEV;
+}
+
 static struct msm_fb_platform_data msm_fb_pdata = {
+	.detect_client = msm_fb_detect_panel,
 	.mddi_prescan = 1,
 };
 
@@ -2443,8 +2442,10 @@ static struct platform_device qcedev_device = {
 };
 #endif
 
-static unsigned char quickvx_mddi_client = 1, other_mddi_client = 1;
-static struct regulator *mddi_ldo16;
+static int display_power(int on)
+{
+	return 0;
+}
 
 static int msm_fb_mddi_sel_clk(u32 *clk_rate)
 {
@@ -2452,41 +2453,9 @@ static int msm_fb_mddi_sel_clk(u32 *clk_rate)
 	return 0;
 }
 
-static int msm_fb_mddi_client_power(u32 client_id)
-{
-	int rc;
-	printk(KERN_NOTICE "\n client_id = 0x%x", client_id);
-	/* Check if it is Quicklogic client */
-	if (client_id == 0xc5835800) {
-		printk(KERN_NOTICE "\n Quicklogic MDDI client");
-		other_mddi_client = 0;
-		if (IS_ERR(mddi_ldo16)) {
-			rc = PTR_ERR(mddi_ldo16);
-			pr_err("%s: gp10 vreg get failed (%d)\n", __func__, rc);
-			return rc;
-		}
-		rc = regulator_disable(mddi_ldo16);
-		if (rc) {
-			pr_err("%s: LDO16 vreg enable failed (%d)\n",
-							__func__, rc);
-			return rc;
-		}
-
-	} else {
-		printk(KERN_NOTICE "\n Non-Quicklogic MDDI client");
-		quickvx_mddi_client = 0;
-		gpio_set_value(97, 0);
-		gpio_set_value_cansleep(PM8058_GPIO_PM_TO_SYS(
-			PMIC_GPIO_QUICKVX_CLK), 0);
-	}
-
-	return 0;
-}
-
 static struct mddi_platform_data mddi_pdata = {
-	//.mddi_power_save = display_common_power,
+	.mddi_power_save = display_power,
 	.mddi_sel_clk = msm_fb_mddi_sel_clk,
-	.mddi_client_power = msm_fb_mddi_client_power,
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
@@ -2676,11 +2645,14 @@ static void __init msm_fb_add_devices(void)
 	msm_fb_register_device("pmdh", &mddi_pdata);
 }
 
-static char *msm_adc_surf_device_names[] = {
+static char *msm_adc_device_names[] = {
 	"XO_ADC",
 };
 
-static struct msm_adc_platform_data msm_adc_pdata;
+static struct msm_adc_platform_data msm_adc_pdata = {
+	.dev_names = msm_adc_device_names,
+	.num_adc = ARRAY_SIZE(msm_adc_device_names),
+};
 
 static struct platform_device msm_adc_device = {
 	.name   = "msm_adc",
@@ -2738,7 +2710,9 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_i2c,
 	&msm_device_i2c_2,
 	&msm_device_uart_dm1,
+#ifdef CONFIG_SEMC_RPC_SERVER_HANDSET
 	&semc_rpc_handset_device,
+#endif
 	&hs_device,
 #ifdef CONFIG_MSM7KV2_AUDIO
 	&msm_aictl_device,
@@ -2769,7 +2743,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_MSM_VPE
 	&msm_vpe_device,
 #endif
+#ifdef CONFIG_BATTERY_SEMC_ARCH
 	&bdata_driver,
+#endif
 #ifdef CONFIG_SIMPLE_REMOTE_PLATFORM
 	&simple_remote_pf_device,
 #endif
@@ -2886,9 +2862,7 @@ static struct msm_gpio msm_nand_ebi2_cfg_data[] = {
 	{GPIO_CFG(115, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_8MA), "ebi2_busy1"},
 };
 
-#if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
-	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
-	|| defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
+#if (defined(CONFIG_MMC_MSM_SDC3_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC4_SUPPORT))
 
 struct sdcc_gpio {
@@ -3087,7 +3061,6 @@ static uint32_t msm_sdcc_setup_power(struct device *dv, unsigned int vdd)
 out:
 	return rc;
 }
-
 
 #endif
 
@@ -3315,8 +3288,6 @@ static void __init msm7x30_init_nand(void)
 
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
 static struct msm_gpio uart3_config_data[] = {
-//	{ GPIO_CFG(49, 2, GPIO_CFG_OUTPUT,  GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), "UART2_RFR"},
-//	{ GPIO_CFG(50, 2, GPIO_CFG_INPUT,   GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA), "UART2_CTS"},
 	{ GPIO_CFG(53, 1, GPIO_CFG_INPUT,   GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART3_Rx"},
 	{ GPIO_CFG(54, 1, GPIO_CFG_OUTPUT,  GPIO_CFG_NO_PULL, GPIO_CFG_4MA), "UART3_Tx"},
 };
@@ -3382,9 +3353,6 @@ struct platform_device zeus_reset_keys_device = {
 static void __init msm7x30_init(void)
 {
 	unsigned smem_size;
-	uint32_t soc_version = 0;
-
-	soc_version = socinfo_get_version();
 
 	msm_clock_init(&msm7x30_clock_init_data);
 #ifdef CONFIG_SERIAL_MSM_CONSOLE
@@ -3392,12 +3360,8 @@ static void __init msm7x30_init(void)
 #endif
 	msm_spm_init(&msm_spm_data, 1);
 	platform_device_register(&msm7x30_device_acpuclk);
+
 #ifdef CONFIG_USB_MSM_OTG_72K
-	if (SOCINFO_VERSION_MAJOR(soc_version) >= 2 &&
-			SOCINFO_VERSION_MINOR(soc_version) >= 1) {
-		pr_debug("%s: SOC Version:2.(1 or more)\n", __func__);
-		msm_otg_pdata.ldo_set_voltage = 0;
-	}
 	msm_device_otg.dev.platform_data = &msm_otg_pdata;
 #ifdef CONFIG_USB_GADGET
 	msm_otg_pdata.swfi_latency =
@@ -3408,13 +3372,14 @@ static void __init msm7x30_init(void)
 #endif
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(136);
 	msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
-	msm_adc_pdata.dev_names = msm_adc_surf_device_names;
-	msm_adc_pdata.num_adc = ARRAY_SIZE(msm_adc_surf_device_names);
+
 	buses_init();
+
 #ifdef CONFIG_MSM_SSBI
 	msm_device_ssbi_pmic1.dev.platform_data =
 				&msm7x30_ssbi_pm8058_pdata;
 #endif
+
 	platform_add_devices(msm_footswitch_devices,
 			     msm_num_footswitch_devices);
 	platform_add_devices(devices, ARRAY_SIZE(devices));
@@ -3459,6 +3424,7 @@ static void __init msm7x30_init(void)
 
 	i2c_register_board_info(4 /* QUP ID */, msm_camera_boardinfo,
 				ARRAY_SIZE(msm_camera_boardinfo));
+
 	spi_register_board_info(msm_spi_board_info,
 				ARRAY_SIZE(msm_spi_board_info));
 
