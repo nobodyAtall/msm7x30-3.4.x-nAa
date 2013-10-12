@@ -449,7 +449,7 @@ static void process_cb_request(void *buffer)
 			be64_to_cpu(rtc_cb->cb_info_data.tod_update.stamp);
 		rtc_cb->cb_info_data.tod_update.freq =
 			be32_to_cpu(rtc_cb->cb_info_data.tod_update.freq);
-		pr_info("RPC CALL -- TOD TIME UPDATE: ttick = %d\n"
+		pr_debug("RPC CALL -- TOD TIME UPDATE: ttick = %d\n"
 			"stamp=%lld, freq = %d\n",
 			rtc_cb->cb_info_data.tod_update.tick,
 			rtc_cb->cb_info_data.tod_update.stamp,
