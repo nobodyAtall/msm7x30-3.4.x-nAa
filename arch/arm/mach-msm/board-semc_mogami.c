@@ -214,7 +214,7 @@
 #define MSM_FB_SIZE roundup(MSM_FB_PRIM_BUF_SIZE, 4096)
 
 #ifdef CONFIG_SEMC_CAMERA_8MP
-#define MSM_PMEM_ADSP_SIZE      0x2500000
+#define MSM_PMEM_ADSP_SIZE      0x2A00000
 #else
 #define MSM_PMEM_ADSP_SIZE      0x1C00000
 #endif
