@@ -3,8 +3,6 @@
 
 #define MDDI_AUO_S6D05A1_HVGA_NAME "mddi_auo_s6d05a1_hvga"
 
-#include "../../drivers/video/msm/msm_fb_panel.h"
-
 enum {
 	DBC_MODE_UI,
 	DBC_MODE_IMAGE,
@@ -18,8 +16,6 @@ struct auo_hvga_platform_data {
 	void (*exit_deep_standby) (void);
 	int dbc_on;
 	int dbc_mode;
-	struct msm_fb_panel_data *panel_data;
 };
 
 #endif
-

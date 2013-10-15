@@ -63,6 +63,8 @@ struct panel_ids {
 	u32 revision_id;
 };
 
+static struct msm_fb_panel_data auo_hvga_panel_data;
+
 struct auo_record {
 	struct auo_hvga_platform_data *pdata;
 	struct mutex mddi_mutex;
@@ -407,6 +409,7 @@ static int mddi_auo_lcd_probe(struct platform_device *pdev)
 {
 	int ret = -ENODEV;
 	struct auo_record *rd;
+	struct msm_fb_panel_data *panel_data;
 
 	if (!pdev) {
 		dev_err(&pdev->dev, "%s: no platform_device\n", __func__);
@@ -430,27 +433,19 @@ static int mddi_auo_lcd_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, rd);
 	mutex_init(&rd->mddi_mutex);
 
+	panel_data = &auo_hvga_panel_data;
+
 	if (!check_panel_ids(rd)) {
 		rd->lcd_state = LCD_STATE_POWER_ON;
 		rd->power_ctrl = POWER_ON;
 
-		rd->pdata->panel_data->panel_info.mddi.vdopkt =
-						MDDI_DEFAULT_PRIM_PIX_ATTR;
-		rd->pdata->panel_data->panel_info.lcd.vsync_enable = TRUE;
-		rd->pdata->panel_data->panel_info.lcd.refx100 = REFRESH_RATE;
-		rd->pdata->panel_data->panel_info.lcd.v_back_porch = 8;
-		rd->pdata->panel_data->panel_info.lcd.v_front_porch = 8;
-		rd->pdata->panel_data->panel_info.lcd.v_pulse_width = 0;
-		rd->pdata->panel_data->panel_info.lcd.hw_vsync_mode = TRUE;
-		rd->pdata->panel_data->panel_info.lcd.vsync_notifier_period = 0;
-		rd->pdata->panel_data->on  = mddi_auo_ic_on_panel_off;
-		rd->pdata->panel_data->controller_on_panel_on =
-						mddi_auo_ic_on_panel_on;
-		rd->pdata->panel_data->off = mddi_auo_ic_off_panel_off;
-		rd->pdata->panel_data->window_adjust =
-						auo_lcd_window_adjust;
-		rd->pdata->panel_data->power_on_panel_at_pan = 0;
-		pdev->dev.platform_data = rd->pdata->panel_data;
+		panel_data->on = mddi_auo_ic_on_panel_off;
+		panel_data->controller_on_panel_on = mddi_auo_ic_on_panel_on;
+		panel_data->off = mddi_auo_ic_off_panel_off;
+		panel_data->window_adjust = auo_lcd_window_adjust;
+		panel_data->power_on_panel_at_pan = 0;
+
+		pdev->dev.platform_data = &auo_hvga_panel_data;
 
 		/* adds mfd on driver_data */
 		msm_fb_add_device(pdev);
@@ -483,12 +478,42 @@ static struct platform_driver this_driver = {
 	.probe  = mddi_auo_lcd_probe,
 	.remove = __devexit_p(mddi_auo_lcd_remove),
 	.driver = {
-		.name   = MDDI_AUO_S6D05A1_HVGA_NAME,
+		.name = MDDI_AUO_S6D05A1_HVGA_NAME,
 	},
 };
 
+static void __init msm_mddi_auo_hvga_display_device_init(void)
+{
+	struct msm_fb_panel_data *panel_data = &auo_hvga_panel_data;
+
+	panel_data->panel_info.xres = 240;
+	panel_data->panel_info.yres = 320;
+	panel_data->panel_info.pdest = DISPLAY_1;
+	panel_data->panel_info.type = MDDI_PANEL;
+	panel_data->panel_info.mddi.vdopkt = MDDI_DEFAULT_PRIM_PIX_ATTR;
+	panel_data->panel_info.wait_cycle = 0;
+	panel_data->panel_info.bpp = 24;
+	panel_data->panel_info.clk_rate = 192000000;
+	panel_data->panel_info.clk_min = 190000000;
+	panel_data->panel_info.clk_max = 200000000;
+	panel_data->panel_info.fb_num = 2;
+	panel_data->panel_info.bl_max = 4;
+	panel_data->panel_info.bl_min = 1;
+	panel_data->panel_info.width = 42;
+	panel_data->panel_info.height = 63;
+
+	panel_data->panel_info.lcd.vsync_enable = TRUE;
+	panel_data->panel_info.lcd.refx100 = REFRESH_RATE;
+	panel_data->panel_info.lcd.v_back_porch = 8;
+	panel_data->panel_info.lcd.v_front_porch = 8;
+	panel_data->panel_info.lcd.v_pulse_width = 0;
+	panel_data->panel_info.lcd.hw_vsync_mode = TRUE;
+	panel_data->panel_info.lcd.vsync_notifier_period = 0;
+}
+
 static int __init mddi_auo_lcd_init(void)
 {
+	msm_mddi_auo_hvga_display_device_init();
 	return platform_driver_register(&this_driver);
 }
 

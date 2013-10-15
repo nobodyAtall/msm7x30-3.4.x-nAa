@@ -195,10 +195,6 @@ static struct panel_ids {
 	u32 revision_id;
 } panel_ids;
 
-/* Display resolutin */
-#define SONY_HVGA_PANEL_XRES 320
-#define SONY_HVGA_PANEL_YRES 480
-
 static struct msm_fb_panel_data sony_hvga_panel_data;
 static struct sony_hvga_platform_data *panel_ext;
 
@@ -904,8 +900,6 @@ static int mddi_sony_lcd_probe(struct platform_device *pdev)
 	}
 
 	panel_data = &sony_hvga_panel_data;
-	/*platform_set_drvdata(pdev, panel_data);*/
-
 
 	if (!check_panel_ids()) {
 		MDDI_DEBUG(LEVEL_TRACE,
@@ -923,16 +917,18 @@ static int mddi_sony_lcd_probe(struct platform_device *pdev)
 		panel_data->on  = mddi_sony_ic_on_panel_off;
 		panel_data->controller_on_panel_on = mddi_sony_ic_on_panel_on;
 		panel_data->off = mddi_sony_ic_off_panel_off;
-		panel_data->power_on_panel_at_pan = 0;
 		panel_data->window_adjust = sony_lcd_window_adjust;
+		panel_data->power_on_panel_at_pan = 0;
 
 		pdev->dev.platform_data = &sony_hvga_panel_data;
+
 		/* adds mfd on driver_data */
 		msm_fb_add_device(pdev);
 
 		/* Add SYSFS to module */
 		lcd_attribute_register(pdev);
 
+		dev_info(&pdev->dev, "%s: Probe success!", __func__);
 		ret = 0;
 	}
 exit_point:
@@ -953,7 +949,7 @@ static struct platform_driver this_driver = {
 	.probe  = mddi_sony_lcd_probe,
 	.remove = __devexit_p(mddi_sony_lcd_remove),
 	.driver = {
-		.name   = "mddi_sony_s6d05a1_hvga",
+		.name = MDDI_SONY_S6D05A1_HVGA_NAME,
 	},
 };
 
@@ -961,17 +957,15 @@ static void __init msm_mddi_sony_hvga_display_device_init(void)
 {
 	struct msm_fb_panel_data *panel_data = &sony_hvga_panel_data;
 
-	panel_data->panel_info.xres = SONY_HVGA_PANEL_XRES;
-	panel_data->panel_info.yres = SONY_HVGA_PANEL_YRES;
+	panel_data->panel_info.xres = 240;
+	panel_data->panel_info.yres = 320;
 	panel_data->panel_info.pdest = DISPLAY_1;
 	panel_data->panel_info.type = MDDI_PANEL;
-	/*panel_date->panel_info.mddi.vdopkt = 0x0023;*/
 	panel_data->panel_info.mddi.vdopkt = MDDI_DEFAULT_PRIM_PIX_ATTR;
 	panel_data->panel_info.wait_cycle = 0;
 	panel_data->panel_info.bpp = 24;
-	/*panel_data->panel_info.bpp = 16;*/
 	panel_data->panel_info.clk_rate = 192000000;
-	panel_data->panel_info.clk_min =  190000000;
+	panel_data->panel_info.clk_min = 190000000;
 	panel_data->panel_info.clk_max = 200000000;
 	panel_data->panel_info.fb_num = 2;
 	panel_data->panel_info.bl_max = 4;
@@ -980,34 +974,18 @@ static void __init msm_mddi_sony_hvga_display_device_init(void)
 	panel_data->panel_info.height = 63;
 
 	panel_data->panel_info.lcd.vsync_enable = TRUE;
-	/*panel_data->panel_info.lcd.vsync_enable = FALSE;*/
 	panel_data->panel_info.lcd.refx100 = REFRESH_RATE;
 	panel_data->panel_info.lcd.v_back_porch = 8;
 	panel_data->panel_info.lcd.v_front_porch = 8;
 	panel_data->panel_info.lcd.v_pulse_width = 0;
 	panel_data->panel_info.lcd.hw_vsync_mode = TRUE;
 	panel_data->panel_info.lcd.vsync_notifier_period = 0;
-	/*panel_data->panel_info.lcd.vsync_notifier_period = (1 * HZ);*/
-}
-
-static void __init msm_mddi_semc_mogami_display_init(void)
-{
-	MDDI_DEBUG(LEVEL_TRACE, "%s\n", __func__);
-	/*semc_mogami_lcd_power_on(11, 2, 21);*/
-	msm_mddi_sony_hvga_display_device_init();
 }
 
 static int __init mddi_sony_lcd_init(void)
 {
-	int ret;
-
-	MDDI_DEBUG(LEVEL_TRACE,  "%s (ver:0x%x) [%d]\n",
-			__func__, MDDI_DRIVER_VERSION, lcd_state);
-
-	msm_mddi_semc_mogami_display_init();
-	ret = platform_driver_register(&this_driver);
-
-	return ret;
+	msm_mddi_sony_hvga_display_device_init();
+	return platform_driver_register(&this_driver);
 }
 
 static void __exit mddi_sony_lcd_exit(void)

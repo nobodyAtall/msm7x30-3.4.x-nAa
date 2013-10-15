@@ -1828,32 +1828,12 @@ static void hitachi_hvga_lcd_exit_deep_standby(void)
 	msleep(6);      /* spec: > 5ms */
 }
 
-static struct msm_fb_panel_data hitachi_hvga_panel_data = {
-	.panel_info = {
-		.xres = 320,
-		.yres = 480,
-		.pdest = DISPLAY_1,
-		.type = MDDI_PANEL,
-		.wait_cycle = 0,
-		.bpp = 24,
-		.clk_rate = 192000000,
-		.clk_min =  190000000,
-		.clk_max =  200000000,
-		.fb_num = 2,
-		.bl_max = 4,
-		.bl_min = 1,
-		.width = 42,
-		.height = 63,
-	},
-};
-
 static struct hitachi_hvga_platform_data hitachi_hvga_panel_ext = {
 	.power_on = hitachi_hvga_lcd_power_on,
 	.power_off = hitachi_hvga_lcd_power_off,
 	.exit_deep_standby = hitachi_hvga_lcd_exit_deep_standby,
 	.dbc_on = 1,
 	.dbc_mode = DBC_MODE_VIDEO,
-	.panel_data = &hitachi_hvga_panel_data,
 };
 
 static struct platform_device mddi_hitachi_hvga_display_device = {
@@ -1891,32 +1871,12 @@ static void sii_hvga_lcd_exit_deep_standby(void)
 	msleep(6);      /* spec: > 5ms */
 }
 
-static struct msm_fb_panel_data sii_hvga_panel_data = {
-	.panel_info = {
-		.xres = 320,
-		.yres = 480,
-		.pdest = DISPLAY_1,
-		.type = MDDI_PANEL,
-		.wait_cycle = 0,
-		.bpp = 24,
-		.clk_rate = 192000000,
-		.clk_min =  190000000,
-		.clk_max =  200000000,
-		.fb_num = 2,
-		.bl_max = 4,
-		.bl_min = 1,
-		.width = 42,
-		.height = 63,
-	},
-};
-
 static struct sii_hvga_platform_data sii_hvga_panel_ext = {
 	.power_on = sii_hvga_lcd_power_on,
 	.power_off = sii_hvga_lcd_power_off,
 	.exit_deep_standby = sii_hvga_lcd_exit_deep_standby,
 	.dbc_on = 1,
 	.dbc_mode = DBC_MODE_VIDEO,
-	.panel_data = &sii_hvga_panel_data,
 };
 
 static struct platform_device mddi_sii_hvga_display_device = {
@@ -1954,32 +1914,12 @@ static void auo_hvga_lcd_exit_deep_standby(void)
 	msleep(51);     /* spec: > 50ms */
 }
 
-static struct msm_fb_panel_data auo_hvga_panel_data = {
-	.panel_info = {
-		.xres = 320,
-		.yres = 480,
-		.pdest = DISPLAY_1,
-		.type = MDDI_PANEL,
-		.wait_cycle = 0,
-		.bpp = 24,
-		.clk_rate = 192000000,
-		.clk_min =  190000000,
-		.clk_max =  200000000,
-		.fb_num = 2,
-		.bl_max = 4,
-		.bl_min = 1,
-		.width = 42,
-		.height = 63,
-	},
-};
-
 static struct auo_hvga_platform_data auo_hvga_panel_ext = {
 	.power_on = auo_hvga_lcd_power_on,
 	.power_off = auo_hvga_lcd_power_off,
 	.exit_deep_standby = auo_hvga_lcd_exit_deep_standby,
 	.dbc_on = 1,
 	.dbc_mode = DBC_MODE_VIDEO,
-	.panel_data = &auo_hvga_panel_data,
 };
 
 static struct platform_device mddi_auo_hvga_display_device = {

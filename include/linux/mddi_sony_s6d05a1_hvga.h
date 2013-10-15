@@ -11,4 +11,3 @@ struct sony_hvga_platform_data {
 };
 
 #endif
-

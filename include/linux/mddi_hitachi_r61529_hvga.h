@@ -3,8 +3,6 @@
 
 #define MDDI_HITACH_R61529_HVGA_NAME "mddi_hitachi_r61529_hvga"
 
-#include "../../drivers/video/msm/msm_fb_panel.h"
-
 enum {
 	DBC_MODE_UI,
 	DBC_MODE_IMAGE,
@@ -18,7 +16,6 @@ struct hitachi_hvga_platform_data {
 	void (*exit_deep_standby) (void);
 	int dbc_on;
 	int dbc_mode;
-	struct msm_fb_panel_data *panel_data;
 };
 
 #endif
