@@ -37,6 +37,55 @@
 #define POWER_OFF 0
 #define POWER_ON  1
 
+/* Function protos */
+static ssize_t show_driver_version(
+	struct device *pdev,
+	struct device_attribute *attr,
+	char *buf);
+
+static ssize_t show_dbc_ctrl(
+	struct device *pdev,
+	struct device_attribute *attr,
+	char *buf);
+
+static ssize_t store_dbc_ctrl(
+	struct device *pdev,
+	struct device_attribute *attr,
+	const char *buf,
+	size_t count);
+
+static ssize_t show_dbc_mode_ctrl(
+	struct device *dev_p,
+	struct device_attribute *attr,
+	char *buf);
+
+static ssize_t store_dbc_mode_ctrl(
+	struct device *dev_p,
+	struct device_attribute *attr,
+	const char *buf,
+	size_t count);
+
+/* Function Configuration */
+#define DBC_OFF 0
+#define DBC_ON	1
+
+static int dbc_ctrl = DBC_ON;
+module_param(dbc_ctrl, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(dbc_ctrl, "Dynamic Backlight Control DBC_OFF = 0, DBC_ON = 1");
+
+#define DBC_MODE_UI	1
+#define DBC_MODE_IMAGE	2
+#define DBC_MODE_VIDEO	3
+
+static int dbc_mode = DBC_MODE_VIDEO;
+module_param(dbc_mode, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(dbc_ctrl, "Dynamic Backlight Mode DBC_MODE_UI = 1, DBC_MODE_IMAGE = 2, DBC_MODE_VIDEO = 3");
+
+/* driver attributes */
+static DEVICE_ATTR(display_driver_version, 0444, show_driver_version, NULL);
+static DEVICE_ATTR(dbc_ctrl, 0644, show_dbc_ctrl, store_dbc_ctrl);
+static DEVICE_ATTR(dbc_mode, 0644, show_dbc_mode_ctrl, store_dbc_mode_ctrl);
+
 enum lcd_registers {
 	LCD_REG_COLUMN_ADDRESS = 0x2a,
 	LCD_REG_PAGE_ADDRESS = 0x2b,
@@ -92,9 +141,9 @@ static u32 dbc_control_off_data[DBC_CONTROL_SIZE] = {
 		0x00000010, 0x00000037, 0x0000005A, 0x00000087, 0X000000BE,
 		0x000000FF, 0x00000000, 0x00000000, 0x00000000, 0X00000000};
 
-static void hitachi_lcd_dbc_on(struct hitachi_record *rd)
+static void hitachi_lcd_dbc_on(void)
 {
-	if (rd->pdata->dbc_on) {
+	if (dbc_ctrl) {
 		/* Manufacture Command Access Protect */
 		mddi_queue_register_write(0xB0, 0x04, TRUE, 0);
 
@@ -112,9 +161,9 @@ static void hitachi_lcd_dbc_on(struct hitachi_record *rd)
 	}
 }
 
-static void hitachi_lcd_dbc_off(struct hitachi_record *rd)
+static void hitachi_lcd_dbc_off(void)
 {
-	if (rd->pdata->dbc_on) {
+	if (dbc_ctrl) {
 		/* Manufacture Command Access Protect */
 		mddi_queue_register_write(0xB0, 0x04, TRUE, 0);
 
@@ -260,14 +309,14 @@ static int mddi_hitachi_ic_on_panel_off(struct platform_device *pdev)
 
 		case LCD_STATE_POWER_ON:
 			hitachi_lcd_exit_sleep(rd);
-			hitachi_lcd_dbc_on(rd);
+			hitachi_lcd_dbc_on();
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
 			break;
 
 		case LCD_STATE_SLEEP:
 			hitachi_lcd_exit_deepstandby(rd);
 			hitachi_lcd_exit_sleep(rd);
-			hitachi_lcd_dbc_on(rd);
+			hitachi_lcd_dbc_on();
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
 			break;
 
@@ -296,7 +345,7 @@ static int mddi_hitachi_ic_on_panel_on(struct platform_device *pdev)
 		switch (rd->lcd_state) {
 		case LCD_STATE_POWER_ON:
 			hitachi_lcd_exit_sleep(rd);
-			hitachi_lcd_dbc_on(rd);
+			hitachi_lcd_dbc_on();
 			hitachi_lcd_display_on();
 			rd->lcd_state = LCD_STATE_ON;
 			break;
@@ -304,7 +353,7 @@ static int mddi_hitachi_ic_on_panel_on(struct platform_device *pdev)
 		case LCD_STATE_SLEEP:
 			hitachi_lcd_exit_deepstandby(rd);
 			hitachi_lcd_exit_sleep(rd);
-			hitachi_lcd_dbc_on(rd);
+			hitachi_lcd_dbc_on();
 			hitachi_lcd_display_on();
 			rd->lcd_state = LCD_STATE_ON;
 			break;
@@ -344,7 +393,7 @@ static int mddi_hitachi_ic_off_panel_off(struct platform_device *pdev)
 
 		case LCD_STATE_ON:
 			hitachi_lcd_display_off();
-			hitachi_lcd_dbc_off(rd);
+			hitachi_lcd_dbc_off();
 			hitachi_lcd_enter_sleep();
 			hitachi_lcd_enter_deepstandby();
 			rd->lcd_state = LCD_STATE_SLEEP;
@@ -356,7 +405,7 @@ static int mddi_hitachi_ic_off_panel_off(struct platform_device *pdev)
 			break;
 
 		case LCD_STATE_DISPLAY_OFF:
-			hitachi_lcd_dbc_off(rd);
+			hitachi_lcd_dbc_off();
 			hitachi_lcd_enter_sleep();
 			hitachi_lcd_enter_deepstandby();
 			rd->lcd_state = LCD_STATE_SLEEP;
@@ -382,8 +431,106 @@ static ssize_t show_driver_version(struct device *dev_p,
 							MDDI_DRIVER_VERSION);
 }
 
-/* driver attributes */
-static DEVICE_ATTR(display_driver_version, 0444, show_driver_version, NULL);
+static ssize_t show_dbc_ctrl(struct device *dev_p,
+			struct device_attribute *attr,
+			char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%i\n", dbc_ctrl);
+}
+
+static ssize_t store_dbc_ctrl(struct device *dev_p,
+			struct device_attribute *attr,
+			const char *buf,
+			size_t count)
+{
+	ssize_t ret;
+	struct hitachi_record *rd;
+
+	rd = kzalloc(sizeof(struct hitachi_record), GFP_KERNEL);
+	if (rd == NULL) {
+		ret = -ENOMEM;
+		goto exit_point;
+	}
+
+	mutex_lock(&rd->mddi_mutex);
+
+	if (sscanf(buf, "%i", &ret) != 1) {
+		pr_err("%s: mddi_hitachi_hvga: "
+			"Invalid flag for dbc ctrl\n", __func__);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	if (ret)
+		dbc_ctrl = 1;
+	else
+		dbc_ctrl = 0;
+
+	ret = strnlen(buf, count);
+
+unlock:
+	mutex_unlock(&rd->mddi_mutex);
+exit_point:
+	return ret;
+}
+
+static ssize_t show_dbc_mode_ctrl(struct device *dev_p,
+				struct device_attribute *attr,
+				char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%i\n", dbc_mode);
+}
+
+static ssize_t store_dbc_mode_ctrl(struct device *dev_p,
+				struct device_attribute *attr,
+				const char *buf,
+				size_t count)
+{
+	ssize_t ret;
+	struct hitachi_record *rd;
+
+	rd = kzalloc(sizeof(struct hitachi_record), GFP_KERNEL);
+	if (rd == NULL) {
+		ret = -ENOMEM;
+		goto exit_point;
+	}
+
+	mutex_lock(&rd->mddi_mutex);
+
+	if (sscanf(buf, "%i", &ret) != 1) {
+		pr_err("%s: mddi_hitachi_hvga: "
+			"Invalid flag for dbc mode\n", __func__);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	switch (ret) {
+	case DBC_MODE_UI:
+	case DBC_MODE_IMAGE:
+	case DBC_MODE_VIDEO:
+		dbc_mode = ret;
+		break;
+	default:
+		pr_err("%s: mddi_hitachi_hvga: "
+			"Invalid value for dbc mode\n", __func__);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	if (rd->lcd_state != LCD_STATE_ON) {
+		pr_err("%s: mddi_hitachi_hvga: LCD in sleep, "
+			"not performing any dbc change\n", __func__);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	ret = strnlen(buf, count);
+
+unlock:
+	mutex_unlock(&rd->mddi_mutex);
+exit_point:
+	return ret;
+}
 
 static void lcd_attribute_register(struct platform_device *pdev)
 {
@@ -392,6 +539,16 @@ static void lcd_attribute_register(struct platform_device *pdev)
 	ret = device_create_file(&pdev->dev, &dev_attr_display_driver_version);
 	if (ret != 0)
 		dev_err(&pdev->dev, "Failed to register display_driver_version"
+						"attributes (%d)\n", ret);
+
+	ret = device_create_file(&pdev->dev, &dev_attr_dbc_ctrl);
+	if (ret != 0)
+		dev_err(&pdev->dev, "Failed to register dbc_ctrl"
+						"attributes (%d)\n", ret);
+
+	ret = device_create_file(&pdev->dev, &dev_attr_dbc_mode);
+	if (ret != 0)
+		dev_err(&pdev->dev, "Failed to register dbc_mode"
 						"attributes (%d)\n", ret);
 }
 
@@ -507,6 +664,8 @@ static int __devexit mddi_hitachi_lcd_remove(struct platform_device *pdev)
 	struct hitachi_record *rd;
 
 	device_remove_file(&pdev->dev, &dev_attr_display_driver_version);
+	device_remove_file(&pdev->dev, &dev_attr_dbc_ctrl);
+	device_remove_file(&pdev->dev, &dev_attr_dbc_mode);
 
 	rd = platform_get_drvdata(pdev);
 	if (rd)

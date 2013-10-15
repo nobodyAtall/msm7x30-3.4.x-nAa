@@ -8,8 +8,6 @@ struct sii_hvga_platform_data {
 	void (*power_off)(void);
 	void (*window_adjust)(u16 x1, u16 x2, u16 y1, u16 y2);
 	void (*exit_deep_standby) (void);
-	int dbc_on;
-	int dbc_mode;
 };
 
 #endif

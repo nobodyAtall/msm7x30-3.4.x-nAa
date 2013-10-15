@@ -1832,8 +1832,6 @@ static struct hitachi_hvga_platform_data hitachi_hvga_panel_ext = {
 	.power_on = hitachi_hvga_lcd_power_on,
 	.power_off = hitachi_hvga_lcd_power_off,
 	.exit_deep_standby = hitachi_hvga_lcd_exit_deep_standby,
-	.dbc_on = 1,
-	.dbc_mode = DBC_MODE_VIDEO,
 };
 
 static struct platform_device mddi_hitachi_hvga_display_device = {
@@ -1875,8 +1873,6 @@ static struct sii_hvga_platform_data sii_hvga_panel_ext = {
 	.power_on = sii_hvga_lcd_power_on,
 	.power_off = sii_hvga_lcd_power_off,
 	.exit_deep_standby = sii_hvga_lcd_exit_deep_standby,
-	.dbc_on = 1,
-	.dbc_mode = DBC_MODE_VIDEO,
 };
 
 static struct platform_device mddi_sii_hvga_display_device = {
@@ -1918,8 +1914,6 @@ static struct auo_hvga_platform_data auo_hvga_panel_ext = {
 	.power_on = auo_hvga_lcd_power_on,
 	.power_off = auo_hvga_lcd_power_off,
 	.exit_deep_standby = auo_hvga_lcd_exit_deep_standby,
-	.dbc_on = 1,
-	.dbc_mode = DBC_MODE_VIDEO,
 };
 
 static struct platform_device mddi_auo_hvga_display_device = {

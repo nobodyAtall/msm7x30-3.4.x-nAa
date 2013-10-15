@@ -14,8 +14,6 @@
 #include "msm_fb.h"
 #include "mddihost.h"
 #include "mddihosti.h"
-#include <linux/swab.h>
-#include <linux/kthread.h>
 #include <linux/fb.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
@@ -84,12 +82,13 @@ static int dbc_ctrl = DBC_ON;
 module_param(dbc_ctrl, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(dbc_ctrl, "Dynamic Backlight Control DBC_OFF = 0, DBC_ON = 1");
 
-
 #define DBC_MODE_UI	1
 #define DBC_MODE_IMAGE	2
 #define DBC_MODE_VIDEO	3
 
 static int dbc_mode = DBC_MODE_VIDEO;
+module_param(dbc_mode, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(dbc_ctrl, "Dynamic Backlight Mode DBC_MODE_UI = 1, DBC_MODE_IMAGE = 2, DBC_MODE_VIDEO = 3");
 
 static int power_ctrl = POWER_OFF;
 
@@ -160,11 +159,7 @@ static struct sony_hvga_platform_data *panel_ext;
 
 static void sony_lcd_dbc_on(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	if (dbc_ctrl) {
-		MDDI_DEBUG(LEVEL_PARAM, "dbc_ctrl = %d\n", dbc_ctrl);
-
 		/* Manual brightness */
 		write_client_reg_nbr(0x51, 0x000000FD, 0, 0, 0, 1);
 
@@ -182,11 +177,7 @@ static void sony_lcd_dbc_on(void)
 
 static void sony_lcd_dbc_off(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	if (dbc_ctrl) {
-		MDDI_DEBUG(LEVEL_PARAM, "dbc_ctrl = %d\n", dbc_ctrl);
-
 		/* Mobile Image Enhancement Mode */
 		write_client_reg_nbr(0x55, 0x00000000, 0, 0, 0, 1);
 
@@ -213,13 +204,12 @@ static void sony_lcd_window_address_set(enum lcd_registers reg,
 	}
 }
 
-static void sony_lcd_window_adjust(uint16 x1, uint16 x2, uint16 y1, uint16 y2)
+static void sony_lcd_window_adjust(uint16 x1, uint16 x2,
+					uint16 y1, uint16 y2)
 {
-
 	mutex_lock(&mddi_mutex);
 
 	sony_lcd_window_address_set(LCD_REG_COLUMN_ADDRESS, x1, x2);
-
 	sony_lcd_window_address_set(LCD_REG_PAGE_ADDRESS, y1, y2);
 
 	/* Workaround: 0x3Ch at start of column bug */
@@ -230,45 +220,33 @@ static void sony_lcd_window_adjust(uint16 x1, uint16 x2, uint16 y1, uint16 y2)
 
 static void sony_lcd_enter_sleep(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
-	/* Sleep in */
+	/* Enter sleep mode */
 	write_client_reg_nbr(0x10, 0, 0, 0, 0, 1);
 	mddi_wait(120); /* >120 ms */
 }
 
-static void sony_lcd_display_off(void)
-{
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
-	/* Display off */
-	write_client_reg_nbr(0x28, 0, 0, 0, 0, 1);
-	mddi_wait(50); /* >50 ms */
-}
-
-
 static void sony_lcd_exit_sleep(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
-	/* Sleep out */
+	/* Exit sleep mode */
 	write_client_reg_nbr(0x11, 0x00000000, 0, 0, 0, 1);
 	mddi_wait(120); /* >120 ms */
 }
 
 static void sony_lcd_display_on(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	/* Display on */
 	write_client_reg_nbr(0x29, 0x00000000, 0, 0, 0, 1);
 }
 
+static void sony_lcd_display_off(void)
+{
+	/* Display off */
+	write_client_reg_nbr(0x28, 0, 0, 0, 0, 1);
+	mddi_wait(50); /* >50 ms */
+}
 
 static void sony_lcd_enter_deepstandby(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE,
-		"%s [%d]\n", __func__, lcd_state);
 	/* PASSWD2 */
 	write_client_reg_nbr(0xF1, 0x00005A5A, 0, 0, 0, 1);
 
@@ -278,8 +256,6 @@ static void sony_lcd_enter_deepstandby(void)
 
 static void sony_toggle_reset(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	if (pdev) {
 		if (panel_ext->exit_deep_standby)
 			panel_ext->exit_deep_standby();
@@ -288,9 +264,6 @@ static void sony_toggle_reset(struct platform_device *pdev)
 
 static void sony_lcd_exit_deepstandby(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE,
-		"%s [%d]\n", __func__, lcd_state);
-
 	if (pdev) {
 		/* Reset toggle */
 		sony_toggle_reset(pdev);
@@ -299,8 +272,6 @@ static void sony_lcd_exit_deepstandby(struct platform_device *pdev)
 
 static void sony_power_on(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	if (pdev) {
 		if (panel_ext->power_on)
 			panel_ext->power_on();
@@ -309,8 +280,6 @@ static void sony_power_on(struct platform_device *pdev)
 
 static void sony_power_off(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	if (pdev) {
 		if (panel_ext->power_off)
 			panel_ext->power_off();
@@ -319,8 +288,6 @@ static void sony_power_off(struct platform_device *pdev)
 
 static int mddi_sony_ic_on_panel_off(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	mutex_lock(&mddi_mutex);
 	if (power_ctrl) {
 		switch (lcd_state) {
@@ -352,8 +319,6 @@ static int mddi_sony_ic_on_panel_off(struct platform_device *pdev)
 
 static int mddi_sony_ic_on_panel_on(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	mutex_lock(&mddi_mutex);
 	if (power_ctrl) {
 		switch (lcd_state) {
@@ -388,8 +353,6 @@ static int mddi_sony_ic_on_panel_on(struct platform_device *pdev)
 
 static int mddi_sony_ic_off_panel_off(struct platform_device *pdev)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	mutex_lock(&mddi_mutex);
 	if (power_ctrl) {
 		switch (lcd_state) {
@@ -441,8 +404,6 @@ static ssize_t show_dbc_ctrl(struct device *dev_p,
 			struct device_attribute *attr,
 			char *buf)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	return snprintf(buf, PAGE_SIZE, "%i\n", dbc_ctrl);
 }
 
@@ -452,8 +413,6 @@ static ssize_t store_dbc_ctrl(struct device *dev_p,
 			size_t count)
 {
 	ssize_t ret;
-
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
 
 	mutex_lock(&mddi_mutex);
 
@@ -468,8 +427,6 @@ static ssize_t store_dbc_ctrl(struct device *dev_p,
 	else
 		dbc_ctrl = 0;
 
-	MDDI_DEBUG(LEVEL_PARAM, "%s dbc_ctrl set to %d\n", __func__, dbc_ctrl);
-
 	ret = strnlen(buf, count);
 
 unlock:
@@ -481,8 +438,6 @@ static ssize_t show_dbc_mode_ctrl(struct device *dev_p,
 				struct device_attribute *attr,
 				char *buf)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	return snprintf(buf, PAGE_SIZE, "%i\n", dbc_mode);
 }
 
@@ -492,8 +447,6 @@ static ssize_t store_dbc_mode_ctrl(struct device *dev_p,
 				size_t count)
 {
 	ssize_t ret;
-
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
 
 	mutex_lock(&mddi_mutex);
 
@@ -525,8 +478,6 @@ static ssize_t store_dbc_mode_ctrl(struct device *dev_p,
 	/* Mobile Image Enhancement Mode */
 	write_client_reg_nbr(0x55, dbc_mode, 0, 0, 0, 1);
 
-	MDDI_DEBUG(LEVEL_PARAM, "%s dbc_mode set to %d\n", __func__, dbc_mode);
-
 	ret = strnlen(buf, count);
 
 unlock:
@@ -538,21 +489,20 @@ static void lcd_attribute_register(struct platform_device *pdev)
 {
 	int ret;
 
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
-
 	ret = device_create_file(&pdev->dev, &dev_attr_display_driver_version);
 	if (ret != 0)
-		MDDI_ERROR("Failed to register display_driver_version"
-			   "attributes (%d)\n", ret);
+		dev_err(&pdev->dev, "Failed to register display_driver_version"
+						"attributes (%d)\n", ret);
 
 	ret = device_create_file(&pdev->dev, &dev_attr_dbc_ctrl);
 	if (ret != 0)
-		MDDI_ERROR("Failed to register dbc attributes (%d)\n", ret);
+		dev_err(&pdev->dev, "Failed to register dbc_ctrl"
+						"attributes (%d)\n", ret);
 
 	ret = device_create_file(&pdev->dev, &dev_attr_dbc_mode);
 	if (ret != 0)
-		MDDI_ERROR("Failed to register dbc mode attributes (%d)\n",
-				ret);
+		dev_err(&pdev->dev, "Failed to register dbc_mode"
+						"attributes (%d)\n", ret);
 }
 
 static int check_panel_ids(void)
@@ -602,20 +552,17 @@ static int mddi_sony_lcd_probe(struct platform_device *pdev)
 	int ret = -ENODEV;
 	struct msm_fb_panel_data *panel_data;
 
-	dev_dbg(&pdev->dev, "probing\n");
-
 	panel_ext = pdev->dev.platform_data;
 	if (panel_ext == NULL)
 		return -EINVAL;
 
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
 	if (!pdev) {
-		MDDI_ERROR("Display failed in probe\n");
+		dev_err(&pdev->dev, "%s: no platform_device\n", __func__);
 		ret = -ENODEV;
 		goto exit_point;
 	}
 	if (!pdev->dev.platform_data) {
-		MDDI_ERROR("Display failed in probe, no platform data\n");
+		dev_err(&pdev->dev, "%s: no platform data\n", __func__);
 		ret = -ENODEV;
 		goto exit_point;
 	}
@@ -709,7 +656,6 @@ static int __init mddi_sony_lcd_init(void)
 
 static void __exit mddi_sony_lcd_exit(void)
 {
-	MDDI_DEBUG(LEVEL_TRACE, "%s [%d]\n", __func__, lcd_state);
 	platform_driver_unregister(&this_driver);
 }
 
