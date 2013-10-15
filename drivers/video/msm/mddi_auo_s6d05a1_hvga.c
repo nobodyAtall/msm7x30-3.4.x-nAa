@@ -565,7 +565,8 @@ static int __devexit mddi_auo_lcd_remove(struct platform_device *pdev)
 
 	device_remove_file(&pdev->dev, &dev_attr_display_driver_info);
 	rd = platform_get_drvdata(pdev);
-	kfree(rd);
+	if (rd)
+		kfree(rd);
 	return 0;
 };
 

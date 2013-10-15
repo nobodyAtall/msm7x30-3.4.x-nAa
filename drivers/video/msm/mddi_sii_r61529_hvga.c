@@ -88,16 +88,6 @@ static u32 dbc_control_off_data[DBC_CONTROL_SIZE] = {
 		0x00000010, 0x00000037, 0x0000005A, 0x00000087, 0X000000BE,
 		0x000000FF, 0x00000000, 0x00000000, 0x00000000, 0X00000000};
 
-#ifdef MDDI_SII_DISPLAY_INITIAL
-#define GAMMA_SETTING_SIZE 6
-static u32 gamma_setting_A[GAMMA_SETTING_SIZE] = {
-	0x1F150C00, 0x273B482E, 0x0104101A, 0x1F150C00, 0x273B482E, 0x0104101A};
-static u32 gamma_setting_B[GAMMA_SETTING_SIZE] = {
-	0x1F150C00, 0x273B482E, 0x0104101A, 0x1F150C00, 0x273B482E, 0x0104101A};
-static u32 gamma_setting_C[GAMMA_SETTING_SIZE] = {
-	0x1F150C00, 0x273B482E, 0x0104101A, 0x1F150C00, 0x273B482E, 0x0104101A};
-#endif
-
 static void sii_lcd_dbc_on(struct sii_record *rd)
 {
 	if (rd->pdata->dbc_on) {
@@ -148,90 +138,6 @@ static void sii_lcd_window_address_set(enum lcd_registers reg,
 	para = swab32(para);
 	mddi_queue_register_write(reg, para, TRUE, 0);
 }
-
-#ifdef MDDI_SII_DISPLAY_INITIAL
-static void sii_lcd_driver_init(struct platform_device *pdev)
-{
-	struct msm_fb_panel_data *panel;
-
-	if (pdev) {
-		panel = (struct msm_fb_panel_data *)pdev->dev.platform_data;
-
-		/* Manufacture Command Access Protect */
-		mddi_queue_register_write(0xB0, 0x04, TRUE, 0);
-
-		/* Frame Memory Acess and Interface Setting */
-		mddi_host_register_write16(0xB3, 0x00000002, 0, 0, 0, 1,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Display mode and Frame memory write mode */
-		mddi_queue_register_write(0xB4, 0x00, TRUE, 0);
-
-		/* DSI Control */
-		mddi_host_register_write16(0xB6, 0x00008351, 0, 0, 0, 1,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* MDDI Control */
-		mddi_host_register_write16(0xB7, 0x21110000, 0, 0, 0, 1,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Backlight control1 set */
-		mddi_host_register_write_xl(0xB8, dbc_control_on_data,
-			DBC_CONTROL_SIZE, TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Backlight control2 set */
-		mddi_host_register_write16(0xB9, 0x00000000, 0x000000F2,
-			0x00000001, 0x00000008, 4,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Display Timing Setting for Normal Mode*/
-		mddi_host_register_write16(0xC1, 0x08082707, 0x00000030,
-			0, 0, 2, TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Source/Gate Diving Timing Setting */
-		mddi_host_register_write16(0xC4, 0x03030040, 0, 0, 0, 1,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* DPI Polarity Control */
-		mddi_queue_register_write(0xC6, 0x00, TRUE, 0);
-
-		/* Gamma Setting A set */
-		mddi_host_register_write_xl(0xC8, gamma_setting_A,
-			GAMMA_SETTING_SIZE, TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Gamma Setting B set */
-		mddi_host_register_write_xl(0xC9, gamma_setting_B,
-			GAMMA_SETTING_SIZE, TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Gamma Setting C set */
-		mddi_host_register_write_xl(0xCA, gamma_setting_C,
-			GAMMA_SETTING_SIZE, TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Power Setting */
-		mddi_host_register_write16(0xD0, 0x200806A9, 0x0001043C,
-			0x06000108, 0x20000001, 4,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* VCOM Setting */
-		mddi_host_register_write16(0xD1, 0x00202000, 0, 0, 0, 1,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* NV Memory Access Control */
-		mddi_host_register_write16(0xE0, 0x00000000, 0, 0, 0, 1,
-			TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* Set_DDB Write Control */
-		mddi_host_register_write16(0xE1, 0x01010101, 0x00000000,
-			0, 0, 2, TRUE, NULL, MDDI_HOST_PRIM);
-
-		/* NV Memory Load Control */
-		mddi_queue_register_write(0xE2, 0xFF, TRUE, 0);
-
-		/* Manufacture Command Access Protect */
-		mddi_queue_register_write(0xB0, 0x03, TRUE, 0);
-	}
-}
-#endif
 
 static void sii_lcd_window_adjust(uint16 x1, uint16 x2,
 					uint16 y1, uint16 y2)
@@ -350,9 +256,6 @@ static int mddi_sii_ic_on_panel_off(struct platform_device *pdev)
 
 		case LCD_STATE_POWER_ON:
 			sii_lcd_exit_sleep(rd);
-#ifdef MDDI_SII_DISPLAY_INITIAL
-			sii_lcd_driver_init(pdev);
-#endif
 			sii_lcd_dbc_on(rd);
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
 			break;
@@ -360,9 +263,6 @@ static int mddi_sii_ic_on_panel_off(struct platform_device *pdev)
 		case LCD_STATE_SLEEP:
 			sii_lcd_exit_deepstandby(rd);
 			sii_lcd_exit_sleep(rd);
-#ifdef MDDI_SII_DISPLAY_INITIAL
-			sii_lcd_driver_init(pdev);
-#endif
 			sii_lcd_dbc_on(rd);
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
 			break;
@@ -392,9 +292,6 @@ static int mddi_sii_ic_on_panel_on(struct platform_device *pdev)
 		switch (rd->lcd_state) {
 		case LCD_STATE_POWER_ON:
 			sii_lcd_exit_sleep(rd);
-#ifdef MDDI_SII_DISPLAY_INITIAL
-			sii_lcd_driver_init(pdev);
-#endif
 			sii_lcd_dbc_on(rd);
 			sii_lcd_display_on();
 			rd->lcd_state = LCD_STATE_ON;
@@ -403,9 +300,6 @@ static int mddi_sii_ic_on_panel_on(struct platform_device *pdev)
 		case LCD_STATE_SLEEP:
 			sii_lcd_exit_deepstandby(rd);
 			sii_lcd_exit_sleep(rd);
-#ifdef MDDI_SII_DISPLAY_INITIAL
-			sii_lcd_driver_init(pdev);
-#endif
 			sii_lcd_dbc_on(rd);
 			sii_lcd_display_on();
 			rd->lcd_state = LCD_STATE_ON;
@@ -614,7 +508,8 @@ static int __devexit mddi_sii_lcd_remove(struct platform_device *pdev)
 
 	device_remove_file(&pdev->dev, &dev_attr_display_driver_info);
 	rd = platform_get_drvdata(pdev);
-	kfree(rd);
+	if (rd)
+		kfree(rd);
 	return 0;
 };
 
