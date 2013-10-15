@@ -646,8 +646,8 @@ static void __init msm_mddi_auo_hvga_display_device_init(void)
 {
 	struct msm_fb_panel_data *panel_data = &auo_hvga_panel_data;
 
-	panel_data->panel_info.xres = 240;
-	panel_data->panel_info.yres = 320;
+	panel_data->panel_info.xres = 320;
+	panel_data->panel_info.yres = 480;
 	panel_data->panel_info.pdest = DISPLAY_1;
 	panel_data->panel_info.type = MDDI_PANEL;
 	panel_data->panel_info.mddi.vdopkt = MDDI_DEFAULT_PRIM_PIX_ATTR;
