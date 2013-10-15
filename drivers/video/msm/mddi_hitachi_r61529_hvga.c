@@ -3,6 +3,7 @@
  * Copyright (C) 2010 Sony Ericsson Mobile Communications AB.
  *
  * Author: Johan Olson <johan.olson@sonyericsson.com>
+ * Adapted for SEMC 2011 devices by Michael Bestas <mikeioannina@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2, as
@@ -30,14 +31,8 @@
 /* Internal version number */
 #define MDDI_DRIVER_VERSION 0x0004
 
-/* DISPLAY ID value */
-#define MDDI_HITACHI_CELL_ID 0xFA
-
-/* DISPLAY DRIVERIC ID value */
+/* Driver_IC_ID value for display */
 #define MDDI_HITACHI_DISPLAY_DRIVER_IC_ID 0x01
-
-/* Frame time, used for delays */
-#define MDDI_FRAME_TIME 13
 
 #define POWER_OFF 0
 #define POWER_ON  1
@@ -152,24 +147,9 @@ static void hitachi_lcd_window_adjust(uint16 x1, uint16 x2,
 {
 	hitachi_lcd_window_address_set(LCD_REG_COLUMN_ADDRESS, x1, x2);
 	hitachi_lcd_window_address_set(LCD_REG_PAGE_ADDRESS, y1, y2);
+
+	/* Workaround: 0x3Ch at start of column bug */
 	mddi_queue_register_write(0x3C, 0x00, TRUE, 0);
-}
-
-static void hitachi_lcd_exit_sleep(struct hitachi_record *rd)
-{
-	/*Address Mode Set */
-	mddi_queue_register_write(0x36, 0x00, TRUE, 0);
-
-	/*Pixle Format Set */
-	mddi_queue_register_write(0x3A, 0x77, TRUE, 0);
-
-	/* Exit sleep mode */
-	mddi_queue_register_write(0x11, 0x00, TRUE, 0);
-
-	mddi_wait(110);/* >108ms */
-
-	/* Set tear on */
-	mddi_queue_register_write(0x35, 0x00, TRUE, 0);
 }
 
 static void hitachi_lcd_enter_sleep(void)
@@ -182,13 +162,32 @@ static void hitachi_lcd_enter_sleep(void)
 	mddi_wait(100);/* >90ms */
 }
 
+static void hitachi_lcd_exit_sleep(struct hitachi_record *rd)
+{
+	/* Set address mode */
+	mddi_queue_register_write(0x36, 0x00, TRUE, 0);
+
+	/* Set pixel format */
+	mddi_queue_register_write(0x3A, 0x77, TRUE, 0);
+
+	/* Exit sleep mode */
+	mddi_queue_register_write(0x11, 0x00, TRUE, 0);
+
+	mddi_wait(110);/* >108ms */
+
+	/* Set tear on */
+	mddi_queue_register_write(0x35, 0x00, TRUE, 0);
+}
+
 static void hitachi_lcd_display_on(void)
 {
+	/* Display on */
 	mddi_queue_register_write(0x29, 0x00, TRUE, 0);
 }
 
 static void hitachi_lcd_display_off(void)
 {
+	/* Display off */
 	mddi_queue_register_write(0x28, 0x00, TRUE, 0);
 	mddi_wait(21); /* >20 ms */
 }
@@ -374,7 +373,7 @@ error:
 	return 0;
 }
 
-static ssize_t show_driver_info(struct device *dev_p,
+static ssize_t show_driver_version(struct device *dev_p,
 			struct device_attribute *attr,
 			char *buf)
 {
@@ -383,13 +382,13 @@ static ssize_t show_driver_info(struct device *dev_p,
 }
 
 /* driver attributes */
-static DEVICE_ATTR(display_driver_info, 0444, show_driver_info, NULL);
+static DEVICE_ATTR(display_driver_version, 0444, show_driver_version, NULL);
 
 static void lcd_attribute_register(struct platform_device *pdev)
 {
 	int ret;
 
-	ret = device_create_file(&pdev->dev, &dev_attr_display_driver_info);
+	ret = device_create_file(&pdev->dev, &dev_attr_display_driver_version);
 	if (ret != 0)
 		dev_err(&pdev->dev, "Failed to register display_driver_version"
 						"attributes (%d)\n", ret);
@@ -405,13 +404,15 @@ static int check_panel_ids(struct hitachi_record *rd)
 					&rd->pid.driver_ic_id,
 					1, MDDI_HOST_PRIM);
 	if (ret < 0) {
-		pr_err("mddi_hitachi_hvga: Failed to read Display ID\n");
+		dev_err(&rd->pdev->dev, "%s: mddi_hitachi_hvga: "
+			"Failed to read Display ID\n", __func__);
 		ret = -ENODEV;
 		goto error;
 	}
 	if ((rd->pid.driver_ic_id & 0xFF) !=
 			MDDI_HITACHI_DISPLAY_DRIVER_IC_ID) {
-		pr_err("mddi_hitachi_hvga: Detected a non-Hitachi display\n");
+		dev_err(&rd->pdev->dev, "%s: mddi_hitachi_hvga: "
+			"Detected a non-Hitachi display\n", __func__);
 		ret = -ENODEV;
 		goto error;
 	}
@@ -420,16 +421,17 @@ static int check_panel_ids(struct hitachi_record *rd)
 					&rd->pid.module_id,
 					1, MDDI_HOST_PRIM);
 	if (ret < 0)
-		pr_err("mddi_hitachi_hvga: Failed to read LCD_REG_MODULE_ID\n");
+		dev_err(&rd->pdev->dev, "%s: mddi_hitachi_hvga: "
+			"Failed to read LCD_REG_MODULE_ID\n", __func__);
 
 	ret = mddi_host_register_read(LCD_REG_REVISION_ID,
 					&rd->pid.revision_id,
 					1, MDDI_HOST_PRIM);
 	if (ret < 0)
-		pr_err("mddi_hitachi_hvga: "
-				"Failed to read LCD_REG_REVISION_ID\n");
+		dev_err(&rd->pdev->dev, "%s: mddi_hitachi_hvga: "
+			"Failed to read LCD_REG_REVISION_ID\n", __func__);
 
-	pr_info("Found display with module ID = 0x%x, "
+	dev_info(&rd->pdev->dev, "Found display with module ID = 0x%x, "
 			"revision ID = 0x%x, driver IC ID = 0x%x, "
 			"driver ID = 0x%x\n",
 			rd->pid.module_id & 0xFF,
@@ -510,7 +512,8 @@ static int __devexit mddi_hitachi_lcd_remove(struct platform_device *pdev)
 {
 	struct hitachi_record *rd;
 
-	device_remove_file(&pdev->dev, &dev_attr_display_driver_info);
+	device_remove_file(&pdev->dev, &dev_attr_display_driver_version);
+
 	rd = platform_get_drvdata(pdev);
 	if (rd)
 		kfree(rd);
