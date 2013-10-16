@@ -188,12 +188,24 @@
 #define GPIO_MSM_MDDI_XRES		157
 #endif
 
+#ifdef CONFIG_MSM_UNDERVOLT_LCD
+#define LCD_VDD_VOLTAGE 2300000
+#else
+#define LCD_VDD_VOLTAGE 2850000
+#endif
+
 #define CYPRESS_TOUCH_GPIO_RESET	40
 #define CYPRESS_TOUCH_GPIO_IRQ		42
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
 #define SYNAPTICS_TOUCH_GPIO_IRQ	42
 #endif
 #define CYPRESS_TOUCH_GPIO_SPI_CS	46
+
+#ifdef CONFIG_MSM_UNDERVOLT_TOUCH
+#define TOUCH_VDD_VOLTAGE 2800000
+#else
+#define TOUCH_VDD_VOLTAGE 3050000
+#endif
 
 #ifdef CONFIG_FB_MSM_HDPI
 #define MSM_PMEM_SF_SIZE  0x2500000
@@ -242,60 +254,44 @@ static unsigned int phys_add = DDR2_BANK_BASE;
 unsigned long ebi1_phys_offset = DDR2_BANK_BASE;
 EXPORT_SYMBOL(ebi1_phys_offset);
 
-static int vreg_helper_on(const char *pzName, unsigned mv)
+static struct regulator *reg;
+
+static int vreg_helper(const char *regName, unsigned uv, int enable)
 {
-	struct vreg *reg = NULL;
 	int rc = 0;
 
-	reg = vreg_get(NULL, pzName);
+	reg = regulator_get(NULL, regName);
 	if (IS_ERR(reg)) {
-		printk(KERN_ERR "Unable to resolve VREG name \"%s\"\n", pzName);
+		pr_err("%s: get vdd failed\n", __func__);
 		return rc;
 	}
 
-	if (mv != (unsigned int)-1)
-		rc = vreg_set_level(reg, mv);
-
-	if (rc) {
-		printk(KERN_ERR "Unable to set vreg \"%s\" level\n", pzName);
-		return rc;
+	if (enable) {
+		rc = regulator_set_voltage(reg, uv, uv);
+		if (rc) {
+			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
+			goto vreg_configure_err;
+		}
+		rc = regulator_enable(reg);
+		if (rc) {
+			pr_err("%s: enable vdd failed, rc=%d\n", __func__, rc);
+			goto vreg_configure_err;
+		}
+	} else {
+		rc = regulator_set_voltage(reg, 0, uv);
+		if (rc) {
+			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
+			goto vreg_configure_err;
+		}
+		rc = regulator_disable(reg);
+		if (rc)
+			pr_err("%s: disable vdd failed, rc=%d\n", __func__, rc);
 	}
-
-	rc = vreg_enable(reg);
-	if (rc) {
-		printk(KERN_ERR "Unable to enable vreg \"%s\" level\n", pzName);
-		return rc;
-	}
-
-	printk(KERN_INFO "Enabled VREG \"%s\" at %u mV\n", pzName, mv);
+	return rc;
+vreg_configure_err:
+	regulator_put(reg);
 	return rc;
 }
-
-#if defined(CONFIG_FB_MSM_MDDI_SONY_HVGA) || \
-	defined(CONFIG_FB_MSM_MDDI_HITACHI_HVGA) || \
-	defined(CONFIG_FB_MSM_MDDI_SII_HVGA) || \
-	defined(CONFIG_FB_MSM_MDDI_AUO_HVGA)
-static void vreg_helper_off(const char *pzName)
-{
-	struct vreg *reg = NULL;
-	int rc;
-
-	reg = vreg_get(NULL, pzName);
-	if (IS_ERR(reg)) {
-		printk(KERN_ERR "Unable to resolve VREG name \"%s\"\n", pzName);
-		return;
-	}
-
-	rc = vreg_disable(reg);
-	if (rc) {
-		printk(KERN_ERR "Unable to disable vreg \"%s\" level\n",
-			pzName);
-		return;
-	}
-
-	printk(KERN_INFO "Disabled VREG \"%s\"\n", pzName);
-}
-#endif
 
 /* Platform specific HW-ID GPIO mask */
 static const u8 hw_id_gpios[] = {150, 149, 148, 43};
@@ -1729,12 +1725,8 @@ static struct platform_device novatek_device = {
 /*  Generic LCD Regulators On function for SEMC mogami displays */
 static void semc_mogami_lcd_regulators_on(void)
 {
-	vreg_helper_on("gp7",1800);  /* L8 */
-#ifdef CONFIG_MSM_UNDERVOLT_LCD
-	vreg_helper_on("gp6",2300);  /* L15 */
-#else
-	vreg_helper_on("gp6",2850);  /* L15 */
-#endif
+	vreg_helper("gp7", 1800000, 1);  /* L8 */
+	vreg_helper("gp6", LCD_VDD_VOLTAGE, 1);  /* L15 */
 }
 
 /* Generic Power On function for SEMC mogami displays */
@@ -1775,8 +1767,8 @@ static void sony_hvga_lcd_power_off(void)
 {
 	gpio_set_value(GPIO_MSM_MDDI_XRES, 0);
 	msleep(121);    /* spec: > 120ms */
-	vreg_helper_off("gp7");  /* L8 */
-	vreg_helper_off("gp6");  /* L15 */
+	vreg_helper("gp7", 1800000, 0);  /* L8 */
+	vreg_helper("gp6", LCD_VDD_VOLTAGE, 0);  /* L15 */
 }
 
 static void sony_hvga_lcd_exit_deep_standby(void)
@@ -1816,8 +1808,8 @@ static void hitachi_hvga_lcd_power_off(void)
 {
 	gpio_set_value(GPIO_MSM_MDDI_XRES, 0);
 	msleep(121);    /* spec: > 120ms */
-	vreg_helper_off("gp7");  /* L8 */
-	vreg_helper_off("gp6");  /* L15 */
+	vreg_helper("gp7", 1800000, 0);  /* L8 */
+	vreg_helper("gp6", LCD_VDD_VOLTAGE, 0);  /* L15 */
 }
 
 static void hitachi_hvga_lcd_exit_deep_standby(void)
@@ -1857,8 +1849,8 @@ static void sii_hvga_lcd_power_off(void)
 {
 	gpio_set_value(GPIO_MSM_MDDI_XRES, 0);
 	msleep(121);    /* spec: > 120ms */
-	vreg_helper_off("gp7");  /* L8 */
-	vreg_helper_off("gp6");  /* L15 */
+	vreg_helper("gp7", 1800000, 0);  /* L8 */
+	vreg_helper("gp6", LCD_VDD_VOLTAGE, 0);  /* L15 */
 }
 
 static void sii_hvga_lcd_exit_deep_standby(void)
@@ -1898,8 +1890,8 @@ static void auo_hvga_lcd_power_off(void)
 {
 	gpio_set_value(GPIO_MSM_MDDI_XRES, 0);
 	msleep(121);    /* spec: > 120ms */
-	vreg_helper_off("gp7");  /* L8 */
-	vreg_helper_off("gp6");  /* L15 */
+	vreg_helper("gp7", 1800000, 0);  /* L8 */
+	vreg_helper("gp6", LCD_VDD_VOLTAGE, 0);  /* L15 */
 }
 
 static void auo_hvga_lcd_exit_deep_standby(void)
@@ -2123,50 +2115,9 @@ int cyttsp_key_rpc_callback(u8 data[], int size)
 #endif /* CONFIG_TOUCHSCREEN_CYTTSP_SPI */
 
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
-#ifdef CONFIG_MSM_UNDERVOLT_TOUCH
-#define CLEARPAD_VDD_VOLTAGE 2800000
-#else
-#define CLEARPAD_VDD_VOLTAGE 3050000
-#endif
-
-static struct regulator *vreg_touch_vdd;
-
 static int clearpad_vreg_configure(int enable)
 {
-	int rc = 0;
-
-	vreg_touch_vdd = regulator_get(NULL, "gp13");
-	if (IS_ERR(vreg_touch_vdd)) {
-		pr_err("%s: get vdd failed\n", __func__);
-		return -ENODEV;
-	}
-
-	if (enable) {
-		rc = regulator_set_voltage(vreg_touch_vdd, CLEARPAD_VDD_VOLTAGE, CLEARPAD_VDD_VOLTAGE);
-		if (rc) {
-			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
-			goto clearpad_vreg_configure_err;
-		}
-		rc = regulator_enable(vreg_touch_vdd);
-		if (rc) {
-			pr_err("%s: enable vdd failed, rc=%d\n", __func__, rc);
-			goto clearpad_vreg_configure_err;
-		}
-	} else {
-		rc = regulator_set_voltage(vreg_touch_vdd, 0, CLEARPAD_VDD_VOLTAGE);
-		if (rc) {
-			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
-			goto clearpad_vreg_configure_err;
-		}
-		rc = regulator_disable(vreg_touch_vdd);
-		if (rc)
-			pr_err("%s: disable vdd failed, rc=%d\n",
-								__func__, rc);
-	}
-	return rc;
-clearpad_vreg_configure_err:
-	regulator_put(vreg_touch_vdd);
-	return rc;
+	vreg_helper("gp13", TOUCH_VDD_VOLTAGE, enable);
 }
 
 static struct msm_gpio clearpad_gpio_config_data[] = {
@@ -2474,8 +2425,6 @@ static struct bma250_platform_data bma250_platform_data = {
 #endif
 #define APDS9702_WAIT_TIME   5000
 
-static struct regulator *vreg_apds9702_vdd;
-
 static int apds9702_gpio_setup(int request)
 {
 	if (request) {
@@ -2493,43 +2442,9 @@ static void apds9702_hw_config(int enable)
 
 static void apds9702_power_mode(int enable)
 {
-	int rc = 0;
-
-	vreg_apds9702_vdd = regulator_get(NULL, "wlan");
-	if (IS_ERR(vreg_apds9702_vdd)) {
-		pr_err("%s: get vdd failed\n", __func__);
-		return;
-	}
-
-	if (enable) {
-		rc = regulator_set_voltage(vreg_apds9702_vdd, APDS9702_VDD_VOLTAGE, APDS9702_VDD_VOLTAGE);
-		if (rc) {
-			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
-			goto vreg_configure_err;
-		}
-		rc = regulator_enable(vreg_apds9702_vdd);
-		if (rc) {
-			pr_err("%s: enable vdd failed, rc=%d\n", __func__, rc);
-			goto vreg_configure_err;
-		}
-	} else {
-		rc = regulator_set_voltage(vreg_apds9702_vdd, 0, APDS9702_VDD_VOLTAGE);
-		if (rc) {
-			pr_err("%s: set voltage failed, rc=%d\n", __func__, rc);
-			goto vreg_configure_err;
-		}
-		rc = regulator_disable(vreg_apds9702_vdd);
-		if (rc)
-			pr_err("%s: disable vdd failed, rc=%d\n", __func__, rc);
-	}
+	vreg_helper("wlan", APDS9702_VDD_VOLTAGE, enable);
 
 	usleep(APDS9702_WAIT_TIME);
-
-	return;
-
-vreg_configure_err:
-	regulator_put(vreg_apds9702_vdd);
-	return;
 }
 
 static struct apds9702_platform_data apds9702_pdata = {
@@ -3989,26 +3904,18 @@ out3:
 static void __init mogami_temp_fixups(void)
 {
 	gpio_set_value(46, 1);	/* SPI_CS0_N - Touch */
-	gpio_set_value(134, 1);	/* UART1DM_RFR_N - BT */
-	gpio_set_value(137, 1);	/* UART1DM_TXD - BT */
 }
 
 static void __init shared_vreg_on(void)
 {
 #ifndef CONFIG_TOUCHSCREEN_CLEARPAD
-#ifdef CONFIG_MSM_UNDERVOLT_TOUCH
-	vreg_helper_on("gp13", 2800); /* ldo20 - Touch */
-#else
-	vreg_helper_on("gp13", 3050); /* ldo20 - Touch */
+	vreg_helper("gp13", TOUCH_VDD_VOLTAGE, 1); /* ldo20 - Touch */
 #endif
+	vreg_helper("gp4", 2600000, 1);  /* ldo10 - BMA150, AK8975B */
+#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_FWVGA
+	vreg_helper("gp6", LCD_VDD_VOLTAGE, 1);  /* ldo15 - LCD */
 #endif
-	vreg_helper_on("gp4", 2600);  /* ldo10 - BMA150, AK8975B */
-#ifdef CONFIG_MSM_UNDERVOLT_LCD
-	vreg_helper_on("gp6", 2300);  /* ldo15 - LCD */
-#else
-	vreg_helper_on("gp6", 2900);  /* ldo15 - LCD */
-#endif
-	vreg_helper_on("gp7", 1800);  /* ldo08 - BMA150, AK8975B, LCD, Touch, HDMI */
+	vreg_helper("gp7", 1800000, 1);  /* ldo08 - BMA150, AK8975B, LCD, Touch, HDMI */
 }
 
 static void __init msm7x30_init_nand(void)
