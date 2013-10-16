@@ -78,12 +78,6 @@ enum mddi_sii_lcd_state {
 	LCD_STATE_SLEEP
 };
 
-struct coords {
-	u16 x1;
-	u16 x2;
-	u16 y1;
-	u16 y2;
-};
 
 struct panel_ids {
 	u32 driver_ic_id;
@@ -98,7 +92,6 @@ struct sii_record {
 	struct mutex mddi_mutex;
 	int power_ctrl;
 	enum mddi_sii_lcd_state lcd_state;
-	struct coords last_window;
 	struct platform_device *pdev;
 	struct panel_ids pid;
 };

@@ -91,14 +91,6 @@ enum mddi_sony_lcd_state {
 	LCD_STATE_SLEEP
 };
 
-static struct lcd_data_t {
-	struct {
-		u16 x1;
-		u16 x2;
-		u16 y1;
-		u16 y2;
-	} last_window;
-} lcd_data;
 
 struct panel_ids {
 	u32 driver_ic_id;
@@ -154,13 +146,6 @@ static void sony_lcd_window_address_set(enum lcd_registers reg,
 	para = (para << 16) | (start + stop);
 	para = swab32(para);
 	write_client_reg_nbr(reg, para, 0, 0, 0, 1);
-	if (reg == LCD_REG_COLUMN_ADDRESS) {
-		lcd_data.last_window.x1 = start;
-		lcd_data.last_window.x2 = stop;
-	} else {
-		lcd_data.last_window.y1 = start;
-		lcd_data.last_window.y2 = stop;
-	}
 }
 
 static void sony_lcd_window_adjust(uint16 x1, uint16 x2,
