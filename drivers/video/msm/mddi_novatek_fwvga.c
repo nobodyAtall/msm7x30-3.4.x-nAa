@@ -28,7 +28,7 @@
 #define write_client_reg(__X, __Y) \
   mddi_queue_register_write(__X, __Y, TRUE, 0)
 
-#ifdef CONFIG_FB_MSM_PANEL_ESD
+#ifdef CONFIG_MACH_SEMC_IYOKAN
 /* ESD check interval */
 #define ESD_POLL_TIME_MS 1000
 static void esd_recovery_resume(struct platform_device *pdev);
@@ -71,7 +71,7 @@ struct novatek_record {
 	const struct panel_id *panel;
 	int power;
 	struct i2c_client *client;
-#ifdef CONFIG_FB_MSM_PANEL_ESD
+#ifdef CONFIG_MACH_SEMC_IYOKAN
 	struct delayed_work work;
 #endif
 };
@@ -144,17 +144,8 @@ static void hr_msleep(int ms)
 static void novatek_controller_execute(const struct novatek_reg_set *rs)
 {
 	int n;
-#ifndef CONFIG_FB_MSM_MDDI_NOVATEK_DISABLE_MDDI
 	int rc;
-#endif
-#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_DISABLE_MDDI
-	u8 i2c_data[4];
 
-	if (!novatek_i2c_client) {
-		pr_err("MDDI_NOVATEK: no i2c client!\n");
-		return;
-	}
-#endif
 	if (rs == NULL) {
 		pr_err(MDDI_NOVATEK_FWVGA_NAME
 				": no register set for state!\n");
@@ -167,17 +158,9 @@ static void novatek_controller_execute(const struct novatek_reg_set *rs)
 				break;
 			hr_msleep(rs[n].val);
 		} else {
-#ifdef CONFIG_FB_MSM_MDDI_NOVATEK_DISABLE_MDDI
-			i2c_data[0] = rs[n].reg >> 8;
-			i2c_data[1] = rs[n].reg & 0xFF;
-			i2c_data[2] = rs[n].val >> 8;
-			i2c_data[3] = rs[n].val & 0xFF;
-			i2c_master_send(novatek_i2c_client, i2c_data, 4);
-#else
 			rc = write_client_reg(rs[n].reg, rs[n].val);
 			if (rc != 0)
 				return;
-#endif
 		}
 	}
 }
@@ -260,7 +243,7 @@ static int novatek_ic_off_panel_off(struct platform_device *pdev)
 		break;
 	}
 
-#ifdef CONFIG_FB_MSM_PANEL_ESD
+#ifdef CONFIG_MACH_SEMC_IYOKAN
 	if (rd->panel->esd_support)
 		cancel_delayed_work_sync(&rd->work);
 #endif
@@ -324,7 +307,7 @@ static int novatek_ic_on_panel_on(struct platform_device *pdev)
 
 	rd->mode = NVT_MODE_NORMAL;
 
-#ifdef CONFIG_FB_MSM_PANEL_ESD
+#ifdef CONFIG_MACH_SEMC_IYOKAN
 	if (rd->panel->esd_support)
 		esd_recovery_resume(mfd->panel_pdev);
 #endif
@@ -332,7 +315,7 @@ static int novatek_ic_on_panel_on(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_FB_MSM_PANEL_ESD
+#ifdef CONFIG_MACH_SEMC_IYOKAN
 static int esd_failure_check(struct novatek_record *rd)
 {
 	u16 id = 0;
@@ -565,7 +548,7 @@ static int __devinit novatek_controller_probe(struct platform_device *pdev)
 	pdev->dev.platform_data = panel_data;
 
 	rd->client = novatek_i2c_client;
-#ifdef CONFIG_FB_MSM_PANEL_ESD
+#ifdef CONFIG_MACH_SEMC_IYOKAN
 	if (rd->panel->esd_support)
 		esd_recovery_init(pdev);
 #endif
@@ -609,4 +592,3 @@ static void __exit novatek_exit(void)
 
 module_init(novatek_init);
 module_exit(novatek_exit);
-
