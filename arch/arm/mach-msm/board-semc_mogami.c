@@ -2117,7 +2117,11 @@ int cyttsp_key_rpc_callback(u8 data[], int size)
 #ifdef CONFIG_TOUCHSCREEN_CLEARPAD
 static int clearpad_vreg_configure(int enable)
 {
-	vreg_helper("gp13", TOUCH_VDD_VOLTAGE, enable);
+	int rc = 0;
+
+	rc = vreg_helper("gp13", TOUCH_VDD_VOLTAGE, enable);
+
+	return rc;
 }
 
 static struct msm_gpio clearpad_gpio_config_data[] = {
