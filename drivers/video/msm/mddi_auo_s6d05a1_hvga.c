@@ -57,17 +57,6 @@ static ssize_t store_dbc_ctrl(
 	const char *buf,
 	size_t count);
 
-static ssize_t show_dbc_mode_ctrl(
-	struct device *dev_p,
-	struct device_attribute *attr,
-	char *buf);
-
-static ssize_t store_dbc_mode_ctrl(
-	struct device *dev_p,
-	struct device_attribute *attr,
-	const char *buf,
-	size_t count);
-
 /* Function Configuration */
 #define DBC_OFF 0
 #define DBC_ON	1
@@ -76,18 +65,11 @@ static int dbc_ctrl = DBC_ON;
 module_param(dbc_ctrl, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(dbc_ctrl, "Dynamic Backlight Control DBC_OFF = 0, DBC_ON = 1");
 
-#define DBC_MODE_UI	1
-#define DBC_MODE_IMAGE	2
-#define DBC_MODE_VIDEO	3
-
-static int dbc_mode = DBC_MODE_VIDEO;
-module_param(dbc_mode, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-MODULE_PARM_DESC(dbc_ctrl, "Dynamic Backlight Mode DBC_MODE_UI = 1, DBC_MODE_IMAGE = 2, DBC_MODE_VIDEO = 3");
-
 /* driver attributes */
 static DEVICE_ATTR(display_driver_version, 0444, show_driver_version, NULL);
 static DEVICE_ATTR(dbc_ctrl, 0644, show_dbc_ctrl, store_dbc_ctrl);
-static DEVICE_ATTR(dbc_mode, 0644, show_dbc_mode_ctrl, store_dbc_mode_ctrl);
+
+static DEFINE_MUTEX(mddi_mutex);
 
 enum lcd_registers {
 	LCD_REG_COLUMN_ADDRESS = 0x2a,
@@ -402,15 +384,8 @@ static ssize_t store_dbc_ctrl(struct device *dev_p,
 			size_t count)
 {
 	ssize_t ret;
-	struct auo_record *rd;
 
-	rd = kzalloc(sizeof(struct auo_record), GFP_KERNEL);
-	if (rd == NULL) {
-		ret = -ENOMEM;
-		goto exit_point;
-	}
-
-	mutex_lock(&rd->mddi_mutex);
+	mutex_lock(&mddi_mutex);
 
 	if (sscanf(buf, "%i", &ret) != 1) {
 		pr_err("%s: mddi_auo_hvga: "
@@ -427,69 +402,7 @@ static ssize_t store_dbc_ctrl(struct device *dev_p,
 	ret = strnlen(buf, count);
 
 unlock:
-	mutex_unlock(&rd->mddi_mutex);
-exit_point:
-	return ret;
-}
-
-static ssize_t show_dbc_mode_ctrl(struct device *dev_p,
-				struct device_attribute *attr,
-				char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%i\n", dbc_mode);
-}
-
-static ssize_t store_dbc_mode_ctrl(struct device *dev_p,
-				struct device_attribute *attr,
-				const char *buf,
-				size_t count)
-{
-	ssize_t ret;
-	struct auo_record *rd;
-
-	rd = kzalloc(sizeof(struct auo_record), GFP_KERNEL);
-	if (rd == NULL) {
-		ret = -ENOMEM;
-		goto exit_point;
-	}
-
-	mutex_lock(&rd->mddi_mutex);
-
-	if (sscanf(buf, "%i", &ret) != 1) {
-		pr_err("%s: mddi_auo_hvga: "
-			"Invalid flag for dbc mode\n", __func__);
-		ret = -EINVAL;
-		goto unlock;
-	}
-
-	switch (ret) {
-	case DBC_MODE_UI:
-	case DBC_MODE_IMAGE:
-	case DBC_MODE_VIDEO:
-		dbc_mode = ret;
-		break;
-	default:
-		pr_err("%s: mddi_auo_hvga: "
-			"Invalid value for dbc mode\n", __func__);
-		ret = -EINVAL;
-		goto unlock;
-	}
-
-	if (rd->lcd_state != LCD_STATE_ON) {
-		pr_err("%s: mddi_auo_hvga: LCD in sleep, "
-			"not performing any dbc change\n", __func__);
-		ret = -EINVAL;
-		goto unlock;
-	}
-
-	/* Mobile Image Enhancement Mode */
-	write_client_reg_nbr(0x55, dbc_mode, 0, 0, 0, 1);
-
-	ret = strnlen(buf, count);
-
-unlock:
-	mutex_unlock(&rd->mddi_mutex);
-exit_point:
+	mutex_unlock(&mddi_mutex);
 	return ret;
 }
 
@@ -505,11 +418,6 @@ static void lcd_attribute_register(struct platform_device *pdev)
 	ret = device_create_file(&pdev->dev, &dev_attr_dbc_ctrl);
 	if (ret != 0)
 		dev_err(&pdev->dev, "Failed to register dbc_ctrl"
-						"attributes (%d)\n", ret);
-
-	ret = device_create_file(&pdev->dev, &dev_attr_dbc_mode);
-	if (ret != 0)
-		dev_err(&pdev->dev, "Failed to register dbc_mode"
 						"attributes (%d)\n", ret);
 }
 
@@ -626,7 +534,6 @@ static int __devexit mddi_auo_lcd_remove(struct platform_device *pdev)
 
 	device_remove_file(&pdev->dev, &dev_attr_display_driver_version);
 	device_remove_file(&pdev->dev, &dev_attr_dbc_ctrl);
-	device_remove_file(&pdev->dev, &dev_attr_dbc_mode);
 
 	rd = platform_get_drvdata(pdev);
 	if (rd)
