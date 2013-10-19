@@ -143,6 +143,98 @@ static void auo_lcd_window_address_set(enum lcd_registers reg,
 	write_client_reg_nbr(reg, para, 0, 0, 0, 1);
 }
 
+static uint32 reg_disctl[5] = {0x08034E3B, 0x00080808, 0x00000808,
+			0x08540000, 0x00080808};
+
+static void auo_lcd_driver_init(void)
+{
+	/* Page Address Set */
+	write_client_reg_nbr(0x2A, 0x0000013F, 0, 0, 0, 1);
+	write_client_reg_nbr(0x2B, 0x000001DF, 0, 0, 0, 1);
+
+	/* PASSWD1 */
+	write_client_reg_nbr(0xF0, 0x00005A5A, 0, 0, 0, 1);
+
+	/* PASSWD2 */
+	write_client_reg_nbr(0xF1, 0x00005A5A, 0, 0, 0, 1);
+
+	/* DISCTL */
+	write_client_reg_xl(0xF2, reg_disctl, 5);
+
+	/* PWRCTL */
+	write_client_reg_nbr(0xF4, 0x00000008, 0x00000000,
+			0x00037900, 0x0000379, 4);
+
+	/* VCMCTL */
+	write_client_reg_nbr(0xF5, 0x00755D00, 0x00000300,
+			0x755D0004, 0, 3);
+
+	/* SRGCTL */
+	write_client_reg_nbr(0xF6, 0x03080004, 0x00010001,
+			0x00000000, 0, 2);
+
+	/* IFCTL */
+	write_client_reg_nbr(0xF7, 0x02108048, 0x00000000,
+			0, 0, 2);
+
+	/* PANELCTL */
+	write_client_reg_nbr(0xF8, 0x00000011, 0, 0, 0, 1);
+
+	/* WRDISBV */
+	write_client_reg_nbr(0x51, 0x000000FF, 0, 0, 0, 1);
+
+	/* WRCTRLD */
+	write_client_reg_nbr(0x53, 0x0000002C, 0, 0, 0, 1);
+
+	/* WRCABC */
+	write_client_reg_nbr(0x55, 0x00000003, 0, 0, 0, 1);
+
+	/* WRCABCMB */
+	write_client_reg_nbr(0x5E, 0x00000000, 0, 0, 0, 1);
+
+	/* MIECTRL */
+	write_client_reg_nbr(0xC0, 0x003F8080, 0, 0, 0, 1);
+
+	/* BCMODE */
+	write_client_reg_nbr(0xC1, 0x00000013, 0, 0, 0, 1);
+
+	/* GAMMSEL */
+	write_client_reg_nbr(0xF9, 0x00000024, 0, 0, 0, 1);
+
+	/* PGAMMACTL */
+	write_client_reg_nbr(0xFA, 0x1B040B0B, 0x291C1A19,
+			0x3F3F3C36, 0x00000011, 4);
+
+	/* GAMMSEL */
+	write_client_reg_nbr(0xF9, 0x00000022, 0, 0, 0, 1);
+
+	/* PGAMMACTL */
+	write_client_reg_nbr(0xFA, 0x1B050B0B, 0x25211F1D,
+			0x3F3F3B34, 0x00000000, 4);
+
+	/* GAMMSEL */
+	write_client_reg_nbr(0xF9, 0x00000021, 0, 0, 0, 1);
+
+	/* PGAMMACTL */
+	write_client_reg_nbr(0xFA, 0x3B000B0B, 0x1F2B3038,
+			0x373A382F, 0x0000004, 4);
+
+	/* COLMOD*/
+	write_client_reg_nbr(0x3A, 0x00000077, 0, 0, 0, 1);
+
+	/* MADCTL */
+	write_client_reg_nbr(0x36, 0x00000000, 0, 0, 0, 1);
+
+	/* TEON */
+	write_client_reg_nbr(0x35, 0x00000000, 0, 0, 0, 1);
+
+	/* PASET */
+	write_client_reg_nbr(0x2B, 0xDF010000, 0, 0, 0, 1);
+
+	/* CASET */
+	write_client_reg_nbr(0x2A, 0x3F010000, 0, 0, 0, 1);
+}
+
 static void auo_lcd_window_adjust(uint16 x1, uint16 x2,
 					uint16 y1, uint16 y2)
 {
@@ -248,6 +340,7 @@ static int mddi_auo_ic_on_panel_off(struct platform_device *pdev)
 			break;
 
 		case LCD_STATE_POWER_ON:
+			auo_lcd_driver_init();
 			auo_lcd_exit_sleep(rd);
 			auo_lcd_dbc_on();
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
@@ -255,6 +348,7 @@ static int mddi_auo_ic_on_panel_off(struct platform_device *pdev)
 
 		case LCD_STATE_SLEEP:
 			auo_lcd_exit_deepstandby(rd);
+			auo_lcd_driver_init();
 			auo_lcd_exit_sleep(rd);
 			auo_lcd_dbc_on();
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
@@ -284,6 +378,7 @@ static int mddi_auo_ic_on_panel_on(struct platform_device *pdev)
 	if (rd->power_ctrl) {
 		switch (rd->lcd_state) {
 		case LCD_STATE_POWER_ON:
+			auo_lcd_driver_init();
 			auo_lcd_exit_sleep(rd);
 			auo_lcd_dbc_on();
 			auo_lcd_display_on();
@@ -292,6 +387,7 @@ static int mddi_auo_ic_on_panel_on(struct platform_device *pdev)
 
 		case LCD_STATE_SLEEP:
 			auo_lcd_exit_deepstandby(rd);
+			auo_lcd_driver_init();
 			auo_lcd_exit_sleep(rd);
 			auo_lcd_dbc_on();
 			auo_lcd_display_on();

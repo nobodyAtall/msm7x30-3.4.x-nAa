@@ -91,7 +91,6 @@ enum mddi_sony_lcd_state {
 	LCD_STATE_SLEEP
 };
 
-
 struct panel_ids {
 	u32 driver_ic_id;
 	u32 module_id;
@@ -146,6 +145,102 @@ static void sony_lcd_window_address_set(enum lcd_registers reg,
 	para = (para << 16) | (start + stop);
 	para = swab32(para);
 	write_client_reg_nbr(reg, para, 0, 0, 0, 1);
+}
+
+static uint32 reg_disctl[5] = {0x080F4E3B, 0x00080808, 0x00000808,
+			0x084E0000, 0x00202008};
+
+static void sony_lcd_driver_init(void)
+{
+	/* Page Address Set */
+	sony_lcd_window_address_set(LCD_REG_COLUMN_ADDRESS,
+			0, panel->panel_info.xres - 1);
+	sony_lcd_window_address_set(LCD_REG_PAGE_ADDRESS,
+			0, panel->panel_info.yres - 1);
+
+	/* MADCTL */
+	write_client_reg_nbr(0x36, 0x00000000, 0, 0, 0, 1);
+
+	/* Interface Pixel Format, 18 bpp*/
+	write_client_reg_nbr(0x3A, 0x00000077, 0, 0, 0, 1);
+
+	/* PASSWD1 */
+	write_client_reg_nbr(0xF0, 0x00005A5A, 0, 0, 0, 1);
+
+	/* DISCTL */
+	write_client_reg_xl(0xF2, reg_disctl, 5);
+
+	/* PWRCTL */
+	write_client_reg_nbr(0xF4, 0x00000007, 0x00000000,
+			0x00054600, 0x0000546, 4);
+
+	/* VCMCTL */
+	write_client_reg_nbr(0xF5, 0x001A1800, 0x00000200,
+			0x1A180000, 0, 3);
+
+	/* SRGCTL */
+	write_client_reg_nbr(0xF6, 0x03080001, 0x00010001,
+			0x00000000, 0, 3);
+
+	/* IFCTL */
+	write_client_reg_nbr(0xF7, 0x03108048, 0x00000000,
+			0, 0, 2);
+
+	/* PANELCTL */
+	write_client_reg_nbr(0xF8, 0x00000055, 0, 0, 0, 1);
+
+	/* GAMMSEL RED*/
+	write_client_reg_nbr(0xF9, 0x00000014, 0, 0, 0, 1);
+
+	/* PGAMMACTL */
+	write_client_reg_nbr(0xFA, 0x1001031C, 0x2E140D0B,
+			0x30303737, 0x00000011, 4);
+
+	/* NGAMMACTL */
+	write_client_reg_nbr(0xFB, 0x3011140B, 0x2E373730,
+			0x100B0D14, 0x00000001, 4);
+
+	/* GAMMSEL GREEN*/
+	write_client_reg_nbr(0xF9, 0x00000012, 0, 0, 0, 1);
+
+	/* PGAMMACTL */
+	write_client_reg_nbr(0xFA, 0x19040315, 0x261F1B18,
+			0x2D2D3231, 0x00000011, 4);
+
+	/* NGAMMACTL */
+	write_client_reg_nbr(0xFB, 0x2D110D0B, 0x2631322D,
+			0x19181B1F, 0x00000004, 4);
+
+	/* GAMMSEL BLUE*/
+	write_client_reg_nbr(0xF9, 0x00000011, 0, 0, 0, 1);
+
+	/* PGAMMACTL */
+	write_client_reg_nbr(0xFA, 0x1503030B, 0x22221C16,
+			0x2B2B2F2D, 0x00000011, 4);
+
+	/* NGAMMACTL */
+	write_client_reg_nbr(0xFB, 0x2B11030B, 0x222D2F2B,
+			0x15161C22, 0x00000003, 4);
+
+	/* MIECTRL */
+	write_client_reg_nbr(0xC0, 0x00108036, 0, 0, 0, 1);
+
+	/* BCMODE */
+	write_client_reg_nbr(0xC1, 0x00000013, 0, 0, 0, 1);
+
+	/* WRMIECTL */
+	write_client_reg_nbr(0xC2, 0x01000008, 0x010000DF,
+			0x0000003F, 0, 3);
+
+	/* WRBLCTL */
+	write_client_reg_nbr(0xC3, 0x0021D000, 0, 0, 0, 1);
+
+	/* PASSWD1 */
+	write_client_reg_nbr(0xF0, 0x0000A5A5, 0, 0, 0, 1);
+
+	/* FTE ON */
+	write_client_reg_nbr(0x44, 0x00000000, 0, 0, 0, 1);
+	write_client_reg_nbr(0x35, 0x00000000, 0, 0, 0, 1);
 }
 
 static void sony_lcd_window_adjust(uint16 x1, uint16 x2,
@@ -253,6 +348,7 @@ static int mddi_sony_ic_on_panel_off(struct platform_device *pdev)
 			break;
 
 		case LCD_STATE_POWER_ON:
+			sony_lcd_driver_init();
 			sony_lcd_exit_sleep(rd);
 			sony_lcd_dbc_on();
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
@@ -260,6 +356,7 @@ static int mddi_sony_ic_on_panel_off(struct platform_device *pdev)
 
 		case LCD_STATE_SLEEP:
 			sony_lcd_exit_deepstandby(rd);
+			sony_lcd_driver_init();
 			sony_lcd_exit_sleep(rd);
 			sony_lcd_dbc_on();
 			rd->lcd_state = LCD_STATE_DISPLAY_OFF;
@@ -289,6 +386,7 @@ static int mddi_sony_ic_on_panel_on(struct platform_device *pdev)
 	if (rd->power_ctrl) {
 		switch (rd->lcd_state) {
 		case LCD_STATE_POWER_ON:
+			sony_lcd_driver_init();
 			sony_lcd_exit_sleep(rd);
 			sony_lcd_dbc_on();
 			sony_lcd_display_on();
@@ -297,6 +395,7 @@ static int mddi_sony_ic_on_panel_on(struct platform_device *pdev)
 
 		case LCD_STATE_SLEEP:
 			sony_lcd_exit_deepstandby(rd);
+			sony_lcd_driver_init();
 			sony_lcd_exit_sleep(rd);
 			sony_lcd_dbc_on();
 			sony_lcd_display_on();
