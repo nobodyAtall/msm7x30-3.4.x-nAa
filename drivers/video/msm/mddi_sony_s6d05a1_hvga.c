@@ -153,10 +153,8 @@ static uint32 reg_disctl[5] = {0x080F4E3B, 0x00080808, 0x00000808,
 static void sony_lcd_driver_init(void)
 {
 	/* Page Address Set */
-	sony_lcd_window_address_set(LCD_REG_COLUMN_ADDRESS,
-			0, panel->panel_info.xres - 1);
-	sony_lcd_window_address_set(LCD_REG_PAGE_ADDRESS,
-			0, panel->panel_info.yres - 1);
+	sony_lcd_window_address_set(LCD_REG_COLUMN_ADDRESS, 0, 319);
+	sony_lcd_window_address_set(LCD_REG_PAGE_ADDRESS, 0, 479);
 
 	/* MADCTL */
 	write_client_reg_nbr(0x36, 0x00000000, 0, 0, 0, 1);
