@@ -113,27 +113,6 @@ config USB_GADGET_STORAGE_NUM_BUFFERS
 	   a module parameter as well.
 	   If unsure, say 2.
 
-config SUPPORT_ALIEN_USB_CHARGER
-	bool "Alien USB charger support"
-	default n
-	help
-	  Enabling this option adds alien USB charger support.
-	  Alien USB charger is an USB charger where the resistance between the
-	  data lines D+/D- is greater than 200 Ohms.
-	  Alien USB charger can look like USB host charger because of the
-	  D+/D- configuration. The difference is that Alien USB charger never
-	  enumerates.
-
-config ALIEN_USB_CHARGER_CURRENT_MA
-	int "Maximum alien USB current"
-	depends on SUPPORT_ALIEN_USB_CHARGER
-	range 0 1500
-	default 500
-	help
-	  Enter the maximum power, in milliAmperes, your device draws through USB
-	  when detected as an alien charger. The permitted range of values is
-	  0 - 1500 mA.
-
 #
 # USB Peripheral Controller Support
 #

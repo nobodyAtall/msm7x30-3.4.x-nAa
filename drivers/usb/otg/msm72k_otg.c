@@ -583,14 +583,6 @@ static int msm_otg_set_power(struct usb_phy *xceiv, unsigned mA)
 	enum chg_type 		new_chg = atomic_read(&dev->chg_type);
 	unsigned 		charge = mA;
 
-#ifdef CONFIG_SUPPORT_ALIEN_USB_CHARGER
-	/* Charger detection is not yet done */
-	if (new_chg == USB_CHG_TYPE__MIGHT_BE_HOST_PC)
-		return 0;
-	else if (new_chg == USB_CHG_TYPE__ALIENCHARGER)
-		new_chg = USB_CHG_TYPE__WALLCHARGER;
-#endif
-
 	if (mA == 0)
 		new_chg = USB_CHG_TYPE__INVALID;
 
@@ -2037,22 +2029,16 @@ static void msm_otg_sm_work(struct work_struct *w)
 		} else if (test_bit(ID_C, &dev->inputs)) {
 			atomic_set(&dev->chg_type, USB_CHG_TYPE__SDP);
 			msm_otg_set_power(&dev->phy, USB_IDCHG_MAX);
-		} else if (chg_type == USB_CHG_TYPE__WALLCHARGER
-#ifdef CONFIG_SUPPORT_ALIEN_USB_CHARGER
-			   || chg_type == USB_CHG_TYPE__ALIENCHARGER
-#endif
-			) {
+		} else if (chg_type == USB_CHG_TYPE__WALLCHARGER) {
 #ifdef CONFIG_USB_MSM_ACA
 			del_timer_sync(&dev->id_timer);
 #endif
-#ifndef CONFIG_SUPPORT_ALIEN_USB_CHARGER
 			/* Workaround: Reset PHY in SE1 state */
 			otg_reset(&dev->phy, 1);
 			pr_debug("entering into lpm with wall-charger\n");
 			msm_otg_put_suspend(dev);
 			/* Allow idle power collapse */
 			otg_pm_qos_update_latency(dev, 0);
-#endif
 		}
 		break;
 	case OTG_STATE_B_WAIT_ACON:
