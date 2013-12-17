@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm 3.4.65 Kernel Configuration
+# Linux/arm 3.4.74 Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_ARM_HAS_SG_CHAIN=y
@@ -2834,7 +2834,6 @@ CONFIG_USB_MSM_OTG_72K=y
 CONFIG_USB_MSM_ACA=y
 # CONFIG_USB_MSM_STANDARD_ACA is not set
 CONFIG_USB_MSM_ACA_FORCE_DETECT_B_AS_A=y
-CONFIG_USB_MSM_OTG_POWER_BUDGET=500
 CONFIG_MMC=y
 # CONFIG_MMC_DEBUG is not set
 CONFIG_MMC_PERF_PROFILING=y
