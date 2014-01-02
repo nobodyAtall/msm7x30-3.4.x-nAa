@@ -2947,6 +2947,7 @@ static struct platform_device android_pmem_device = {
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
        .inject_rx_on_wakeup = 1,
        .rx_to_inject = 0xFD,
+       .uartdm_rx_buf_size = 1024,
 };
 
 static struct resource msm_fb_resources[] = {
