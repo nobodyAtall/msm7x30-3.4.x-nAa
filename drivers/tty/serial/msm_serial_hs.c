@@ -2016,7 +2016,9 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 		if (ret) {
 			dev_err(uport->dev, "Clock ON Failure"
 			"For UART CLK Stalling HSUART\n");
+#ifndef CONFIG_SERIAL_MSM_HS_NO_DMA_WAKELOCK
 			wake_unlock(&msm_uport->dma_wake_lock);
+#endif
 			break;
 		}
 
