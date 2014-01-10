@@ -76,15 +76,6 @@ config ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
 	  /sys/module/lowmemorykiller/parameters/adj and convert them
 	  to oom_score_adj values.
 
-config ANDROID_LOW_MEMORY_KILLER_DO_NOT_KILL_PROCESS
-	bool "Android Low Memory Killer: do not kill process inside user defined white-lists"
-	depends on ANDROID_LOW_MEMORY_KILLER
-	default N
-	---help---
-	  Allows the user to define processes and system processes
-	  white-lists to not be killed by lowmemorykiller, unless
-	  it is absolutely necessary.
-
 source "drivers/staging/android/switch/Kconfig"
 
 config ANDROID_INTF_ALARM_DEV
