@@ -517,7 +517,7 @@ u32 vidc_lookup_addr_table(struct video_client_ctx *client_ctx,
 	}
 
 	if (found) {
-		*phy_addr = buf_addr_table[i].dev_addr;
+		*phy_addr = buf_addr_table[i].phy_addr;
 		*pmem_fd = buf_addr_table[i].pmem_fd;
 		*file = buf_addr_table[i].file;
 		*buffer_index = i;

@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
+#include <linux/fdtable.h>
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/fmem.h>
@@ -73,6 +74,12 @@
 #define PMEM_FLAGS_SUBMAP 0x1 << 3
 #define PMEM_FLAGS_UNSUBMAP 0x1 << 4
 
+struct recordingbuffer_info {
+	unsigned int fd; //out
+	unsigned int user_vaddr; //out
+	unsigned int size; //in
+};
+
 struct pmem_data {
 	/* in alloc mode: an index into the bitmap
 	 * in no_alloc mode: the size of the allocation */
@@ -97,6 +104,8 @@ struct pmem_data {
 	struct list_head region_list;
 	/* a linked list of data so we can access them for debugging */
 	struct list_head list;
+	struct file *mapfile;
+	unsigned int fd;
 #if PMEM_DEBUG
 	int ref;
 #endif
@@ -379,13 +388,29 @@ static ssize_t show_pmem_allocator_type(int id, char *buf)
 }
 RO_PMEM_ATTR(allocator_type);
 
+static int find_fd(struct file *file,struct files_struct *files)
+{
+	int fd = 0;
+	rcu_read_lock();
+
+	while (fcheck_files(files,fd) != file) {
+		fd++;
+		if (fd == 1024) {
+			break;
+		}
+	}
+
+	rcu_read_unlock();
+	return fd;
+}
+
 static ssize_t show_pmem_mapped_regions(int id, char *buf)
 {
 	struct list_head *elt;
 	int ret;
 
 	ret = scnprintf(buf, PAGE_SIZE,
-		      "pid #: mapped regions (offset, len) (offset,len)...\n");
+		      "pid #: mapped regions (vmastart, vmalen, fd, offset, len, index) (offset,len)...\n");
 
 	mutex_lock(&pmem[id].data_list_mutex);
 	list_for_each(elt, &pmem[id].data_list) {
@@ -394,8 +419,19 @@ static ssize_t show_pmem_mapped_regions(int id, char *buf)
 		struct list_head *elt2;
 
 		down_read(&data->sem);
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "pid %u:",
-				data->pid);
+
+		if (data->vma) {
+			if (data->mapfile && !data->fd) {
+				data->fd=find_fd(data->mapfile,data->task->files);
+			}
+
+			ret += scnprintf(buf + ret, PAGE_SIZE - ret, "pid %u: vma start: %p, vma len: %lu, fd: %u, index: %d ",
+					data->pid,(void*)data->vma->vm_start,data->vma->vm_end-data->vma->vm_start,data->fd, data->index);
+		} else {
+			ret += scnprintf(buf + ret, PAGE_SIZE - ret, "pid %u:",
+					data->pid);
+		}
+
 		list_for_each(elt2, &data->region_list) {
 			struct pmem_region_node *region_node = list_entry(elt2,
 					struct pmem_region_node,
@@ -1002,6 +1038,8 @@ static int pmem_open(struct inode *inode, struct file *file)
 	data->task = NULL;
 	data->vma = NULL;
 	data->pid = 0;
+	data->fd = 0;
+	data->mapfile = NULL;
 	data->master_file = NULL;
 #if PMEM_DEBUG
 	data->ref = 0;
@@ -1733,6 +1771,10 @@ static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 		}
 		data->flags |= PMEM_FLAGS_MASTERMAP;
 		data->pid = current->pid;
+		data->vma = vma;
+		data->mapfile = file;
+		get_task_struct(current->group_leader);
+		data->task = current->group_leader;
 	}
 	vma->vm_ops = &vm_ops;
 error:
@@ -2355,6 +2397,42 @@ static void pmem_get_size(struct pmem_region *region, struct file *file)
 	DLOG("offset 0x%lx len 0x%lx\n", region->offset, region->len);
 }
 
+static int pmem_get_recording_buffer_info(int id,struct recordingbuffer_info *recordingbuffer)
+{
+	struct list_head *elt;
+	int ret = -EINVAL;
+	unsigned int alignedSize;
+
+	if (recordingbuffer->size % 4096 > 0)
+		alignedSize = ((unsigned int)(recordingbuffer->size / 4096 + 1)) * 4096;
+	else
+		alignedSize = recordingbuffer->size;
+	DLOG("Searched recording buffer info aligned size: %u",alignedSize);
+
+	mutex_lock(&pmem[id].data_list_mutex);
+	list_for_each(elt, &pmem[id].data_list) {
+		struct pmem_data *data =list_entry(elt, struct pmem_data, list);
+
+		down_read(&data->sem);
+		if (data->vma) {
+			if (data->vma->vm_end-data->vma->vm_start == alignedSize) {
+				pr_err("Found recording buffer info");
+				if (data->mapfile && !data->fd) {
+					data->fd = find_fd(data->mapfile,data->task->files);
+				}
+				recordingbuffer->fd = data->fd;
+				recordingbuffer->user_vaddr = data->vma->vm_start;
+				up_read(&data->sem);
+				ret = 0;
+				goto finish;
+			}
+		}
+		up_read(&data->sem);
+	}
+finish:
+	mutex_unlock(&pmem[id].data_list_mutex);
+	return ret;
+}
 
 static long pmem_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -2543,6 +2621,25 @@ static long pmem_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 
 			return pmem_cache_maint(file, cmd, &pmem_addr);
+		}
+	case PMEM_GET_RECORDING_BUFFER_INFO:
+		{
+			int ret = 0;
+			struct recordingbuffer_info recordingbuffer;
+
+			if (copy_from_user(&recordingbuffer, (void __user *)arg,
+						sizeof(struct recordingbuffer_info)))
+				return -EFAULT;
+
+			pr_err("Getting recording buffer info.");
+
+			if (pmem_get_recording_buffer_info(id, &recordingbuffer))
+				return -EFAULT;
+
+			if (copy_to_user((void __user *)arg, &recordingbuffer, sizeof(struct recordingbuffer_info)))
+				return -EFAULT;
+
+			return ret;
 		}
 	default:
 		if (pmem[id].ioctl)
