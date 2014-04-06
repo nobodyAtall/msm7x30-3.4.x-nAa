@@ -186,6 +186,8 @@
 #define DDR2_BANK_BASE 0X40000000
 #define DDR2_BANK_SIZE 0X10000000
 
+#define USB_VREG_MV		3500	/* usb voltage regulator mV */
+
 /* GPIO hardware device identification */
 enum board_hwid {
 	BOARD_HWID_UNK,
@@ -2132,13 +2134,11 @@ static struct msm_usb_host_platform_data msm_usb_host_pdata = {
 static struct regulator *vreg_3p3;
 static int msm_hsusb_ldo_init(int init)
 {
-	int def_vol = 3400000;
-
 	if (init) {
 		vreg_3p3 = regulator_get(NULL, "usb");
 		if (IS_ERR(vreg_3p3))
 			return PTR_ERR(vreg_3p3);
-		regulator_set_voltage(vreg_3p3, def_vol, def_vol);
+		regulator_set_voltage(vreg_3p3, USB_VREG_MV * 1000, USB_VREG_MV * 1000);
 	} else
 		regulator_put(vreg_3p3);
 
@@ -2165,13 +2165,16 @@ static int msm_hsusb_ldo_enable(int enable)
 
 static int msm_hsusb_ldo_set_voltage(int mV)
 {
-	static int cur_voltage;
+	static int cur_voltage = USB_VREG_MV;
+	printk("msm_hsusb_ldo_set_voltage called with: %d\n", mV);
 
 	if (!vreg_3p3 || IS_ERR(vreg_3p3))
 		return -ENODEV;
 
 	if (cur_voltage == mV)
 		return 0;
+
+	charger_connected(USB_VREG_MV == mV);
 
 	cur_voltage = mV;
 
