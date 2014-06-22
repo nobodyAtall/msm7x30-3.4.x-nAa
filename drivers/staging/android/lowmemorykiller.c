@@ -35,6 +35,8 @@
 #include <linux/oom.h>
 #include <linux/sched.h>
 #include <linux/notifier.h>
+#include <linux/kthread.h>
+#include <linux/wait.h>
 #include <linux/memory.h>
 #include <linux/memory_hotplug.h>
 
@@ -70,15 +72,43 @@ task_notify_func(struct notifier_block *self, unsigned long val, void *data);
 static struct notifier_block task_nb = {
 	.notifier_call	= task_notify_func,
 };
+static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc);  
+
+int lmk_involk()  
+{  
+	int other_free = global_page_state(NR_FREE_PAGES);  
+	int other_file = global_page_state(NR_INACTIVE_FILE);  
+	int array_max_idx = ARRAY_SIZE(lowmem_adj)-2;  
+
+	if (lowmem_deathpending &&  
+		time_before_eq(jiffies, lowmem_deathpending_timeout))  
+ 		return 0;  
+
+	if (time_before_eq(jiffies, lowmem_timeout))  
+		return 0;  
+
+	if (other_free + other_file > lowmem_minfree[array_max_idx])  
+		return 0;  
+
+	lowmem_timeout = jiffies + HZ/2;  
+
+	return 1;  
+}
+
+void wakeup_lmkd();  
 
 static int
 task_notify_func(struct notifier_block *self, unsigned long val, void *data)
 {
 	struct task_struct *task = data;
 
-	if (task == lowmem_deathpending)
+	struct shrink_control sc = {NULL, 1};  
+	if (task == lowmem_deathpending) {  
 		lowmem_deathpending = NULL;
-
+		if (lmk_involk()) {  
+			wakeup_lmkd();  
+		}  
+	}
 	return NOTIFY_OK;
 }
 
@@ -122,6 +152,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int other_free = global_page_state(NR_FREE_PAGES);
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
+	int other_file_act = global_page_state(NR_ACTIVE_FILE);  
+	int other_anon = global_page_state(NR_ANON_PAGES);
 	struct zone *zone;
 
 	if (offlining) {
@@ -146,6 +178,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_deathpending &&
 	    time_before_eq(jiffies, lowmem_deathpending_timeout))
 		return 0;
+	lowmem_deathpending = NULL;
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
@@ -187,7 +220,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			continue;
 		}
 		oom_adj = sig->oom_adj;
-		if (oom_adj < min_adj) {
+		if (oom_adj < selected_oom_adj) {
 			task_unlock(p);
 			continue;
 		}
@@ -196,8 +229,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		if (tasksize <= 0)
 			continue;
 		if (selected) {
-			if (oom_adj < selected_oom_adj)
-				continue;
 			if (oom_adj == selected_oom_adj &&
 			    tasksize <= selected_tasksize)
 				continue;
@@ -222,6 +253,51 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	read_unlock(&tasklist_lock);
 	return rem;
 }
+
+wait_queue_head_t lmkd_wait;  
+
+static void lmkd_try_to_sleep()  
+{  
+	long remaining;  
+	DEFINE_WAIT(wait);  
+ 
+	prepare_to_wait(&lmkd_wait, &wait, TASK_INTERRUPTIBLE);  
+	schedule();  
+	finish_wait(&lmkd_wait, &wait);  
+}  
+ 
+struct task_struct *lmkd_task;  
+static int lmkd();  
+int lmkd_run(int nid)  
+{  
+	int ret = 0;  
+	if (lmkd_task)  
+		return ret;  
+	init_waitqueue_head(&lmkd_wait);  
+	lowmem_timeout = jiffies;  
+	lmkd_task = kthread_run(lmkd, NULL , "lmkd");  
+	if (IS_ERR(lmkd_task)) {  
+		printk("Failed to start lmkd\n");  
+		ret = -1;  
+	}  
+	return ret;  
+}  
+  
+static int lmkd()  
+{  
+	struct shrink_control sc = {NULL, 1};  
+	while (1) {  
+		lowmem_shrink(NULL, &sc);  
+		lmkd_try_to_sleep();  
+	}  
+}  
+
+void wakeup_lmkd()  
+{  
+	if (!waitqueue_active(&lmkd_wait))  
+		return;  
+	wake_up_interruptible(&lmkd_wait);  
+}  
 
 static struct shrinker lowmem_shrinker = {
 	.shrink = lowmem_shrink,
