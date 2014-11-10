@@ -228,7 +228,7 @@
 #ifdef CONFIG_SEMC_CAMERA_8MP
 #define MSM_PMEM_ADSP_SIZE      0x2A00000
 #else
-#define MSM_PMEM_ADSP_SIZE      0x1D00000
+#define MSM_PMEM_ADSP_SIZE      0x1FBD000
 #endif
 #define PMEM_KERNEL_EBI0_SIZE   0x600000
 
@@ -2984,7 +2984,7 @@ static struct platform_device msm_migrate_pages_device = {
 static struct android_pmem_platform_data android_pmem_adsp_pdata = {
        .name = "pmem_adsp",
        .allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
-       .cached = 0,
+       .cached = 1,
 	.memory_type = MEMTYPE_EBI0,
 };
 

@@ -60,6 +60,9 @@
 
 #define PMEM_GET_FREE_SPACE	_IOW(PMEM_IOCTL_MAGIC, 14, unsigned int)
 #define PMEM_ALLOCATE_ALIGNED	_IOW(PMEM_IOCTL_MAGIC, 15, unsigned int)
+
+#define PMEM_GET_RECORDING_BUFFER_INFO	_IOW(PMEM_IOCTL_MAGIC, 16, unsigned int)
+
 struct pmem_region {
 	unsigned long offset;
 	unsigned long len;
