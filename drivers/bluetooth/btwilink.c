@@ -115,7 +115,7 @@ static long st_receive(void *priv_data, struct sk_buff *skb)
 	err = hci_recv_frame(skb);
 	if (err < 0) {
 		BT_ERR("Unable to push skb to HCI core(%d)", err);
-		return err;
+		return 0;
 	}
 
 	lhst->hdev->stat.byte_rx += skb->len;
@@ -126,6 +126,13 @@ static long st_receive(void *priv_data, struct sk_buff *skb)
 /* ------- Interfaces to HCI layer ------ */
 /* protocol structure registered with shared transport */
 static struct st_proto_s ti_st_proto[MAX_BT_CHNL_IDS] = {
+	{
+		.chnl_id = HCI_EVENT_PKT, /* HCI Events */
+		.hdr_len = sizeof(struct hci_event_hdr),
+		.offset_len_in_hdr = offsetof(struct hci_event_hdr, plen),
+		.len_size = 1, /* sizeof(plen) in struct hci_event_hdr */
+		.reserve = 8,
+	},
 	{
 		.chnl_id = HCI_ACLDATA_PKT, /* ACL */
 		.hdr_len = sizeof(struct hci_acl_hdr),
@@ -138,13 +145,6 @@ static struct st_proto_s ti_st_proto[MAX_BT_CHNL_IDS] = {
 		.hdr_len = sizeof(struct hci_sco_hdr),
 		.offset_len_in_hdr = offsetof(struct hci_sco_hdr, dlen),
 		.len_size = 1, /* sizeof(dlen) in struct hci_sco_hdr */
-		.reserve = 8,
-	},
-	{
-		.chnl_id = HCI_EVENT_PKT, /* HCI Events */
-		.hdr_len = sizeof(struct hci_event_hdr),
-		.offset_len_in_hdr = offsetof(struct hci_event_hdr, plen),
-		.len_size = 1, /* sizeof(plen) in struct hci_event_hdr */
 		.reserve = 8,
 	},
 };
@@ -242,7 +242,7 @@ static int ti_st_close(struct hci_dev *hdev)
 	if (!test_and_clear_bit(HCI_RUNNING, &hdev->flags))
 		return 0;
 
-	for (i = 0; i < MAX_BT_CHNL_IDS; i++) {
+	for (i = MAX_BT_CHNL_IDS-1; i >= 0; i--) {
 		err = st_unregister(&ti_st_proto[i]);
 		if (err)
 			BT_ERR("st_unregister(%d) failed with error %d",
@@ -292,14 +292,6 @@ static int ti_st_send_frame(struct sk_buff *skb)
 	return 0;
 }
 
-static void ti_st_destruct(struct hci_dev *hdev)
-{
-	BT_DBG("%s", hdev->name);
-	/* do nothing here, since platform remove
-	 * would free the hdev->driver_data
-	 */
-}
-
 static int bt_ti_probe(struct platform_device *pdev)
 {
 	static struct ti_st *hst;
@@ -326,7 +318,6 @@ static int bt_ti_probe(struct platform_device *pdev)
 	hdev->close = ti_st_close;
 	hdev->flush = NULL;
 	hdev->send = ti_st_send_frame;
-	hdev->destruct = ti_st_destruct;
 	hdev->owner = THIS_MODULE;
 
 	err = hci_register_dev(hdev);

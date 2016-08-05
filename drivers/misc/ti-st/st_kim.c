@@ -403,7 +403,8 @@ static long download_firmware(struct kim_data_s *kim_gdata)
 		case ACTION_DELAY:	/* sleep */
 			pr_info("sleep command in scr");
 			action_ptr = &(((struct bts_action *)ptr)->data[0]);
-			mdelay(((struct bts_action_delay *)action_ptr)->msec);
+			msleep_interruptible(
+				((struct bts_action_delay *)action_ptr)->msec);
 			break;
 		}
 		len =
